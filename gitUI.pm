@@ -2,18 +2,58 @@
 # Window to invoke gitUI from my /bat/git_repositories.txt
 #-------------------------------------------------------------------------
 
-package gitUIWindow;
+package apps::gitUI::myHyperlink;
+use strict;
+use warnings;
+use Wx qw(:everything);
+use Pub::Utils;
+use base qw(Wx::StaticText);
+
+
+our $color_red     = Wx::Colour->new(0xc0 ,0x00, 0x00);  # red
+our $color_green   = Wx::Colour->new(0x00 ,0x90, 0x00);  # green
+our $color_blue    = Wx::Colour->new(0x00 ,0x00, 0xc0);  # blue
+
+BEGIN
+{
+ 	use Exporter qw( import );
+	our @EXPORT = qw(
+		$color_red
+		$color_green
+		$color_blue
+	);
+}
+
+
+sub new
+{
+	my ($class,$parent,$id,$text,$pos,$size,$color) = @_;
+	$color = $color_blue if !defined($color);
+	my $this = $class->SUPER::new($parent,$id,$text,$pos,$size);
+	$this->SetForegroundColour($color);
+	return $this;
+}
+
+
+
+
+package apps::gitUI::Window;
 use strict;
 use warnings;
 use Win32::Process;
 use Wx qw(:everything);
 use Wx::Event qw(
 	EVT_SIZE
-	EVT_HYPERLINK
+	EVT_LEFT_DOWN
 	EVT_ENTER_WINDOW
 	EVT_LEAVE_WINDOW);
 use Pub::Utils;
+use apps::gitUI::repos;
 use base qw(Wx::Window);
+
+my $dbg_win = 0;
+my $dbg_pop = 1;
+my $dbg_layout = 1;
 
 
 my $BASE_ID = 1000;
@@ -23,17 +63,6 @@ my $ROW_HEIGHT   = 18;
 my $COLUMN_START = 10;
 my $COLUMN_WIDTH = 180;
 
-my $repos_file = "/base/bat/git_repositories.txt";
-
-our $color_red     = Wx::Colour->new(0xc0 ,0x00, 0x00);  # red
-our $color_green   = Wx::Colour->new(0x00 ,0x90, 0x00);  # green
-our $color_blue    = Wx::Colour->new(0x00 ,0x00, 0xc0);  # blue
-
-
-
-my @paths;
-
-
 
 sub new
 {
@@ -42,24 +71,56 @@ sub new
 	#bless $this,$class;
 
 	$this->{frame} = $frame;
-	$this->{ctrls} = [];
+	$this->{ctrl_sections} = [];
 	$this->populate();
 	$this->doLayout();
 
 	EVT_SIZE($this, \&onSize);
-	EVT_HYPERLINK($this, -1, \&onLink);
 
 	return $this;
 }
 
 
 
+sub repoPathFromId
+{
+	my ($id) = @_;
+	my $repo_list = getRepoList();
+	return $repo_list->[$id  - $BASE_ID]->{path};
+}
+
+
+
+sub onEnterLink
+{
+	my ($ctrl,$event) = @_;
+	my $id = $event->GetId();
+	my $this = $ctrl->GetParent();
+	my $path = repoPathFromId($id);
+	$this->{frame}->SetStatusText($path);
+	my $font = Wx::Font->new($this->GetFont());
+	$font->SetWeight (wxFONTWEIGHT_BOLD );
+	$ctrl->SetFont($font);
+	$ctrl->Refresh();
+}
+
+sub onLeaveLink
+{
+	my ($ctrl,$event) = @_;
+	my $this = $ctrl->GetParent();
+	$this->{frame}->SetStatusText('');
+	$ctrl->SetFont($this->GetFont());
+	$ctrl->Refresh();
+}
+
+
 sub onLink
 {
-	my ($this,$event) = @_;
+	my ($ctrl,$event) = @_;
 	my $id = $event->GetId();
-	my $path = $paths[$id  - $BASE_ID];
-	display(0,0,"onLink($id) = path-$path");
+	my $this = $ctrl->GetParent();
+	my $path = repoPathFromId($id);
+	display($dbg_win,0,"onLink($id) = path-$path");
 	chdir($path);
 
 	# This, not system(), is how I figured out how to start
@@ -95,15 +156,67 @@ sub doLayout
 	my $NUM_PER = int(($height - $ROW_START) / $ROW_HEIGHT);
 	return if $NUM_PER < 2;
 
-	for my $ctrl (@{$this->{ctrls}})
+	display($dbg_layout,0,"doLayout() NUM_PER=$NUM_PER");
+
+	# always start new sections at top of the screen
+	# each column has at least one section
+	# do not start a section unless at least two items will fit
+
+	my $row = 0;
+	my $col = 0;
+	for my $ctrl_section (@{$this->{ctrl_sections}})
 	{
-		my $num = $ctrl->{num};
-		my $row = int($num % $NUM_PER);
-		my $col = int($num / $NUM_PER);
-		my $x = $COLUMN_START + $col * $COLUMN_WIDTH;
-		my $y = $ROW_START + $row * $ROW_HEIGHT;
-		$ctrl->{ctrl}->Move($x,$y);
+		my $ctrls = $ctrl_section->{ctrls};
+		my $num_ctrls = @$ctrls;
+		display($dbg_layout,1,"ctrl_section($ctrl_section->{section}->{name}) row=$row col=$col  num=$num_ctrls");
+
+		if ($row + 2 >= $NUM_PER)	# to fit each section fully: $num_ctrls > $NUM_PER)
+		{
+			$row = 0;
+			$col++;
+		}
+
+		$row++ if $row;		# blank line for subsequent sections in same column
+
+		for my $ctrl (@$ctrls)
+		{
+			my $x = $COLUMN_START + $col * $COLUMN_WIDTH;
+			my $y = $ROW_START + $row * $ROW_HEIGHT;
+			$ctrl->Move($x,$y);
+
+			$row++;
+			if ($row >= $NUM_PER)
+			{
+				$row = 0;
+				$col++;
+			}
+		}
 	}
+}
+
+
+#----------------------------------------
+# populate
+#----------------------------------------
+
+
+sub newCtrlSection
+{
+	my ($this,$section,$name) = @_;
+	display($dbg_pop,0,"newCtrlSection($section->{name})");
+
+	my $ctrl_section = {
+		section => $section,
+		ctrls   => [] };
+	push @{$this->{ctrl_sections}},$ctrl_section;
+	return $ctrl_section;
+}
+
+sub addSectionCtrl
+{
+	my ($ctrl_section,$ctrl,$name) = @_;
+	display($dbg_pop,0,"addSectionCtrl($name)");
+	push @{$ctrl_section->{ctrls}},$ctrl;
 }
 
 
@@ -111,125 +224,38 @@ sub doLayout
 sub populate
 {
 	my ($this) = @_;
-	my $text = getTextFile($repos_file);
-    if ($text)
-    {
-		my $id_num = 0;
-		my $display_num = 0;
-		my $section = '';
-		my $section_name = '';
-		my $section_started = 0;
-		my $ctrls = $this->{ctrls};
-        for my $line (split(/\n/,$text))
-        {
-			$line =~ s/#.*$//;
-			$line =~ s/^\s+//;
-			$line =~ s/\s+$//;
 
-			# get section path RE and optional name if different
+	return if !parseRepos();
+	my $sections = getRepoSections();
 
-			if ($line =~ /^SECTION\t/)
+	display($dbg_pop,0,"populate()");
+
+	for my $section (@$sections)
+	{
+		my $started = 0;
+		my $ctrl_section = newCtrlSection($this,$section);
+		for my $repo (@{$section->{repos}})
+		{
+			if (!$started && $section->{name} ne $repo->{path})
 			{
-				my @parts = split(/\t/,$line);
-				$section = $parts[1];
-				$section =~ s/^\s+|\s+$//g;
-				$section_name = $parts[2] || $section;
-				$section =~ s/\//\\\//g;
-				$section_started = 0;
+				display($dbg_pop,1,"staticText($section->{name})");
+				my $ctrl = Wx::StaticText->new($this,-1,$section->{name},[0,0]);
+				addSectionCtrl($ctrl_section,$ctrl,$section->{name});
 			}
 
-			# Repos start with a forward slash
+			my $id = $repo->{num} + $BASE_ID;
+			my $display_name = $section->displayName($repo);
+			display($dbg_pop,1,"myHyperLink($id,$display_name)");
 
-			elsif ($line =~ /^\//)
-			{
-				my @parts = split(/\t/,$line);
-				my $path = shift @parts;
-				my $display = $path;
-				my $elipses = $section && $display =~ s/^$section// ? 1 : 0;
+			my $ctrl = apps::gitUI::myHyperlink->new($this,$id,$display_name,[0,0],[$COLUMN_WIDTH-2,16]);
+			addSectionCtrl($ctrl_section,$ctrl,$display_name);
+			$started = 1;
 
-				# display a break for the section
-
-				if ($section && !$section_started)
-				{
-					$section_started = 1;
-					$display_num ++;
-
-					# if the section is NOT the same as the first path
-					# throw out a static text ..
-
-					if ($display)	# RE did not absorb the whole thing
-					{
-						my $ctrl = Wx::StaticText->new($this,-1,$section_name,[0,0]);
-						push @$ctrls,{
-							num => $display_num++,
-							ctrl => $ctrl };
-					}
-				}
-
-				my $MAX_LEN = 28;
-					# not including elipses
-
-				# if the whole path was matched, restore it
-
-				if (!$display)
-				{
-					$display = $path;
-				}
-
-				# if was not replaced, and won't fit,
-				# set replaced and shrink it
-
-				if (length($display)>$MAX_LEN)
-				{
-					$display = substr($display,-$MAX_LEN);
-					$elipses = 1;
-				}
-
-				$display = '...'.$display if $elipses;
-
-				# push the path and ctrl
-
-				push @paths,$path;
-				my $ctrl = Wx::HyperlinkCtrl->new($this,$BASE_ID+$id_num++,$display,'',[0,0],[$COLUMN_WIDTH-2,16]);
-				$ctrl->SetHoverColour($color_green);
-
-				EVT_ENTER_WINDOW($ctrl, \&onEnterLink);
-				EVT_LEAVE_WINDOW($ctrl, \&onLeaveLink);
-
-				push @$ctrls,{
-					num => $display_num++,
-					ctrl => $ctrl };
-			}
+			EVT_LEFT_DOWN($ctrl, \&onLink);
+			EVT_ENTER_WINDOW($ctrl, \&onEnterLink);
+			EVT_LEAVE_WINDOW($ctrl, \&onLeaveLink);
 		}
-    }
-    else
-    {
-        error("Could not open $repos_file");
-        return;
-    }
-
-    if (!@paths)
-    {
-        error("No repositories found in $repos_file");
-        return;
-    }
-}
-
-
-
-sub onEnterLink
-{
-	my ($ctrl,$event) = @_;
-	my $id = $event->GetId();
-	my $this = $ctrl->GetParent();
-	my $path = $paths[$id  - $BASE_ID];
-	$this->{frame}->SetStatusText($path);
-}
-sub onLeaveLink
-{
-	my ($ctrl,$event) = @_;
-	my $this = $ctrl->GetParent();
-	$this->{frame}->SetStatusText('');
+	}
 }
 
 
@@ -239,7 +265,7 @@ sub onLeaveLink
 # frame
 #--------------------------------------------------------
 
-package gitUIFrame;
+package apps::gitUI::Frame;
 use strict;
 use warnings;
 use Wx qw(:everything);
@@ -254,8 +280,7 @@ sub new
 
     $this->CreateStatusBar();
 
-
-	gitUIWindow->new($this);
+	apps::gitUI::Window->new($this);
 	return $this;
 }
 
@@ -266,20 +291,21 @@ sub new
 # For some reason, to exit with CTRL-C from the console
 # we need to set PERL_SIGNALS=unsafe in the environment.
 
-package gitUIApp;
+package apps::gitUI::App;
 use strict;
 use warnings;
 use Pub::Utils;
 use Pub::WX::Main;
 use base 'Wx::App';
 
+my $dbg_app = 0;
 
 my $frame;
 
 
 sub OnInit
 {
-	$frame = gitUIFrame->new();
+	$frame = apps::gitUI::Frame->new();
 	if (!$frame)
 	{
 		error("unable to create frame");
@@ -287,19 +313,17 @@ sub OnInit
 	}
 	setAppFrame($frame);
 	$frame->Show( 1 );
-	display(0,0,"gitUIApp started");
+	display($dbg_app,0,"gitUIApp started");
 	return 1;
 }
 
 
-my $app = gitUIApp->new();
+my $app = apps::gitUI::App->new();
 
 Pub::WX::Main::run($app);
 
-
-display(0,0,"ending gitUIApp");
 $frame = undef;
-display(0,0,"finished gitUIApp");
+display($dbg_app,0,"finished gitUIApp");
 
 
 1;
