@@ -8,19 +8,41 @@ use warnings;
 use Wx qw(:everything);
 use apps::gitUI::pathWindow;
 use Pub::Utils;
-use base qw(Wx::Frame);
+use Pub::WX::Frame;
+use apps::gitUI::Resources;
+use base qw(Pub::WX::Frame);
+
+my $dbg_frame = 0;
 
 
 sub new
 {
 	my ($class, $parent) = @_;
-	my $this = $class->SUPER::new($parent,-1,'gitUI title',[50,50],[600,680]);
+	Pub::WX::Frame::setHowRestore($RESTORE_MAIN_RECT);
+	my $this = $class->SUPER::new($parent);	# ,-1,'gitUI',[50,50],[600,680]);
 
     $this->CreateStatusBar();
+	$this->createPane($ID_PATH_WINDOW);
 
-	apps::gitUI::pathWindow->new($this);
 	return $this;
 }
+
+
+sub createPane
+{
+	my ($this,$id,$book,$data) = @_;
+	display($dbg_frame,0,"gitUI::Frame::createPane($id)".
+		" book="._def($book).
+		" data="._def($data) );
+
+	if ($id == $ID_PATH_WINDOW)
+	{
+	    $book ||= $this->{book};
+        return apps::gitUI::pathWindow->new($this,$id,$book,$data);
+    }
+    return $this->SUPER::createPane($id,$book,$data);
+}
+
 
 
 #----------------------------------------------------
@@ -34,7 +56,13 @@ use strict;
 use warnings;
 use Pub::Utils;
 use Pub::WX::Main;
+use Pub::WX::AppConfig;
 use base 'Wx::App';
+
+$temp_dir = "/base/temp/gitUI";
+$data_dir = "/base/temp/gitUI";
+$ini_file = "$data_dir/gitUI.ini";
+
 
 my $dbg_app = 0;
 

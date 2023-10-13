@@ -13,10 +13,11 @@ use Wx::Event qw(
 	EVT_ENTER_WINDOW
 	EVT_LEAVE_WINDOW);
 use Pub::Utils;
+use Pub::WX::Window;
 use apps::gitUI::repos;
 use apps::gitUI::styles;
 use apps::gitUI::hyperlink;
-use base qw(Wx::Window);
+use base qw(Wx::Window Pub::WX::Window);
 
 my $dbg_win = 0;
 my $dbg_pop = 1;
@@ -33,11 +34,12 @@ my $COLUMN_WIDTH = 180;
 
 sub new
 {
-	my ($class, $frame) = @_;
-	my $this = $class->SUPER::new($frame);
-	#bless $this,$class;
+	my ($class,$frame,$id,$book,$data) = @_;
+	display($dbg_win,0,"pathWindow::new($frame,$id,"._def($book).","._def($data).")");
+	my $this = $class->SUPER::new($book,$id);
+	$this->MyWindow($frame,$book,$id,'Paths',$data);	## ,$instance);
+	# $this->{frame} = $frame;
 
-	$this->{frame} = $frame;
 	$this->{ctrl_sections} = [];
 	$this->populate();
 	$this->doLayout();
@@ -214,7 +216,13 @@ sub populate
 			my $display_name = $section->displayName($repo);
 			display($dbg_pop,1,"hyperLink($id,$display_name)");
 
-			my $ctrl = apps::gitUI::hyperlink->new($this,$id,$display_name,[0,0],[$COLUMN_WIDTH-2,16]);
+			my $ctrl = apps::gitUI::hyperlink->new(
+				$this,
+				$id,
+				$display_name,
+				[0,0],
+				[$COLUMN_WIDTH-2,16],
+				$repo->{private} ? $color_blue : $color_green);
 			addSectionCtrl($ctrl_section,$ctrl,$display_name);
 			$started = 1;
 

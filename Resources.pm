@@ -18,6 +18,7 @@ BEGIN
 {
  	use Exporter qw( import );
 	our @EXPORT = ( qw(
+		$ID_PATH_WINDOW
 
 		$COMMAND_PATHS
 		$COMMAND_REPOS
@@ -34,7 +35,8 @@ BEGIN
 # commands added to the view menu, by setting
 # the 'command_id' member on the notebook info.
 
-our ($COMMAND_PATHS,
+our ($ID_PATH_WINDOW,
+	 $COMMAND_PATHS,
 	 $COMMAND_REPOS,
 	 $COMMAND_CHANGES,
 	 $COMMAND_REMOTE,
@@ -82,7 +84,7 @@ my @win_context_menu = (
 #-----------------------------------------
 
 $resources = { %$resources,
-    app_title => 'fileCllient',
+    app_title => 'gitUI',
     main_menu => \@main_menu,
     command_data => \%command_data,
     win_context_menu => \@win_context_menu,

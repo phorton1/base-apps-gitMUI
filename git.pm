@@ -47,7 +47,7 @@ my $git_api_token = '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';
 
 
 my @id_path_mappings = (
-	"ArduinoObs"       ,    "/src/ArduinoObs",
+	"obs-"             ,    "/src/obs/",
     "Arduino"          ,    "/src/Arduino",
     "circle-prh-apps"  ,    "/src/circle/_prh/_apps",
     "circle-prh"       ,    "/src/circle/_prh",
@@ -58,11 +58,7 @@ my @id_path_mappings = (
 	"Grbl"			   ,    "/src/Grbl",
 	"FluidNC"		   ,    "/src/FluidNC",
 	"kiCad"			   ,    "/src/kiCad",
-	"phorton1\$"	   ,	"/src/phorton1",
-	"base-MBE-ST"	   ,	"/mbeSystems/obsolete_store_manager/base/MBE/ST",
-	"base-MBE-Store"   ,	"/mbeSystems/obsolete_store_manager/base/MBE/Store",
-	"base-MBE-Web"     ,	"/mbeSystems/obsolete_store_manager/base/MBE/Web",
-	"base_dist-storeManagerRelease",	"/mbeSystems/obsolete_store_manager/base_dist/storeManagerRelease",
+	"phorton1"	       ,	"/src/phorton1",
 	"fusionAddIns",		"/Users/Patrick/AppData/Roaming/Autodesk/Autodesk Fusion 360/API/AddIns",
 );
 
