@@ -370,7 +370,6 @@ sub gitCall
 	display(0,0,"calling open3('git $command')");
 	my $pid = open3(\*CHILD_STDIN, \*CHILD_STDOUT, \*CHILD_STDERR, "git $command");
 
-
 	my $rslt = '';
 
 	my $start = time();
@@ -416,7 +415,7 @@ sub gitCall
 	close(*CHILD_STDIN);
 	close(*CHILD_STDOUT);
 	close(*CHILD_STDERR);
-	waitpid($pid, 1);
+	waitpid($pid, 0);		# I think WNOHANG is 1
 
     if (defined($rslt))
     {
