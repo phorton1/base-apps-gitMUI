@@ -351,11 +351,11 @@ sub gitCall
     }
 
 	display($dbg_git+1,0,"calling 'git $command'");
-	my $rslt = `git $command`;
+	my $rslt = `git $command` || '';
     if (defined($rslt))
     {
         $rslt =~ s/\s*$//s;
-        display($dbg_git+1,1,"'git $command' returned '$rslt'");;
+        display($dbg_git,1,"'git $command' returned '$rslt'") if $rslt;;
     }
     else
     {
@@ -374,7 +374,7 @@ sub gitPush
 {
 	my ($this) = @_;
 	my $branch = $this->{branch};
-	display($dbg_git,0,"gitPush($this->{path} $branch");
+	display($dbg_git,0,"gitPush($this->{path} $branch)");
 	$this->gitCall("push -u origin $branch");
 }
 
@@ -389,7 +389,7 @@ sub gitCommit
 {
 	my ($this,$msg) = @_;
 	my $branch = $this->{branch};
-	display($dbg_git,0,"gitCommit($this->{path}");
+	display($dbg_git,0,"gitCommit($this->{path})");
 	$this->gitCall("add -A");
 	$this->gitCall("commit  -m \"$msg\"");
 }
@@ -403,7 +403,7 @@ sub gitCommit
 sub gitChanges
 {
 	my ($this) = @_;
-	display($dbg_git+1,0,"gitChanges($this->{path}");
+	display($dbg_git+1,0,"gitChanges($this->{path})");
 
 	my $started = 0;
 	my $has_changes = 0;
