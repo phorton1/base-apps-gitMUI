@@ -338,6 +338,13 @@ sub canPush
 }
 
 
+use IPC::Open3;
+use Symbol qw(gensym);
+use IO::Select;
+
+
+
+
 sub gitCall
     # does the given git_command,
     # displays and returns shell text
@@ -351,7 +358,66 @@ sub gitCall
     }
 
 	display($dbg_git+1,0,"calling 'git $command'");
-	my $rslt = `git $command` || '';
+
+
+	# my $rslt = `git $command` || '';
+
+
+	# my $stdin;
+	# my $stdout;
+	# my $stderr = gensym();
+    #
+	display(0,0,"calling open3('git $command')");
+	my $pid = open3(\*CHILD_STDIN, \*CHILD_STDOUT, \*CHILD_STDERR, "git $command");
+
+
+	my $rslt = '';
+
+	my $start = time();
+	my $last_time = '';
+	my $select = IO::Select->new();
+	$select->add(*CHILD_STDOUT,*CHILD_STDERR);
+	while (time() < $start + 10)
+	{
+		select(undef,undef,undef,0.01);
+
+		my $line0 = <CHILD_STDOUT>;
+		if ($line0)
+		{
+			$line0 =~ s/^\s+|\s+$//g;
+			display(0,1,$line0,0,$display_color_light_cyan);
+			$rslt .= $line0."\n";
+		};
+
+		my $line1 = <CHILD_STDERR>;
+		if ($line1)
+		{
+			display(0,1,$line1,0,$display_color_light_magenta);
+		}
+
+		last if !defined($line0) && !defined($line1);
+
+		# my @can_read = $select->can_read();
+		# for my $handle (@can_read)
+		# {
+		# 	print "canRead($handle)\n";
+		# 	# my $line = <$handle>;
+		# 	# print "GOT $line\n";
+		# }
+
+		my $now = time();
+		if ($now ne $last_time)
+		{
+			$last_time = $now;
+			display(0,1,"loop(".($now-$start).")");
+		}
+	}
+
+	close(*CHILD_STDIN);
+	close(*CHILD_STDOUT);
+	close(*CHILD_STDERR);
+	waitpid($pid, 1);
+
     if (defined($rslt))
     {
         $rslt =~ s/\s*$//s;
@@ -371,11 +437,16 @@ sub gitCall
 ########################
 
 sub gitPush
+	# At the present time, the push works well from a dos box
+	# because I get to see the STDOUT or STDERR output in real time
+	# with fancy characters ... as well as 'Everything up-to-date' message
 {
 	my ($this) = @_;
 	my $branch = $this->{branch};
 	display($dbg_git,0,"gitPush($this->{path} $branch)");
-	$this->gitCall("push -u origin $branch");
+	my $rslt = $this->gitCall("push -u origin $branch");
+	# instead of this meaningless message
+	# Branch 'master' set up to track remote branch 'master' from 'origin'.
 }
 
 
@@ -391,7 +462,8 @@ sub gitCommit
 	my $branch = $this->{branch};
 	display($dbg_git,0,"gitCommit($this->{path})");
 	$this->gitCall("add -A");
-	$this->gitCall("commit  -m \"$msg\"");
+	my $rslt = $this->gitCall("commit  -m \"$msg\"");
+	# [master 9c8685f] test commit 1 file changed, 5 insertions(+), 5 deletions(-)
 }
 
 
