@@ -367,7 +367,7 @@ sub gitCall
 	# my $stdout;
 	# my $stderr = gensym();
     #
-	display(0,0,"calling open3('git $command')");
+	display($dbg_git+1,0,"calling open3('git $command')");
 	my $pid = open3(\*CHILD_STDIN, \*CHILD_STDOUT, \*CHILD_STDERR, "git $command");
 
 	my $rslt = '';
@@ -384,14 +384,14 @@ sub gitCall
 		if ($line0)
 		{
 			$line0 =~ s/^\s+|\s+$//g;
-			display(0,1,$line0,0,$display_color_light_cyan);
+			display($dbg_git,1,$line0,0,$display_color_light_cyan);
 			$rslt .= $line0."\n";
 		};
 
 		my $line1 = <CHILD_STDERR>;
 		if ($line1)
 		{
-			display(0,1,$line1,0,$display_color_light_magenta);
+			display($dbg_git,1,$line1,0,$display_color_light_magenta);
 		}
 
 		last if !defined($line0) && !defined($line1);
@@ -408,7 +408,7 @@ sub gitCall
 		if ($now ne $last_time)
 		{
 			$last_time = $now;
-			display(0,1,"loop(".($now-$start).")");
+			display($dbg_git+1,1,"loop(".($now-$start).")");
 		}
 	}
 
