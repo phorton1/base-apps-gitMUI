@@ -57,10 +57,10 @@ use warnings;
 use Pub::Utils;
 use Pub::WX::Main;
 use Pub::WX::AppConfig;
+use apps::gitUI::git;	# for $temp_dir and $data_dir
 use base 'Wx::App';
 
-$temp_dir = "/base/temp/gitUI";
-$data_dir = "/base/temp/gitUI";
+
 $ini_file = "$data_dir/gitUI.ini";
 
 

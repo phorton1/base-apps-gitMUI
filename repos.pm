@@ -5,6 +5,10 @@
 # - HASH by path of repos
 # - a LIST in order of parsed repos
 # - a set of SECTION containing a number of repos organized for display in my apps
+#
+# This file can parse them from the file and
+# add members from local git/config files.
+
 
 package apps::gitUI::section;
 use strict;
@@ -82,6 +86,8 @@ BEGIN
 	);
 }
 
+my $repo_filename = '/base/bat/git_repositories.txt';
+
 
 my $repo_hash:shared = shared_clone({});
 my $repo_list:shared = shared_clone([]);
@@ -90,8 +96,6 @@ my $repo_sections:shared = shared_clone([]);
 sub getRepoHash		{ return $repo_hash; }
 sub getRepoList		{ return $repo_list; }
 sub getRepoSections	{ return $repo_sections; }
-
-
 
 
 sub parseRepos
@@ -159,6 +163,14 @@ sub parseRepos
 				$repo->{private} = 1;
 			}
 
+			# set FORKED = 1 or whatever follows
+
+			elsif ($line =~ s/^FORKED\s*//)
+			{
+				$line ||= 1;
+				display($dbg_parse+2,2,"FORKED $line");
+				$repo->{forked} = $line;
+			}
 
 			# add USES, NEEDS, GROUP, FRIEND
 
