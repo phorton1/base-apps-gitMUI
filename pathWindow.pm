@@ -41,8 +41,9 @@ sub new
 	# $this->{frame} = $frame;
 
 	$this->{ctrl_sections} = [];
+	parseRepos();
+
 	$this->populate();
-	$this->doLayout();
 
 	EVT_SIZE($this, \&onSize);
 
@@ -51,13 +52,21 @@ sub new
 
 
 
+
+sub repoFromId
+{
+	my ($id) = @_;
+	my $repo_list = getRepoList();
+	return $repo_list->[$id  - $BASE_ID];
+}
+
+
 sub repoPathFromId
 {
 	my ($id) = @_;
 	my $repo_list = getRepoList();
 	return $repo_list->[$id  - $BASE_ID]->{path};
 }
-
 
 
 sub onEnterLink
@@ -72,6 +81,7 @@ sub onEnterLink
 	$ctrl->SetFont($font);
 	$ctrl->Refresh();
 }
+
 
 sub onLeaveLink
 {
@@ -164,6 +174,31 @@ sub doLayout
 }
 
 
+sub updateLinks
+{
+	my ($this) = @_;
+	for my $ctrl_section (@{$this->{ctrl_sections}})
+	{
+		for my $ctrl (@{$ctrl_section->{ctrls}})
+		{
+			my $id = $ctrl->GetId();
+			if ($id > 0)
+			{
+				my $repo = repoFromId($id);
+				my $color =
+					@{$repo->{local_changes}} ? $color_red :
+					@{$repo->{remote_changes}} ? $color_magenta :
+					$repo->{private} ? $color_blue :
+					$color_green;
+				$ctrl->SetForegroundColour($color);
+				$ctrl->Refresh();
+			}
+		}
+	}
+}
+
+
+
 #----------------------------------------
 # populate
 #----------------------------------------
@@ -194,10 +229,11 @@ sub populate
 {
 	my ($this) = @_;
 
-	return if !parseRepos();
-	my $sections = getRepoSections();
-
 	display($dbg_pop,0,"populate()");
+
+	my $sections = getRepoSections();
+	$this->{ctrl_sections} = [];
+	$this->DestroyChildren();
 
 	for my $section (@$sections)
 	{
@@ -216,13 +252,19 @@ sub populate
 			my $display_name = $section->displayName($repo);
 			display($dbg_pop,1,"hyperLink($id,$display_name)");
 
+			my $color =
+				@{$repo->{local_changes}} ? $color_red :
+				@{$repo->{remote_changes}} ? $color_magenta :
+				$repo->{private} ? $color_blue :
+				$color_green;
+
 			my $ctrl = apps::gitUI::hyperlink->new(
 				$this,
 				$id,
 				$display_name,
 				[0,0],
 				[$COLUMN_WIDTH-2,16],
-				$repo->{private} ? $color_blue : $color_green);
+				$color);
 			addSectionCtrl($ctrl_section,$ctrl,$display_name);
 			$started = 1;
 
@@ -231,6 +273,7 @@ sub populate
 			EVT_LEAVE_WINDOW($ctrl, \&onLeaveLink);
 		}
 	}
+	$this->doLayout();
 }
 
 

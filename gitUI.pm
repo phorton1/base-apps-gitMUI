@@ -378,6 +378,11 @@ sub updateProgress
 	{
 		$this->{progress}->finish($what);
 		$this->initCommand();
+		for my $pane (@{$this->{panes}})
+		{
+			my $id = $pane->GetId();
+			$pane->updateLinks() if $id == $ID_PATH_WINDOW;
+		}
 	}
 }
 
