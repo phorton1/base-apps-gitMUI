@@ -78,10 +78,10 @@ my $HOW_THREADED = $THREADED_THREAD;
 
 my $REDIRECT_STDERR = 1;
 
-my $dbg_push = -1;
+my $dbg_push = 1;
 	# 0 = main push functions
 	# -1 = details
-my $dbg_thread = -1;
+my $dbg_thread = 1;
 	# 0 = msin thread calls
 	# -1 = dtails
 our $dbg_idle = 1;
