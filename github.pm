@@ -38,6 +38,7 @@ BEGIN
 {
  	use Exporter qw( import );
 	our @EXPORT = qw(
+		doGitHub
 	);
 }
 
@@ -55,12 +56,14 @@ my $git_api_token = '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';
 
 sub gitHubRequest
 {
-    my ($what,$location) = @_;
-	display($dbg_request,0,"gitHubRequest($what,$location)");
+    my ($what,$location,$use_cache) = @_;
+	$use_cache ||= 0;
+
+	display($dbg_request,0,"gitHubRequest($what,$location) use_cache($use_cache)");
 
 	my $cache_filename = "$temp_dir/$what.txt";
 
-	my $content = $USE_TEST_CACHE ?
+	my $content = $use_cache || $USE_TEST_CACHE ?
 		getTextFile($cache_filename) : '';
 	my $from_cache = $content ? 1 : 0;
 
@@ -169,9 +172,11 @@ sub gitHubRequest
 
 sub doGitHub
 {
-    display($dbg_github,0,"doGitHub()");
+	my ($use_cache) = @_;
+	$use_cache ||= 0;
+    display($dbg_github,0,"doGitHub($use_cache)");
 
-    my $data = gitHubRequest("repos",'user/repos?per_page=100');
+    my $data = gitHubRequest("repos",'user/repos?per_page=100',$use_cache);
         # returns an array of hashes (upto 100)
         # prh - will need to do it multiple times if I get more than 100 repositories
 
@@ -207,7 +212,7 @@ sub doGitHub
 
 				if ($GET_GITHUB_FORK_PARENTS && $is_forked)
 				{
-					my $info = gitHubRequest($id,"repos/phorton1/$id");
+					my $info = gitHubRequest($id,"repos/phorton1/$id",$use_cache);
 					if (!$info)
 					{
 						$repo->repoError("doGitHub($id) - could not get forked repo");
@@ -258,33 +263,38 @@ if (0)
 	display($dbg_github,0,"github.pm test_main()");
 	if (parseRepos())
 	{
-		my $repo_list = getRepoList();
+		my $sections = getRepoSections();
 		display($dbg_github,1,"github.pm checking git/config files");
-		for my $repo (@$repo_list)
+		for my $section  (@$sections)
 		{
-			$repo->clearErrors();
-			$repo->checkGitConfig();
+			for my $repo (@{$section->{repos}})
+			{
+				$repo->clearErrors();
+				$repo->checkGitConfig();
+			}
 		}
 
 		if (1)
 		{
 			display($dbg_github,1,"github.pm checking for changes");
-			for my $repo (@$repo_list)
+			for my $section  (@$sections)
 			{
-				$repo->gitChanges();
+				for my $repo (@{$section->{repos}})
+				{
+					$repo->gitChanges(1);
+				}
 			}
 		}
 
-
-		if (0)
+		if (1)
 		{
-			doGitHub();
+			doGitHub(1);		# use cache if available
 		}
 
 		if (1)
 		{
 			my $text = '';
-			my @lines = split(/\n/,Dumper(getRepoHash()));
+			my @lines = split(/\n/,Dumper(@$sections));
 			for my $line (@lines)
 			{
 				chomp($line);
