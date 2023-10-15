@@ -13,19 +13,23 @@ use warnings;
 use threads;
 use threads::shared;
 use Pub::WX::Resources;
+use Pub::Utils;
 
 BEGIN
 {
  	use Exporter qw( import );
 	our @EXPORT = ( qw(
 		$ID_PATH_WINDOW
-		$COMMAND_PUSH
 
-		$COMMAND_PATHS
-		$COMMAND_REPOS
 		$COMMAND_CHANGES
+		$COMMAND_COMMIT
+		$COMMAND_PUSH
+		$COMMAND_TAGS
 		$COMMAND_REPOS
-		$COMMAND_DEPENDENCIES
+		$COMMAND_PATH_WIN
+		$COMMAND_SHOW_CHANGES
+		$COMMAND_INFO
+		$COMMAND_DEPENDS
 	),
 
 	@Pub::WX::Resources::EXPORT );
@@ -36,17 +40,18 @@ BEGIN
 # commands added to the view menu, by setting
 # the 'command_id' member on the notebook info.
 
-our ($ID_PATH_WINDOW,
+our (
 
-	$COMMAND_CHANGES,
-		# currently modal with ?!? reporting ?!?
-		# should be done automatically after COMMIT, PUSH, or TAG
+	$ID_PATH_WINDOW,
 
+	# git things ...
+
+	$COMMAND_CHANGES,	# should be auto active commands
 	$COMMAND_COMMIT,
 	$COMMAND_PUSH,		# only one actually implemented
 	$COMMAND_TAGS,
 
-	$COMMAND_REPOS,
+	$COMMAND_REPOS,		# github thin
 
 	# idas for windows
 
@@ -61,21 +66,17 @@ our ($ID_PATH_WINDOW,
 # Command data for this application.
 # Notice the merging that takes place
 
-my %command_data = (%{$resources->{command_data}},
-
+mergeHash($resources->{command_data},{
 	$COMMAND_CHANGES		=> ['Changes',	'Update local and remote changes for repositories'],
-
 	$COMMAND_COMMIT			=> ['Commit',	'Commit repositories with a comment'],
 	$COMMAND_PUSH			=> ['Push',		'Push any commited local changes'],
 	$COMMAND_TAGS			=> ['Tags',		'Add Tag to selected repositories'],
-
     $COMMAND_REPOS      	=> ['Repos',	'Update local repository info cache from github'],
-
 	$COMMAND_PATH_WIN		=> ['Paths',	'Show repos organized by Sections'],
     $COMMAND_SHOW_CHANGES   => ['Deltas',	'Show the current changes. Could also be dialog with context menu item'],
     $COMMAND_INFO    		=> ['Info',		'Maybe a tree? table? Showing info for each repository. Could also be dialog with context menu item'],
     $COMMAND_DEPENDS    	=> ['Depends',	'Show Dependency tree, etc'],
-);
+});
 
 
 my %pane_data = (
@@ -119,7 +120,6 @@ my @win_context_menu = (
 $resources = { %$resources,
     app_title => 'gitUI',
     main_menu => \@main_menu,
-    command_data => \%command_data,
     win_context_menu => \@win_context_menu,
 };
 

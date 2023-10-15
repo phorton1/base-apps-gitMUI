@@ -41,6 +41,7 @@ use Wx qw(:everything);
 use Wx::Event qw(EVT_CLOSE EVT_BUTTON);
 use Pub::Utils qw(getAppFrame display warning);
 use Pub::WX::Dialogs;
+use apps::gitUI::Resources;
 use base qw(Wx::Dialog);
 
 
@@ -65,30 +66,52 @@ my @stages = (
 	'Finishing',
 	'Finished', );
 
+# stats
 
+my $local_changed:shared = 0;
+my $remote_changed:shared = 0;
+	# repos
+my $local_changes:shared = 0;
+my $remote_changes:shared = 0;
+	# files
+
+#------------------------------------------------
+# ctor
+#------------------------------------------------
 
 sub new
 {
     my ($class,
 		$parent,
+		$command_id,
 		$num_repos) = @_;
 
-	display($dbg_dlg,0,"progressDialog::new($num_repos)");
+	my $command_name = $resources->{command_data}->{$command_id}->[0];
+	display($dbg_dlg,0,"progressDialog::new($command_id,$command_name) for $num_repos repos)");
 
     my $this = $class->SUPER::new(
 		$parent,
 		$ID_WINDOW,
-		'Pushing remote repositories',
+		"$command_name for $num_repos repos",
 		[-1,-1],
 		[480,180]);
 
+	$this->{command_id} = $command_id;
+	$this->{command_name} = $command_name;
 	$this->{window_done} = 0;
 		# set during finish()
 
 	$this->{parent}  	= $parent;
 	$this->{aborted} 	= 0;
-	$this->{main_msg}   = 'Checking';	# generally shows the stage we are in ..
+	$this->{main_msg}   = $this->{command_name};	# generally shows the stage we are in ..
 	$this->{repo}       = '';			# shows the current repo name while checking and pushing
+
+	# stats
+
+	$local_changed = 0;
+	$remote_changed = 0;
+	$local_changes = 0;
+	$remote_changes = 0;
 
 	# These are the range and done for the main_gauge
 
@@ -99,27 +122,27 @@ sub new
 	# displays the path and increments {main_done}.
 	# The app then calls $repo->gitChanges() for each repo,
 	# and if it needs pushing it calls $this->incPushNeeded()
-	# which updates {push_todo} and displays it.
+	# which updates {action_todo} and displays it.
 
-	$this->{push_todo} = 0;
-	$this->{push_finished} = 0;
+	$this->{action_todo} = 0;
+	$this->{action_finished} = 0;
 
 	# Then, for each repository needing a push, the app calls
 	# $this->startPush(path).  The first time it is called, startPush()
 	# 	changes the {main_msg} to 'Pushing'
-	#   resets {main_range} to {push_todo}
+	#   resets {main_range} to {action_todo}
 	# Every time startPush() is called it
 	#	sets the {repo} path
-	#   zeros out {push_done}
-	#   sets {push_range} to $PUSH_RANGE
+	#   zeros out {action_done}
+	#   sets {action_range} to $PUSH_RANGE
 	#   sets {push_msg} to 'Starting'
-	#   clears {push_pct} and {push_rate}
+	#   clears {action_pct} and {action_rate}
 
-	$this->{push_done} = 0;
-	$this->{push_range} = '';
-	$this->{push_msg} = '';
-	$this->{push_pct} = '';
-	$this->{push_rate} = '';
+	$this->{action_done} = 0;
+	$this->{action_range} = '';
+	$this->{action_msg} = '';
+	$this->{action_pct} = '';
+	$this->{action_rate} = '';
 
 	# After that, for the duration of the push, the app
 	# calls handleMessage() which updates the above
@@ -129,7 +152,7 @@ sub new
 
 
 	$this->{ctrl_main_msg} = Wx::StaticText->new($this,-1,'',  	[20,10],  [60,20]);
-	$this->{ctrl_repo} 	   = Wx::StaticText->new($this,-1,'',  	[90,10],  [190,20]);
+	$this->{ctrl_repo} 	   = Wx::StaticText->new($this,-1,'',  	[120,10], [190,20]);
 	$this->{ctrl_todo} 	   = Wx::StaticText->new($this,-1,'',  	[360,10], [100,20]);
     $this->{ctrl_gauge1}   = Wx::Gauge->new($this,-1,$num_repos,[20,30],  [420,20]);
 
@@ -143,7 +166,6 @@ sub new
 	$this->{ctrl_rate}->Hide();
 	$this->{ctrl_gauge2}->Hide();
 
-
     $this->{cancel_button} = Wx::Button->new($this,$ID_CANCEL,'Cancel',[380,115],[60,20]);
 
     EVT_BUTTON($this,$ID_CANCEL,\&onButton);
@@ -154,6 +176,15 @@ sub new
 
 	display($dbg_dlg,0,"ProgressDialog::new() finished");
     return $this;
+}
+
+sub addChanges
+{
+	my ($this,$num_local,$num_remote) = @_;
+	$local_changed++ if $num_local;
+	$remote_changed++ if $num_remote;
+	$local_changes += $num_local;
+	$remote_changes += $num_remote;
 }
 
 
@@ -183,7 +214,7 @@ sub onButton
 	{
 		warning($dbg_dlg-1,0,"ProgressDialog::ABORTING");
 		$this->{aborted} = 1;
-		getAppFrame()->abortPush();
+		getAppFrame()->abortCommand();
 	}
 	else
 	{
@@ -207,25 +238,25 @@ sub update
 
 	$this->{ctrl_main_msg}->SetLabel($this->{main_msg});
 	$this->{ctrl_repo}->SetLabel($this->{repo});
-	$this->{ctrl_todo}->SetLabel("push $this->{push_finished}/$this->{push_todo} repos")
-		if $this->{push_todo};
+	$this->{ctrl_todo}->SetLabel("push $this->{action_finished}/$this->{action_todo} repos")
+		if $this->{action_todo};
 
 	$this->{ctrl_gauge1}->SetRange($this->{main_range});
 	$this->{ctrl_gauge1}->SetValue($this->{main_done});
 
-	if ($this->{push_range})
+	if ($this->{action_range})
 	{
 		$this->{ctrl_msg}->Show();
 		$this->{ctrl_pct}->Show();
 		$this->{ctrl_rate}->Show();
 		$this->{ctrl_gauge2}->Show();
 
-		$this->{ctrl_msg}->SetLabel($this->{push_msg});
-		$this->{ctrl_pct}->SetLabel($this->{push_pct});
-		$this->{ctrl_rate}->SetLabel($this->{push_rate});
+		$this->{ctrl_msg}->SetLabel($this->{action_msg});
+		$this->{ctrl_pct}->SetLabel($this->{action_pct});
+		$this->{ctrl_rate}->SetLabel($this->{action_rate});
 
-		$this->{ctrl_gauge2}->SetRange($this->{push_range});
-		$this->{ctrl_gauge2}->SetValue($this->{push_done});
+		$this->{ctrl_gauge2}->SetRange($this->{action_range});
+		$this->{ctrl_gauge2}->SetValue($this->{action_done});
 	}
 	else
 	{
@@ -238,13 +269,10 @@ sub update
 	# yield occasionally
 
 	Wx::App::GetInstance()->Yield();
-	# sleep(0.2);
-	# Wx::App::GetInstance()->Yield();
-
 
 	display($dbg_update,0,"progressDialog::update() finished");
 
-	getAppFrame()->abortPush() if $this->{aborted};
+	getAppFrame()->abortCommand() if $this->{aborted};
 }
 
 
@@ -263,19 +291,19 @@ sub checkRepo
 }
 
 
-sub incPushNeeded
+sub incActionNeeded
 {
 	my ($this) = @_;
-	display($dbg_dlg+1,0,"incPushes(}");
-	$this->{push_todo}++;
+	display($dbg_dlg+1,0,"incActionNeeded(}");
+	$this->{action_todo}++;
 	$this->update();
 }
 
 
-sub startPush
+sub startAction
 {
 	my ($this,$path) = @_;
-	warning($dbg_dlg,0,"startPush($path} todo($this->{push_todo}) main_msg($this->{main_msg})");
+	warning($dbg_dlg,0,"startAction($path} todo($this->{action_todo}) main_msg($this->{main_msg})");
 
 	# first push changes the message to Push
 	# and activates the 2nd guage and message
@@ -283,20 +311,20 @@ sub startPush
 	$this->{main_done} = 0
 		if $this->{main_msg} eq 'Checking';
 
-	$this->{main_range} = $this->{push_todo};
-	$this->{main_msg} = 'Pushing';
+	$this->{main_range} = $this->{action_todo};
+	$this->{main_msg} = $this->{command_name};
 	$this->{repo} = $path;
-	$this->{push_finished}++;	# pre-increment
+	$this->{action_finished}++;	# pre-increment
 	$this->{main_done}++;		# these are now synchronized
 
 	# set the constant $PUSH_RANGE which will cause
 	# the second bar to be displayed
 
-	$this->{push_range} = $PUSH_RANGE;
-	$this->{push_done} = 0;
-	$this->{push_msg} = 'Starting';
-	$this->{push_pct} = '';
-	$this->{push_rate} = '';
+	$this->{action_range} = $PUSH_RANGE;
+	$this->{action_done} = 0;
+	$this->{action_msg} = 'Starting';
+	$this->{action_pct} = '';
+	$this->{action_rate} = '';
 
 	$this->update();
 }
@@ -331,22 +359,22 @@ sub handleMessage
 
 			display($dbg_dlg+1,1,"$stage($pct)  msg($pct_msg) rate($rate)");
 
-			$this->{push_done} = $pct;
-			$this->{push_msg} = $stage;
-			$this->{push_pct} = $pct_msg;
-			$this->{push_rate} = $rate;
+			$this->{action_done} = $pct;
+			$this->{action_msg} = $stage;
+			$this->{action_pct} = $pct_msg;
+			$this->{action_rate} = $rate;
 		}
 		elsif ($line =~ /^remote:/)
 		{
 			if ($line =~ /,\s+completed/)
 			{
-				$this->{push_msg} = "Done";
-				$this->{main_msg} = "Done" if
+				$this->{action_msg} = "Done";
+				$this->finish('done') if
 					$this->{main_done} == $this->{main_range};
 			}
 			else
 			{
-				$this->{push_msg} = "Finishing";
+				$this->{action_msg} = "Finishing";
 			}
 		}
 		$this->update();
@@ -361,18 +389,42 @@ sub finish
 	$this->{cancel_button}->SetLabel("Close");
 	$this->{window_done} = 1;
 
-	my $msg =
-		$what eq 'done' ? "Done" :
-		$what eq 'noChanges' ? "NO CHANGES" :
-		$what eq 'aborted' ? "ABORTED" :
-		"unknown finish message";
+	my $msg = 'unknown finish message';
+
+	$msg = "Done!" if $what eq 'done';
+	$msg = "ABORTED !!!" if $what eq 'aborted';
+
+	if ($what eq 'noActions')
+	{
+		if ($this->{command_id} == $COMMAND_CHANGES)
+		{
+			if (!$local_changes && !$remote_changes)
+			{
+				$msg = 'No changes!';
+			}
+			else
+			{
+				$msg = 'Done';
+			}
+		}
+		else
+		{
+			$msg = "Nothing to do!!";
+		}
+	}
+
+	my $msg2 = '';
+	$msg2 = "local($local_changed:$local_changes) " if $local_changes;
+	$msg2 .= "remote($remote_changed:$remote_changes) " if $remote_changes;
+
+	$this->{repo} = $msg2 if $this->{command_id} == $COMMAND_CHANGES;
+
 	$this->{main_msg} = $msg;
 	$this->update();
 
 	okDialog($this,"Push aborted by user","Push Aborted")
 		if $what eq 'aborted';
 }
-
 
 
 1;

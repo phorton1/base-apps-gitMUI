@@ -9,7 +9,7 @@ use threads;
 use threads::shared;
 use Wx qw(:everything);
 use Wx::Event qw(
-	EVT_MENU
+	EVT_MENU_RANGE
 	EVT_COMMAND
 	EVT_IDLE );
 use Pub::Utils;
@@ -23,12 +23,12 @@ use base qw(Pub::WX::Frame);
 
 my $dbg_frame = 0;
 	# lifecycle, major commands
-my $dbg_push = 1;
-	# 0 = main push functions
+my $dbg_cmds = 0;
+	# 0 = main command functions
 	# -1 = details
-my $dbg_thread = 1;
+my $dbg_thread = 0;
 	# 0 = msin thread calls
-	# -1 = dtails
+	# -1 = details
 our $dbg_idle = 1;
 	# 0 = show onIdle stuff
 
@@ -57,8 +57,8 @@ my $stderr_handle;
 my $last_size:shared = 0;
 	# last bytes read from $stderr_handle in onIdle();
 
-my $push_aborted:shared = 0;
-	# abortPush() called by progressDialog.pm
+my $command_aborted:shared = 0;
+	# abortCommand() called by progressDialog.pm
 
 
 #--------------------------------------
@@ -80,7 +80,7 @@ sub new
 	$this->createPane($ID_PATH_WINDOW);
 
 	EVT_IDLE($this,\&onIdle);
-	EVT_MENU($this, $COMMAND_PUSH, \&onCommandPush);
+	EVT_MENU_RANGE($this, $COMMAND_CHANGES, $COMMAND_TAGS, \&onGitCommand);
 	EVT_COMMAND($this, -1, $THREAD_EVENT, \&onThreadEvent );
 
 	return $this;
@@ -104,48 +104,50 @@ sub createPane
 
 
 
-#######################
-# commandPush
-#######################
+#################################################################
+# onGitCommand
+#################################################################
 
 
-sub initPush
+sub initCommand
 {
 	my ($this) = @_;
 
 	close($stderr_handle) if $stderr_handle;
 	$stderr_handle = undef;
 	unlink $stderr_filename;
-	$push_aborted = 0;
+	$command_aborted = 0;
 	$last_size = 0;
 }
 
 
-sub abortPush
+sub abortCommand
 {
 	my ($this) = @_;
-	if (!$push_aborted)
+	if (!$command_aborted)
 	{
-		warning(0,0,"abortPush()");
-		$push_aborted = 1;
+		warning(0,0,"abortCommand()");
+		$command_aborted = 1;
 	}
 }
 
 
-
-sub onCommandPush
+sub onGitCommand
 {
 	my ($this,$event) = @_;
-	display($dbg_push,0,"onCommandPush()");
+	my $id = $event->GetId();
+	$this->{command_name} = $resources->{command_data}->{$id}->[0];
+	display($dbg_cmds,0,"onGitCommand($id)=$this->{command_name}");
 
-	$this->initPush();
+	$this->initCommand();
 
 	return if !parseRepos();
 	my $repo_list = getRepoList();
 
+	my $data = '';
+		# Commit needs to get the description
 
-	$this->{progress} = apps::gitUI::progressDialog->new($this,scalar(@$repo_list));
-
+	$this->{progress} = apps::gitUI::progressDialog->new($this,$id,scalar(@$repo_list));
 
 	if ($HOW_THREADED == $THREADED_FORK)
 	{
@@ -159,7 +161,7 @@ sub onCommandPush
 		if (!$child_pid)	# child fork
 		{
 			display($dbg_thread,0,"THREADED_FORK_START($fork_num) pid=$$");
-			$this->doThreadedPush($repo_list);
+			$this->doThreadedCommand($repo_list,$id,$data);
 			display($dbg_thread,0,"THREADED_FORK_END($fork_num) pid=$$");
 			exit();
 		}
@@ -169,100 +171,64 @@ sub onCommandPush
 		display($dbg_thread,1,"starting THREAD");
 		@_ = ();
 		$push_thread = threads->create(	# barfs: my $thread = threads->create(
-			\&doThreadedPush,$this,$repo_list);
+			\&doThreadedCommand,$this,$repo_list,$id,$data);
 		$push_thread->detach(); 			# barfs;
 		display($dbg_thread,1,"THREAD_STARTED");
 	}
 	else
 	{
-		$this->doThreadedPush($repo_list);
+		$this->doThreadedCommand($repo_list,$id,$data);
 	}
 
 	# $this->{progress}->Destroy();
 	# $this->{progress} = '';
-	display($dbg_push,0,"onCommandPush() returning");
+	display($dbg_cmds,0,"onGitCommand() returning");
 }
 
 
 
-sub updateProgress
+sub doThreadedCommand
 {
-	my ($this,$what,$data) = @_;
-	return if !$this->{progress};
-	if ($what eq 'checkRepo')
-	{
-		$this->{progress}->checkRepo($data);
-	}
-	elsif ($what eq 'incPushNeeded')
-	{
-		$this->{progress}->incPushNeeded();
-	}
-	elsif ($what eq 'startPush')
-	{
-		$this->{progress}->startPush($data);
-	}
-	elsif ($what eq 'handleMessage')
-	{
-		$this->{progress}->handleMessage($data);
-	}
-	elsif ($what =~ /^done|noChanges|aborted$/)
-	{
-		$this->{progress}->finish($what);
-		$this->initPush();
-	}
-}
+	my ($this,$repo_list,$id,$data) = @_;
+	display($dbg_cmds,0,"doThreadedCommand($id)=$this->{command_name}");
+	display($dbg_cmds+1,1,"data='$data'");
 
-
-sub sendThreadEvent
-{
-	my ($this,$packet) = @_;
-	display($dbg_thread+1,1,"sendThreadEvent() $packet->{what})");
-
-	if ($HOW_THREADED)
-	{
-		my $evt = new Wx::PlThreadEvent( -1, $THREAD_EVENT, shared_clone($packet) );
-		Wx::PostEvent( $this, $evt );
-	}
-	else
-	{
-		$this->updateProgress($packet->{what},$packet->{data});
-	}
-
-}
-
-
-sub doThreadedPush
-{
-	my ($this,$repo_list) = @_;
-	display($dbg_push,0,"doThreadedPush()");
-
-
-	my $num_pushes = 0;
+	my $num_actions = 0;
 	for my $repo (@$repo_list)
 	{
-		last if $push_aborted;
+		last if $command_aborted;
 		$this->sendThreadEvent({
 			what => 'checkRepo',
 			data  => $repo->{path} });
 
-		last if $push_aborted;
-		$repo->gitChanges();
+		last if $command_aborted;
 
-		last if $push_aborted;
+		# GRRR - getting superflous changes,
+		# then i 'turned on' debugging with '1' parameter
+		# and they went away ...
 
-		if ($repo->canPush())
+		if ($id != $COMMAND_TAGS)
 		{
-			$this->sendThreadEvent({what => 'incPushNeeded'});
-			$num_pushes++;
+			$repo->gitChanges(1);
+			$this->{progress}->addChanges(
+				scalar(@{$repo->{local_changes}}),
+				scalar(@{$repo->{remote_changes}}));
+				# threadsafe
+		}
+
+		last if $command_aborted;
+
+		if ($id == $COMMAND_PUSH && $repo->canPush())
+		{
+			$this->sendThreadEvent({what => 'incActionNeeded'});
+			$num_actions++;
 		}
 	}
 
-
-
-	if ($num_pushes)
+	if ($num_actions)
 	{
 		local *SAVED_STDERR;
-		if ($REDIRECT_STDERR)
+		if ($id == $COMMAND_PUSH && $REDIRECT_STDERR)
 		{
 			open(*SAVED_STDERR, ">&", STDERR);
 			open(STDERR, ">",  $stderr_filename );
@@ -271,18 +237,21 @@ sub doThreadedPush
 		for my $repo (@$repo_list)
 		{
 			# next if $repo->{path} ne '/junk/junk_repository';
-			if ($repo->canPush())
-			{
-				display($dbg_push+1,2,"doThreadedPush() startPush($repo->{path})");
 
-				last if $push_aborted;
+			my $doit = 0;
+			$doit = 1 if $id == $COMMAND_PUSH && $repo->canPush();
+			$doit = 1 if $id == $COMMAND_COMMIT && $repo->canCommit();
+
+			if ($doit)
+			{
+				display($dbg_cmds+1,2,"doThreadedCommand($this->{command_name}) startAction($repo->{path})");
+
+				last if $command_aborted;
 				$this->sendThreadEvent({
-					what => 'startPush',
+					what => 'startAction',
 					data  => $repo->{path} });
 
-				display($dbg_push+1,2,"doThreadedPush() calling repo->gitPush()");
-
-				last if $push_aborted;
+				last if $command_aborted;
 
 				# There's some convoluted logic to get 'git push' messages
 				# to display in the progressDialog() progress ..
@@ -304,50 +273,61 @@ sub doThreadedPush
 				# I currently have all debugging from onIdle(() to progressDialog::
 				# handleMessage() turned off.  It seems to be working.
 
-				my $save_with = $WITH_SEMAPHORES;
-				my $save_local = $USE_SHARED_LOCK_SEM;
-				$WITH_SEMAPHORES = 0;
-				$USE_SHARED_LOCK_SEM = 0;
+				if ($id == $COMMAND_PUSH)
+				{
+					display($dbg_cmds+1,2,"doThreadedCommand() calling repo->gitPush()");
+					my $save_with = $WITH_SEMAPHORES;
+					my $save_local = $USE_SHARED_LOCK_SEM;
+					$WITH_SEMAPHORES = 0;
+					$USE_SHARED_LOCK_SEM = 0;
 
-				$repo->gitPush();
+					$repo->gitPush();
 
-				$WITH_SEMAPHORES = $save_with;
-				$USE_SHARED_LOCK_SEM = $save_local;
+					$WITH_SEMAPHORES = $save_with;
+					$USE_SHARED_LOCK_SEM = $save_local;
+				}
 			}
-		}
+		}	# for each repo
 
+		open( STDERR, ">&", SAVED_STDERR) if
+			$id == $COMMAND_PUSH && $REDIRECT_STDERR;
 
-		open( STDERR, ">&", SAVED_STDERR) if $REDIRECT_STDERR;
-		display($dbg_push,0,"doThreadedPush() finished");
-	}
+	}	# $num_actions
 
 
 	$this->sendThreadEvent({ what =>
-		$push_aborted ? "aborted" :
-		!$num_pushes ? "noChanges" :
+		$command_aborted ? "aborted" :
+		!$num_actions ? "noActions" :
 		"done" });
 
-	$this->initPush();
+	$this->initCommand();
+	display($dbg_cmds,0,"doThreadedCommand() finished");
 
-}
+}	# doThreadedCommand()
 
 
 
-sub notifyPushProgress
-	# only called from repo.pm if $DO_ASYNCH_PUSH
+#-----------------------------------------
+# doThreadedCommand support
+#-----------------------------------------
+
+sub sendThreadEvent
 {
-	my ($this,$buf) = @_;
-	display($dbg_push+1,0,"notifyPushProgress($buf)");
-	$this->sendThreadEvent({
-		what => 'handleMessage',
-		data  => $buf });
-	return !$push_aborted;
+	my ($this,$packet) = @_;
+	display($dbg_thread+1,1,"sendThreadEvent($packet->{what})");
+
+	if ($HOW_THREADED)
+	{
+		my $evt = new Wx::PlThreadEvent( -1, $THREAD_EVENT, shared_clone($packet) );
+		Wx::PostEvent( $this, $evt );
+	}
+	else
+	{
+		$this->updateProgress($packet->{what},$packet->{data});
+	}
+
 }
 
-
-
-
-my $no_progess_reported:shared = 0;
 
 
 sub onThreadEvent
@@ -359,10 +339,9 @@ sub onThreadEvent
 		error("No event in onThreadEvent!!");
 		return;
 	}
-	if (!$this->{progress} && !$no_progess_reported)
+	if (!$this->{progress})
 	{
 		error("No progress in onThreadEvent!!");
-		$no_progess_reported = 1;
 		return;
 	}
 
@@ -375,8 +354,52 @@ sub onThreadEvent
 }
 
 
+sub updateProgress
+{
+	my ($this,$what,$data) = @_;
+	return if !$this->{progress};
+	if ($what eq 'checkRepo')
+	{
+		$this->{progress}->checkRepo($data);
+	}
+	elsif ($what eq 'incActionNeeded')
+	{
+		$this->{progress}->incActionNeeded();
+	}
+	elsif ($what eq 'startAction')
+	{
+		$this->{progress}->startAction($data);
+	}
+	elsif ($what eq 'handleMessage')
+	{
+		$this->{progress}->handleMessage($data);
+	}
+	elsif ($what =~ /^done|noActions|aborted$/)
+	{
+		$this->{progress}->finish($what);
+		$this->initCommand();
+	}
+}
 
 
+
+sub notifyPushProgress
+	# obsolete
+	# only called from repo.pm if $DO_ASYNCH_PUSH
+{
+	my ($this,$buf) = @_;
+	display($dbg_cmds+1,0,"notifyPushProgress($buf)");
+	$this->sendThreadEvent({
+		what => 'handleMessage',
+		data  => $buf });
+	return !$command_aborted;
+}
+
+
+
+#-----------------------------------------------
+# onIdle()
+#-----------------------------------------------
 
 sub onIdle
 {
@@ -384,7 +407,7 @@ sub onIdle
 
 	if ($this->{progress} && -f $stderr_filename)
 	{
-		# display($dbg_push,0,"onIdle() checking $stderr");
+		# display($dbg_cmds,0,"onIdle() checking $stderr");
 
 		my ($dev,$ino,$in_mode,$nlink,$uid,$gid,$rdev,$size,
 			$atime,$mtime,$ctime,$blksize,$blocks) = stat($stderr_filename);
@@ -435,7 +458,7 @@ sub onIdle
 
 	elsif ($stderr_handle)
 	{
-		display($dbg_push,2,"onIdle() closing $stderr_filename");
+		display($dbg_cmds,2,"onIdle() closing $stderr_filename");
 		close($stderr_handle);
 		$stderr_handle = undef;
 	}
