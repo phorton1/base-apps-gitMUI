@@ -22,15 +22,58 @@ use apps::gitUI::pushDialog;
 use base qw(Pub::WX::Frame);
 
 my $dbg_frame = 0;
+	# lifecycle, major commands
+my $dbg_push = 1;
+	# 0 = main push functions
+	# -1 = details
+my $dbg_thread = 1;
+	# 0 = msin thread calls
+	# -1 = dtails
+our $dbg_idle = 1;
+	# 0 = show onIdle stuff
 
 
-our $THREAD_EVENT:shared = Wx::NewEventType;
+# THREADING SETUP
+
+my $REDIRECT_STDERR = 1;
+	# redirect STDER to $stderr_filename for push command
+
+my $THREADED_NONE = 0;
+my $THREADED_FORK = 1;
+my $THREADED_THREAD = 2;
+	# how to do threading ($THREADED_THREAD curreently working)
+
+my $HOW_THREADED = $THREADED_THREAD;
+my $THREAD_EVENT:shared = Wx::NewEventType;
+
+my $fork_num = 0;
+	# if $HOW_THREADED == $THREADED_FORK
+my $push_thread;
+	# if $HOW_THREADED == $THREADED_THREAD
+
+my $stderr_filename;
+my $stderr_handle;
+	# if $REDIRECT_STDERR
+my $last_size:shared = 0;
+	# last bytes read from $stderr_handle in onIdle();
+
+my $push_aborted:shared = 0;
+	# abortPush() called by pushDialog.pm
+
+
+#--------------------------------------
+# methods
+#--------------------------------------
 
 
 sub new
 {
 	my ($class, $parent) = @_;
+
 	Pub::WX::Frame::setHowRestore($RESTORE_MAIN_RECT);
+	$stderr_filename= "$temp_dir/stderr_for_push_command.txt";
+		# after $temp_dir setup in gitUI::git.pm
+
 	my $this = $class->SUPER::new($parent);	# ,-1,'gitUI',[50,50],[600,680]);
 
     $this->CreateStatusBar();
@@ -64,42 +107,15 @@ sub createPane
 #######################
 # commandPush
 #######################
-# The push command (if $DO_ASYNCH_PUSH is set in repo.pm)
-# will call back to us with $buf that we use to update the progrees.
-#
-# This requires the use of a $THREAD_EVENT to communicate
-# to the progress dialog.
 
-my $THREADED_NONE = 0;
-my $THREADED_FORK = 1;
-my $THREADED_THREAD = 2;
-
-my $HOW_THREADED = $THREADED_THREAD;
-
-my $REDIRECT_STDERR = 1;
-
-my $dbg_push = 1;
-	# 0 = main push functions
-	# -1 = details
-my $dbg_thread = 1;
-	# 0 = msin thread calls
-	# -1 = dtails
-our $dbg_idle = 1;
-
-
-my $fork_num = 0;
-my $push_thread;
-my $push_aborted:shared = 0;
-my $stderr = "/junk/stderr.txt";
-my $stderr_handle;
-my $last_size:shared = 0;
 
 sub initPush
 {
 	my ($this) = @_;
+
 	close($stderr_handle) if $stderr_handle;
 	$stderr_handle = undef;
-	unlink $stderr;
+	unlink $stderr_filename;
 	$push_aborted = 0;
 	$last_size = 0;
 }
@@ -249,7 +265,7 @@ sub doThreadedPush
 		if ($REDIRECT_STDERR)
 		{
 			open(*SAVED_STDERR, ">&", STDERR);
-			open(STDERR, ">",  $stderr );
+			open(STDERR, ">",  $stderr_filename );
 		}
 
 		for my $repo (@$repo_list)
@@ -366,12 +382,12 @@ sub onIdle
 {
 	my ($this, $event ) = @_;
 
-	if ($this->{progress} && -f $stderr)
+	if ($this->{progress} && -f $stderr_filename)
 	{
 		# display($dbg_push,0,"onIdle() checking $stderr");
 
 		my ($dev,$ino,$in_mode,$nlink,$uid,$gid,$rdev,$size,
-			$atime,$mtime,$ctime,$blksize,$blocks) = stat($stderr);
+			$atime,$mtime,$ctime,$blksize,$blocks) = stat($stderr_filename);
 
 		if ($last_size != $size)
 		{
@@ -382,16 +398,16 @@ sub onIdle
 
 			if (!$stderr_handle)
 			{
-				display($dbg_idle,2,"onIdle() opening $stderr for input");
-				if (!open($stderr_handle,"<$stderr"))
+				display($dbg_idle,2,"onIdle() opening $stderr_filename for input");
+				if (!open($stderr_handle,"<$stderr_filename"))
 				{
-					error("Could not open $stderr for input");
+					error("Could not open $stderr_filename for input");
 					$this->{progress} = '';
 					return;
 				}
 				if (!$stderr_handle)
 				{
-					error("no stderr_handle to $stderr");
+					error("no stderr_handle to $stderr_filename");
 					$this->{progress} = '';
 					return;
 				}
@@ -419,7 +435,7 @@ sub onIdle
 
 	elsif ($stderr_handle)
 	{
-		display($dbg_push,2,"onIdle() closing $stderr");
+		display($dbg_push,2,"onIdle() closing $stderr_filename");
 		close($stderr_handle);
 		$stderr_handle = undef;
 	}
