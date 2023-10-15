@@ -19,6 +19,7 @@ BEGIN
  	use Exporter qw( import );
 	our @EXPORT = ( qw(
 		$ID_PATH_WINDOW
+		$COMMAND_PUSH
 
 		$COMMAND_PATHS
 		$COMMAND_REPOS
@@ -36,6 +37,7 @@ BEGIN
 # the 'command_id' member on the notebook info.
 
 our ($ID_PATH_WINDOW,
+	 $COMMAND_PUSH,
 	 $COMMAND_PATHS,
 	 $COMMAND_REPOS,
 	 $COMMAND_CHANGES,
@@ -48,6 +50,7 @@ our ($ID_PATH_WINDOW,
 
 my %command_data = (%{$resources->{command_data}},
 
+	$COMMAND_PUSH		=> ['Push',		'Push any commited local changes'],
 	$COMMAND_PATHS		=> ['Paths',	'Show local paths with Sections'],
     $COMMAND_REPOS      => ['Repos',	'Show by Repo ID'],
     $COMMAND_CHANGES    => ['Changes',	'Show current Changes'],
@@ -67,12 +70,13 @@ my %pane_data = (
 
 my @main_menu = ( 'view_menu,&View' );
 
-unshift @{$resources->{view_menu}},$COMMAND_PATHS;
-unshift @{$resources->{view_menu}},$COMMAND_REPOS;
-unshift @{$resources->{view_menu}},$COMMAND_CHANGES;
-unshift @{$resources->{view_menu}},$COMMAND_REMOTE;
-unshift @{$resources->{view_menu}},$COMMAND_DEPENDS;
 
+# unshift @{$resources->{view_menu}},$COMMAND_DEPENDS;
+# unshift @{$resources->{view_menu}},$COMMAND_REMOTE;
+# unshift @{$resources->{view_menu}},$COMMAND_REPOS;
+# unshift @{$resources->{view_menu}},$COMMAND_CHANGES;
+# unshift @{$resources->{view_menu}},$COMMAND_PATHS;
+unshift @{$resources->{view_menu}},$COMMAND_PUSH;
 
 my @win_context_menu = (
     $ID_SEPARATOR,

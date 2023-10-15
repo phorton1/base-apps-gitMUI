@@ -7,6 +7,9 @@ use strict;
 use warnings;
 use threads;
 use threads::shared;
+use Time::Hires qw(sleep);
+use IPC::Open3;
+use Symbol qw(gensym);
 use Pub::Utils;
 use apps::gitUI::git;
 
@@ -16,9 +19,15 @@ my $dbg_new = 1;
 my $dbg_config = 1;
 	# 0 show header in checkConfig
 	# -1 = show details in checkConfig
-my $dbg_git = 0;
-	# 0 = default
-	# -11 = git calls
+
+my $dbg_git_funcs = 0;
+	# debug gitCommit(), gitPush()
+my $dbg_git_changes = 1;
+	# specific to git_changes - output is appropriate for git_changes.pm
+
+my $dbg_git_calls = 1;
+	# 0 = show gitCalls
+	# -1 = show gitCallDetails (for $DO_ASYNCH_PUSH)
 
 
 BEGIN
@@ -28,7 +37,13 @@ BEGIN
 	);
 }
 
+my $DO_ASYNCH_PUSH = 0;
 
+
+
+#---------------------------
+# ctor
+#---------------------------
 
 sub new
 {
@@ -49,8 +64,8 @@ sub new
 		needs	 => shared_clone([]),       # a list of the abitrary dependencies this repository has
 		friend   => shared_clone([]),       # a hash of repositories this repository relates to or can use
 		group    => shared_clone([]),       # a list of arbitrary groups that this repository belongs to
-		local_changes => '',				# list of lines of change text matching 'local: ...'
-		remote_changes => '',				# list of lines of change text matching 'remote: ...'
+		local_changes =>  shared_clone([]),	# list of lines of change text matching 'local: ...'
+		remote_changes => shared_clone([]),	# list of lines of change text matching 'remote: ...'
 		errors   => shared_clone([]),
 		warnings => shared_clone([]),
 		notes 	 => shared_clone([]), });
@@ -101,27 +116,6 @@ sub repoNote
 	push @{$this->{notes}},$msg;
 }
 
-
-# sub addChange
-# {
-# 	my ($this,$where,$what) = @_;
-# 	$what =~ s/^\s+|\s+$//g;
-# 	my $key = $where."_changes";
-# 	$this->{$key} ||= shared_clone([]);
-# 	push @{$this->{$key}},$what;
-# }
-#
-#
-# sub setChanges
-# {
-# 	my ($this,$text) = @_;
-# 	my @lines = split(/\n/,$text);
-# 	for my $line (@lines)
-# 	{
-# 		$this->addChange($1,$line) if
-# 			$line =~ s/^\s*(remote|local):\s*//;
-# 	}
-# }
 
 
 #------------------------------------------
@@ -324,23 +318,19 @@ sub checkGitConfig
 sub hasChanges
 {
 	my ($this) = @_;
-	return $this->{local_changes} || $this->{remote_changes} ? 1 : 0;
+	return @{$this->{local_changes}} || @{$this->{remote_changes}} ? 1 : 0;
 }
 sub canCommit
 {
 	my ($this) = @_;
-	return $this->{local_changes} ? 1 : 0;
+	return @{$this->{local_changes}} ? 1 : 0;
 }
 sub canPush
 {
 	my ($this) = @_;
-	return $this->{remote_changes} ? 1 : 0;
+	return @{$this->{remote_changes}} ? 1 : 0;
 }
 
-
-use IPC::Open3;
-use Symbol qw(gensym);
-use IO::Select;
 
 
 
@@ -357,70 +347,74 @@ sub gitCall
         return;
     }
 
-	display($dbg_git+1,0,"calling 'git $command'");
-
-
-	# my $rslt = `git $command` || '';
-
-
-	# my $stdin;
-	# my $stdout;
-	# my $stderr = gensym();
-    #
-	display($dbg_git+1,0,"calling open3('git $command')");
-	my $pid = open3(\*CHILD_STDIN, \*CHILD_STDOUT, \*CHILD_STDERR, "git $command");
-
 	my $rslt = '';
+	display($dbg_git_calls,0,"calling 'git $command' for($this->{path})");
 
-	my $start = time();
-	my $last_time = '';
-	my $select = IO::Select->new();
-	$select->add(*CHILD_STDOUT,*CHILD_STDERR);
-	while (time() < $start + 10)
+	my $app_frame = getAppFrame();
+
+	if (!$DO_ASYNCH_PUSH ||
+		!$command !~ /^push/ ||
+		!$app_frame)
 	{
-		select(undef,undef,undef,0.01);
+		# $ENV{GIT_REDIRECT_STDERR} = "2>&1";	 # "/junk/stderr.txt";
+		# $ENV{GIT_REDIRECT_STDERR} = ">/junk/stderr.txt";
 
-		my $line0 = <CHILD_STDOUT>;
-		if ($line0)
-		{
-			$line0 =~ s/^\s+|\s+$//g;
-			display($dbg_git,1,$line0,0,$display_color_light_cyan);
-			$rslt .= $line0."\n";
-		};
+		my $got_sem = waitSTDOUTSemaphore();
+		$rslt = `git $command` || '';
+		releaseSTDOUTSemaphore() if $got_sem;
+	}
+	else
+	{
+		my $child_command = "git $command";
+		display($dbg_git_calls,0,"calling open3($child_command)");
+		my $pid = open3(\*CHILD_STDIN, \*CHILD_STDOUT, \*CHILD_STDERR, $child_command);
 
-		my $line1 = <CHILD_STDERR>;
-		if ($line1)
+		my $start = time();
+		my $last_time = '';
+		while (1)	# time() < $start + 30)
 		{
-			display($dbg_git,1,$line1,0,$display_color_light_magenta);
+			my $buf;
+			my $bytes1 = sysread(*CHILD_STDERR,$buf,10000);
+			if ($bytes1)
+			{
+				display($dbg_git_calls+1,1,"buf=$buf",0,$display_color_light_magenta);
+				my $aborted = !$app_frame->notifyPushProgress($buf);
+				if ($aborted)
+				{
+					warning($dbg_git_calls+1,1,"gitCall() aborted");
+					last;
+				}
+			}
+
+			last if !$bytes1;
+
+			my $now = time();
+			if ($now ne $last_time)
+			{
+				$last_time = $now;
+				display($dbg_git_calls+2,1,"loop(".($now-$start).")");
+			}
 		}
 
-		last if !defined($line0) && !defined($line1);
-
-		# my @can_read = $select->can_read();
-		# for my $handle (@can_read)
-		# {
-		# 	print "canRead($handle)\n";
-		# 	# my $line = <$handle>;
-		# 	# print "GOT $line\n";
-		# }
-
-		my $now = time();
-		if ($now ne $last_time)
+		my $buf;
+		my $bytes0 = sysread(*CHILD_STDOUT,$buf,10000);
+		if ($bytes0)
 		{
-			$last_time = $now;
-			display($dbg_git+1,1,"loop(".($now-$start).")");
+			display($dbg_git_calls+1,1,"buf=$buf",0,$display_color_light_cyan);
+			$rslt .= $buf;
 		}
+
+		close(*CHILD_STDIN);
+		close(*CHILD_STDOUT);
+		close(*CHILD_STDERR);
+		waitpid($pid, 0);		# I think WNOHANG is 1
 	}
 
-	close(*CHILD_STDIN);
-	close(*CHILD_STDOUT);
-	close(*CHILD_STDERR);
-	waitpid($pid, 0);		# I think WNOHANG is 1
 
     if (defined($rslt))
     {
         $rslt =~ s/\s*$//s;
-        display($dbg_git,1,"'git $command' returned '$rslt'") if $rslt;;
+        display($dbg_git_calls,1,"'git $command' returned rslt=".length($rslt)." bytes");
     }
     else
     {
@@ -442,8 +436,10 @@ sub gitPush
 {
 	my ($this) = @_;
 	my $branch = $this->{branch};
-	display($dbg_git,0,"gitPush($this->{path} $branch)");
-	my $rslt = $this->gitCall("push -u origin $branch");
+	display($dbg_git_funcs,0,"gitPush($this->{path} $branch)");
+	my $rslt = $this->gitCall("push --progress -u origin $branch");
+	$rslt ||= '';
+	display($dbg_git_funcs,0,"gitPush() returning $rslt");
 	# instead of this meaningless message
 	# Branch 'master' set up to track remote branch 'master' from 'origin'.
 }
@@ -459,7 +455,7 @@ sub gitCommit
 {
 	my ($this,$msg) = @_;
 	my $branch = $this->{branch};
-	display($dbg_git,0,"gitCommit($this->{path})");
+	display($dbg_git_funcs,0,"gitCommit($this->{path})");
 	$this->gitCall("add -A");
 	my $rslt = $this->gitCall("commit  -m \"$msg\"");
 	# [master 9c8685f] test commit 1 file changed, 5 insertions(+), 5 deletions(-)
@@ -473,21 +469,25 @@ sub gitCommit
 
 sub gitChanges
 {
-	my ($this) = @_;
-	display($dbg_git+1,0,"gitChanges($this->{path})");
+	my ($this,$for_git_changes_pm) = @_;
+	display($dbg_git_changes+1,0,"gitChanges($this->{path})");
 
 	my $started = 0;
-	my $has_changes = 0;
-	$has_changes = 1 if $this->getSpecificChanges(0,\$started);
-	$has_changes = 1 if $this->getSpecificChanges(1,\$started);
+	$this->getSpecificChanges(0,\$started,$for_git_changes_pm);
+	$this->getSpecificChanges(1,\$started,$for_git_changes_pm);
+
+	my $local_changes = scalar(@{$this->{local_changes}});
+	my $remote_changes = scalar(@{$this->{remote_changes}});
+
+	display($dbg_git_changes+1,0,"gitChanges($this->{path}) local($local_changes) remote($remote_changes)")
+		if $local_changes || $remote_changes;
 }
 
 
 sub getSpecificChanges
 {
-	my ($this,$local,$pstarted) = @_;
+	my ($this,$local,$pstarted,$for_git_changes_pm) = @_;
 
-	my $has_changes = 0;
 	my $path = $this->{path};
 	my $branch = $this->{branch};
 	my $key = $local ? 'local_changes' : 'remote_changes';
@@ -505,28 +505,37 @@ sub getSpecificChanges
 
 	# parse returned lines
 
-	$this->{$key} = '';
-    for my $line (split(/\n/,$text))
+	for my $line (split(/\n/,$text))
     {
         $line ||= '';
         $line =~ s/\s|$//;
 
 		if ($line)
 		{
-			$has_changes = 1;
+			my $array = $this->{$key};
+			my $use_dbg = $for_git_changes_pm ? 0 : $dbg_git_changes;
+
 			if (!$$pstarted)
 			{
 				$$pstarted = 1;
-				display($dbg_git,0,"gitChanges($this->{path})");
+				display($use_dbg,0,"gitChanges($this->{path})");
 			}
 
-			$this->{$key} ||= shared_clone([]);
-			display($dbg_git,1,($local?"local:  ":"remote: ").$line);
-			push @{$this->{$key}},$line;
+			display($use_dbg,1,($local?"local:  ":"remote: ").$line);
+
+			push @$array,$line;
 		}
 	}
-	return $has_changes;
 }
+
+
+if (0)
+{
+	my $repo = apps::gitUI::repo->new(0,'',"/junk/junk_repository",'master');
+	#$repo->gitChanges();
+	$repo->gitPush();
+}
+
 
 
 1;

@@ -101,6 +101,10 @@ sub getRepoSections	{ return $repo_sections; }
 sub parseRepos
 {
     display($dbg_parse,0,"parseRepos($repo_filename)");
+	$repo_hash = shared_clone({});
+	$repo_list = shared_clone([]);
+	$repo_sections = shared_clone([]);
+
 	my $text = getTextFile($repo_filename);
     if ($text)
     {
