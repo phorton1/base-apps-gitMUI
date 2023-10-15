@@ -18,7 +18,7 @@ use apps::gitUI::repo;
 use apps::gitUI::repos;
 use apps::gitUI::Resources;
 use apps::gitUI::pathWindow;
-use apps::gitUI::pushDialog;
+use apps::gitUI::progressDialog;
 use base qw(Pub::WX::Frame);
 
 my $dbg_frame = 0;
@@ -58,7 +58,7 @@ my $last_size:shared = 0;
 	# last bytes read from $stderr_handle in onIdle();
 
 my $push_aborted:shared = 0;
-	# abortPush() called by pushDialog.pm
+	# abortPush() called by progressDialog.pm
 
 
 #--------------------------------------
@@ -144,7 +144,7 @@ sub onCommandPush
 	my $repo_list = getRepoList();
 
 
-	$this->{progress} = apps::gitUI::pushDialog->new($this,scalar(@$repo_list));
+	$this->{progress} = apps::gitUI::progressDialog->new($this,scalar(@$repo_list));
 
 
 	if ($HOW_THREADED == $THREADED_FORK)
@@ -285,7 +285,7 @@ sub doThreadedPush
 				last if $push_aborted;
 
 				# There's some convoluted logic to get 'git push' messages
-				# to display in the pushDialog() progress ..
+				# to display in the progressDialog() progress ..
 				#
 				# We generally use both the local $USE_SHARED_LOCK_SEM
 				# AND $WITH_SEMAPHORES = $HOW_SEMAPHORE_LOCAL to prevent
@@ -301,7 +301,7 @@ sub doThreadedPush
 				# are underway.
 				#
 				# The use of debugging output in this is probably problematic.
-				# I currently have all debugging from onIdle(() to pushDialog::
+				# I currently have all debugging from onIdle(() to progressDialog::
 				# handleMessage() turned off.  It seems to be working.
 
 				my $save_with = $WITH_SEMAPHORES;

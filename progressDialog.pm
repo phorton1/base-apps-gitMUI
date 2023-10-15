@@ -1,6 +1,6 @@
 #!/usr/bin/perl
 #--------------------------------------------------
-# apps::gitUI::pushDialog
+# apps::gitUI::progressDialog
 #--------------------------------------------------
 # A progress dialog for a Push
 #
@@ -31,7 +31,7 @@
 # We up this to 5 stages where the beginning and end stages don't have any actual progress
 # I also have no idea how ERRORS or ABORT are going to work.
 
-package apps::gitUI::pushDialog;
+package apps::gitUI::progressDialog;
 use strict;
 use warnings;
 use threads;
@@ -73,7 +73,7 @@ sub new
 		$parent,
 		$num_repos) = @_;
 
-	display($dbg_dlg,0,"pushDialog::new($num_repos)");
+	display($dbg_dlg,0,"progressDialog::new($num_repos)");
 
     my $this = $class->SUPER::new(
 		$parent,
@@ -203,7 +203,7 @@ sub onButton
 sub update
 {
 	my ($this) = @_;
-	display($dbg_update,0,"pushDialog::update()");
+	display($dbg_update,0,"progressDialog::update()");
 
 	$this->{ctrl_main_msg}->SetLabel($this->{main_msg});
 	$this->{ctrl_repo}->SetLabel($this->{repo});
@@ -242,7 +242,7 @@ sub update
 	# Wx::App::GetInstance()->Yield();
 
 
-	display($dbg_update,0,"pushDialog::update() finished");
+	display($dbg_update,0,"progressDialog::update() finished");
 
 	getAppFrame()->abortPush() if $this->{aborted};
 }
