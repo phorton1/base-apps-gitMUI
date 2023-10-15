@@ -89,8 +89,6 @@ my %pane_data = (
 
 my @main_menu = ( 'view_menu,&View' );
 
-
-
 unshift @{$resources->{view_menu}},(
 	$COMMAND_CHANGES,
 		$ID_SEPARATOR,
