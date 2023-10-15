@@ -185,6 +185,11 @@ sub onButton
 		$this->{aborted} = 1;
 		getAppFrame()->abortPush();
 	}
+	else
+	{
+		$this->EndModal($ID_CANCEL);
+		$this->Destroy();
+	}
 	$event->Skip();
 }
 
