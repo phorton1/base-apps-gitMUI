@@ -80,15 +80,13 @@ BEGIN
 }
 
 
-my $repo_quiet:shared = 0;
-my $save_dbg_chgs:shared;
-my $save_dbg_commit:shared;
-my $save_dbg_push:shared;
-my $save_dbg_tag:shared;
-my $save_dbg_creds:shared;
-my $save_dbg_cb:shared;
-	# push callbacks
 
+my $repo_quiet:shared = 0;
+
+sub setRepoQuiet { $repo_quiet = shift; }
+	# turns off repoErrors, repoWarnings, and repoNotes
+	# for calling from gitUI windows without reporting
+	# those kinds of errors
 
 my $git_user:shared = '';
 my $git_api_token:shared = '';
@@ -163,50 +161,6 @@ sub getCredentials
 }
 
 
-sub setRepoQuiet
-	# 1 = turn off repoErrors, repoWarnings, and repoNotes
-	# 2 = turn off debugging
-	# 3 = both
-{
-	my $quiet = shift;
-	if ($repo_quiet != $quiet)
-	{
-		if (($repo_quiet & 2) != ($quiet & 2))
-		{
-			if ($quiet & 2)
-			{
-				# print "setting repoQuiet(2)\n";
-
-				$save_dbg_chgs	 = $dbg_chgs	;
-				$save_dbg_commit = $dbg_commit  ;
-				$save_dbg_push   = $dbg_push    ;
-				$save_dbg_tag    = $dbg_tag     ;
-				$save_dbg_creds  = $dbg_creds   ;
-				$save_dbg_cb	 = $dbg_cb	    ;
-				$dbg_chgs		 = 1 ;
-				$dbg_commit 	 = 1 ;
-				$dbg_push   	 = 1 ;
-				$dbg_tag    	 = 1 ;
-				$dbg_creds  	 = 1 ;
-				$dbg_cb	 		 = 1 ;
-			}
-			else
-			{
-				# print "restoring repoQuiet(2)\n";
-
-				$dbg_chgs	= $save_dbg_chgs	;
-				$dbg_commit = $save_dbg_commit  ;
-				$dbg_push   = $save_dbg_push    ;
-				$dbg_tag    = $save_dbg_tag     ;
-				$dbg_creds  = $save_dbg_creds   ;
-				$dbg_cb	 	= $save_dbg_cb	    ;
-			}
-		}
-		$repo_quiet = $quiet;
-	}
-}
-
-
 #----------------------------
 # accessors
 #----------------------------
@@ -226,7 +180,7 @@ sub repoError
 	$call_level ||= 0;
 	$call_level++;
 	error("repo($this->{path}): ".$msg,$call_level)
-		if !($repo_quiet & 1);
+		if !$repo_quiet;
 	push @{$this->{errors}},$msg;
 	return 0;
 }
@@ -237,7 +191,7 @@ sub repoWarning
 	$call_level ||= 0;
 	$call_level++;
 	warning($dbg_level,$indent,"repo($this->{path}): ".$msg,$call_level)
-		if !($repo_quiet & 1);
+		if !$repo_quiet;
 	push @{$this->{warnings}},$msg;
 }
 
@@ -249,7 +203,7 @@ sub repoNote
 	$call_level++;
 	$color |= $display_color_white;
 	display($dbg_level,$indent,"repo($this->{path}): ".$msg,$call_level,$color)
-		if !($repo_quiet & 1);
+		if !$repo_quiet;
 	push @{$this->{notes}},$msg;
 }
 
