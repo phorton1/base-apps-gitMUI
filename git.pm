@@ -1,10 +1,36 @@
 #----------------------------------------------------
 # base::apps::gitUI::git
 #----------------------------------------------------
-# - parses {path}/,git/config files
-# - calls github to get list of all repositories
-# - calls github to get info about fork-parent of a repository
-# - calls local git for changes, commits, tags, and pushes
+# Some commom git commands:
+#
+#    diff --name-status
+#       or git "status show modified files"
+#       shows any local changes to the repo
+#    diff master origin/master --name-status","remote differences"
+#       show any differences from bitbucket
+#    fetch
+#       update the local repository from the net ... dangerous?
+#    stash
+#       stash any local changes
+#    update
+#       pull any differences from bitbucket
+#    add .
+#       add all uncommitted changes to the staging area
+#    commit  -m "checkin message"
+#       calls "git add ." to add any uncommitted changes to the staging area
+#       and git $command to commit the changes under the given comment
+#    push -u origin master
+#       push the repository to bitbucket
+#
+# TO INITIALIZE REMOTE REPOSITORY
+#
+#      git remote add origin https://github.com/phorton1/Arduino.git
+#
+# Various dangerous commands
+#
+#    git reset --hard HEAD
+#    git pull -u origin master
+
 
 package apps::gitUI::git;
 use strict;
@@ -47,8 +73,6 @@ my @id_path_mappings = (
     "www"              , "/var/www",
 	"fusionAddIns"	   , "/Users/Patrick/AppData/Roaming/Autodesk/Autodesk Fusion 360/API/AddIns",
 );
-
-
 
 
 sub repoPathToId
