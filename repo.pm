@@ -1,18 +1,22 @@
 #----------------------------------------------------
 # base::apps::gitUI::repo
 #----------------------------------------------------
+# The client must implement ABORT.
+# To abort a PUSH, the push must be in a thread
+# 		and the user should kill the thread.
 
 package apps::gitUI::repo;
 use strict;
 use warnings;
 use threads;
 use threads::shared;
-use Time::Hires qw(sleep);
-use IPC::Open3;
-use Symbol qw(gensym);
+use Time::HiRes qw(sleep);
+use Git::Raw;
 use Pub::Utils;
 use apps::gitUI::git;
 
+my $MAX_SHOWN_CHANGES = 30;
+	# any more than this results in single message
 
 my $dbg_new = 1;
 	# ctor
@@ -20,24 +24,79 @@ my $dbg_config = 1;
 	# 0 show header in checkConfig
 	# -1 = show details in checkConfig
 
-my $dbg_git_funcs = 0;
-	# debug gitCommit(), gitPush()
-my $dbg_git_changes = 1;
-	# specific to git_changes - output is appropriate for git_changes.pm
+my $dbg_chgs:shared = 0;
+my $dbg_commit:shared = 0;
+my $dbg_push:shared = 0;
+my $dbg_tag:shared = 0;
 
-my $dbg_git_calls = 1;
-	# 0 = show gitCalls
-	# -1 = show gitCallDetails (for $DO_ASYNCH_PUSH)
+my $dbg_creds:shared = 0;
+	# push credentials callback
+my $dbg_cb:shared = 0;
+	# push callbacks
+
+
+my $CREDENTIAL_FILENAME = '/dat/Private/git/git_credentials.txt';
+
+
+# PUSH callbacks
+#
+# PACK is called first, stage is 0 on first, 1 thereafter
+# 	when done, $total = the number of objects for the push
+# TRANSFER show the current, and total objects and bytes
+#   transferred thus far.
+# REFERENCE is the last (set of) messages as git updates
+#   the local repository's origin/$branch to the HEAD.
+#   There could be multiple, but I usually only see one.
+#   The push is complete when REFERENCE $msg is undef.
+#
+# NEGOTIATE is not seen in my usages
+# SIDEBAND (Resolving deltas) had too many problems,
+#   very quick, so I don't use it.
+
+our $PUSH_CB_PACK		= 0;		# $stage, $current, $total
+our $PUSH_CB_TRANSFER	= 1;		# $current, $total, $bytes
+our $PUSH_CB_REFERENCE  = 2;		# $ref, $msg
+
+# The callback method is of the form
+#
+#     push_callback($object, $CB, $repo, $params...)
+#
+# We specifically use non-shared global variables to
+# hold the users $object and $repo so that it should
+# work with multiple simulatneous threaded pushes
+
 
 
 BEGIN
 {
  	use Exporter qw( import );
 	our @EXPORT = qw(
+		setRepoQuiet
+
+		$PUSH_CB_PACK
+        $PUSH_CB_TRANSFER
+        $PUSH_CB_REFERENCE
 	);
 }
 
-my $DO_ASYNCH_PUSH = 0;
+
+my $repo_quiet:shared = 0;
+my $save_dbg_chgs:shared;
+my $save_dbg_commit:shared;
+my $save_dbg_push:shared;
+my $save_dbg_tag:shared;
+my $save_dbg_creds:shared;
+my $save_dbg_cb:shared;
+	# push callbacks
+
+
+my $git_user:shared = '';
+my $git_api_token:shared = '';
+my $credential_error = 0;
+
+my $push_cb;
+my $push_cb_object;
+my $push_cb_repo;
 
 
 
@@ -75,6 +134,79 @@ sub new
 }
 
 
+
+sub getCredentials
+{
+	return 0 if $credential_error;
+	return 1 if $git_user;
+	my $text = getTextFile($CREDENTIAL_FILENAME);
+	if (!$text)
+	{
+		error("No text in $CREDENTIAL_FILENAME");
+		$credential_error = 1;
+		return 0;
+	}
+	($git_user,$git_api_token) = split(/\n/,$text);
+	$git_user ||= '';
+	$git_user =~ s/^\s+|\s$//g;
+	$git_api_token ||= '';
+	$git_api_token =~ s/^\s+|\s$//g;
+
+	if (!$git_user || !$git_api_token)
+	{
+		error("Could not get git_user("._def($git_user).") or git_token("._def($git_api_token).")");
+		$credential_error = 1;
+		return 0;
+	}
+	display($dbg_creds,0,"got git_user($git_user) git_token($git_api_token)");
+	return 1;
+}
+
+
+sub setRepoQuiet
+	# 1 = turn off repoErrors, repoWarnings, and repoNotes
+	# 2 = turn off debugging
+	# 3 = both
+{
+	my $quiet = shift;
+	if ($repo_quiet != $quiet)
+	{
+		if (($repo_quiet & 2) != ($quiet & 2))
+		{
+			if ($quiet & 2)
+			{
+				# print "setting repoQuiet(2)\n";
+
+				$save_dbg_chgs	 = $dbg_chgs	;
+				$save_dbg_commit = $dbg_commit  ;
+				$save_dbg_push   = $dbg_push    ;
+				$save_dbg_tag    = $dbg_tag     ;
+				$save_dbg_creds  = $dbg_creds   ;
+				$save_dbg_cb	 = $dbg_cb	    ;
+				$dbg_chgs		 = 1 ;
+				$dbg_commit 	 = 1 ;
+				$dbg_push   	 = 1 ;
+				$dbg_tag    	 = 1 ;
+				$dbg_creds  	 = 1 ;
+				$dbg_cb	 		 = 1 ;
+			}
+			else
+			{
+				# print "restoring repoQuiet(2)\n";
+
+				$dbg_chgs	= $save_dbg_chgs	;
+				$dbg_commit = $save_dbg_commit  ;
+				$dbg_push   = $save_dbg_push    ;
+				$dbg_tag    = $save_dbg_tag     ;
+				$dbg_creds  = $save_dbg_creds   ;
+				$dbg_cb	 	= $save_dbg_cb	    ;
+			}
+		}
+		$repo_quiet = $quiet;
+	}
+}
+
+
 #----------------------------
 # accessors
 #----------------------------
@@ -90,31 +222,55 @@ sub clearErrors
 
 sub repoError
 {
-	my ($this,$msg,$quiet,$call_level) = @_;
+	my ($this,$msg,$call_level) = @_;
 	$call_level ||= 0;
 	$call_level++;
-	error($msg,$call_level) if !$quiet;
+	error("repo($this->{path}): ".$msg,$call_level)
+		if !($repo_quiet & 1);
 	push @{$this->{errors}},$msg;
+	return 0;
 }
 
 sub repoWarning
 {
-	my ($this,$dbg_level,$indent,$msg,$quiet,$call_level) = @_;
+	my ($this,$dbg_level,$indent,$msg,$call_level) = @_;
 	$call_level ||= 0;
 	$call_level++;
-	warning($dbg_level,$indent,$msg,$call_level) if !$quiet;
+	warning($dbg_level,$indent,"repo($this->{path}): ".$msg,$call_level)
+		if !($repo_quiet & 1);
 	push @{$this->{warnings}},$msg;
 }
 
 
 sub repoNote
 {
-	my ($this,$dbg_level,$indent,$msg,$quiet,$call_level) = @_;
+	my ($this,$dbg_level,$indent,$msg,$call_level,$color) = @_;
 	$call_level ||= 0;
 	$call_level++;
-	LOG($indent,$msg,$call_level) if !$quiet && $dbg_level <= $debug_level;
+	$color |= $display_color_white;
+	display($dbg_level,$indent,"repo($this->{path}): ".$msg,$call_level,$color)
+		if !($repo_quiet & 1);
 	push @{$this->{notes}},$msg;
 }
+
+
+
+sub hasChanges
+{
+	my ($this) = @_;
+	return @{$this->{local_changes}} + @{$this->{remote_changes}};
+}
+sub canCommit
+{
+	my ($this) = @_;
+	return @{$this->{local_changes}};
+}
+sub canPush
+{
+	my ($this) = @_;
+	return @{$this->{remote_changes}};
+}
+
 
 
 
@@ -279,262 +435,322 @@ sub checkGitConfig
 
 
 
+#--------------------------------------------
+# gitTag
+#--------------------------------------------
 
-#-------------------------------------------------------
-# git CHANGES, COMMIT, TAG, and PUSH
-#-------------------------------------------------------
-# Some commom git commands:
-#
-#    diff --name-status
-#       or git "status show modified files"
-#       shows any local changes to the repo
-#    diff master origin/master --name-status","remote differences"
-#       show any differences from bitbucket
-#    fetch
-#       update the local repository from the net ... dangerous?
-#    stash
-#       stash any local changes
-#    update
-#       pull any differences from bitbucket
-#    add .
-#       add all uncommitted changes to the staging area
-#    commit  -m "checkin message"
-#       calls "git add ." to add any uncommitted changes to the staging area
-#       and git $command to commit the changes under the given comment
-#    push -u origin master
-#       push the repository to bitbucket
-#
-# TO INITIALIZE REMOTE REPOSITORY
-#
-#      git remote add origin https://github.com/phorton1/Arduino.git
-#
-# Various dangerous commands
-#
-#    git reset --hard HEAD
-#    git pull -u origin master
-
-
-
-sub hasChanges
+sub gitTag
 {
-	my ($this) = @_;
-	return @{$this->{local_changes}} || @{$this->{remote_changes}} ? 1 : 0;
-}
-sub canCommit
-{
-	my ($this) = @_;
-	return @{$this->{local_changes}} ? 1 : 0;
-}
-sub canPush
-{
-	my ($this) = @_;
-	return @{$this->{remote_changes}} ? 1 : 0;
-}
+	my ($this,$tag) = @_;
+	display($dbg_tag,0,"gitTag($tag,$this->{path})");
+	my $git_repo = Git::Raw::Repository->open($this->{path});
+	return $this->repoError("Could not create git_repo") if !$git_repo;
 
+	my $config = $git_repo->config();
+	my $name   = $config->str('user.name');
+	my $email  = $config->str('user.email');
+	display($dbg_tag+1,1,"name($name) email($email)");
+	my $sig = Git::Raw::Signature->new($name, $email, time(), 0);
 
+	my $ref = Git::Raw::Reference->lookup("HEAD", $git_repo);
+	return $this->repoError("Could not get ref(HEAD)")
+		if !$ref;
+	my $ref2 = $ref->target();
+	my $id = $ref2->target();
+	return $this->repoError("Could not get id_remote(HEAD)")
+		if !$id;
 
+	print "ref=$ref id=$id\n";
 
+	my $msg = '';
+	my $rslt = $git_repo->tag($tag, $msg, $sig, $id );
+	display($dbg_tag,0,"gitTag($tag) returning"._def($rslt));
 
-sub gitCall
-    # does the given git_command,
-    # displays and returns shell text
-{
-	my ($this,$command) = @_;
-
-    if (!chdir $this->{path})
-    {
-        error("Could not chdir to '$this->{path}'");
-        return;
-    }
-
-	my $rslt = '';
-	display($dbg_git_calls,0,"calling 'git $command' for($this->{path})");
-
-	my $app_frame = getAppFrame();
-
-	if (!$DO_ASYNCH_PUSH ||
-		!$command !~ /^push/ ||
-		!$app_frame)
-	{
-		# $ENV{GIT_REDIRECT_STDERR} = "2>&1";	 # "/junk/stderr.txt";
-		# $ENV{GIT_REDIRECT_STDERR} = ">/junk/stderr.txt";
-
-		my $got_sem = waitSTDOUTSemaphore();
-		$rslt = `git $command` || '';
-		releaseSTDOUTSemaphore() if $got_sem;
-	}
-	else
-	{
-		my $child_command = "git $command";
-		display($dbg_git_calls,0,"calling open3($child_command)");
-		my $pid = open3(\*CHILD_STDIN, \*CHILD_STDOUT, \*CHILD_STDERR, $child_command);
-
-		my $start = time();
-		my $last_time = '';
-		while (1)	# time() < $start + 30)
-		{
-			my $buf;
-			my $bytes1 = sysread(*CHILD_STDERR,$buf,10000);
-			if ($bytes1)
-			{
-				display($dbg_git_calls+1,1,"buf=$buf",0,$display_color_light_magenta);
-				my $aborted = !$app_frame->notifyPushProgress($buf);
-				if ($aborted)
-				{
-					warning($dbg_git_calls+1,1,"gitCall() aborted");
-					last;
-				}
-			}
-
-			last if !$bytes1;
-
-			my $now = time();
-			if ($now ne $last_time)
-			{
-				$last_time = $now;
-				display($dbg_git_calls+2,1,"loop(".($now-$start).")");
-			}
-		}
-
-		my $buf;
-		my $bytes0 = sysread(*CHILD_STDOUT,$buf,10000);
-		if ($bytes0)
-		{
-			display($dbg_git_calls+1,1,"buf=$buf",0,$display_color_light_cyan);
-			$rslt .= $buf;
-		}
-
-		close(*CHILD_STDIN);
-		close(*CHILD_STDOUT);
-		close(*CHILD_STDERR);
-		waitpid($pid, 0);		# I think WNOHANG is 1
-	}
-
-
-    if (defined($rslt))
-    {
-        $rslt =~ s/\s*$//s;
-        display($dbg_git_calls,1,"'git $command' returned rslt=".length($rslt)." bytes");
-    }
-    else
-    {
-        error("git '$command' returned undef");
-    }
 	return $rslt;
 }
 
 
 
-########################
-# gitPush
-########################
-
-sub gitPush
-	# At the present time, the push works well from a dos box
-	# because I get to see the STDOUT or STDERR output in real time
-	# with fancy characters ... as well as 'Everything up-to-date' message
-{
-	my ($this) = @_;
-	my $branch = $this->{branch};
-	display($dbg_git_funcs,0,"gitPush($this->{path} $branch)");
-	my $rslt = $this->gitCall("push --progress -u origin $branch");
-	$rslt ||= '';
-	display($dbg_git_funcs,0,"gitPush() returning $rslt");
-	# instead of this meaningless message
-	# Branch 'master' set up to track remote branch 'master' from 'origin'.
-}
-
-
-
-########################
+#--------------------------------------------
 # gitCommit
-########################
+#--------------------------------------------
 
 
 sub gitCommit
+	# callback gets $path, $pattern
+	# callback returns -1 to abort, 0 to add, 1 to skip
+	# git add -A
+	# git commit  -m \"$msg\"
 {
-	my ($this,$msg) = @_;
-	my $branch = $this->{branch};
-	display($dbg_git_funcs,0,"gitCommit($this->{path})");
-	$this->gitCall("add -A");
-	my $rslt = $this->gitCall("commit  -m \"$msg\"");
-	# [master 9c8685f] test commit 1 file changed, 5 insertions(+), 5 deletions(-)
+	my ($this,$call_back,$msg,$pattern) = @_;
+	$pattern ||= '*';
+	display($dbg_commit,0,"gitCommit($this->{path},$pattern) msg='$msg'");
+	my $git_repo = Git::Raw::Repository->open($this->{path});
+	return $this->repoError("Could not create git_repo") if !$git_repo;
+
+	# build the add_opts
+
+	my $add_opts = { paths => [$pattern]};
+	$add_opts->{notification} = $call_back if $call_back;
+
+	# add files to the repository default index
+
+	my $index = $git_repo->index();
+	$index->add_all($add_opts);
+	$index->write;
+
+	# create a new tree out of the repository index
+
+	my $tree_id = $index->write_tree();
+	my $tree 	= $git_repo->lookup($tree_id);
+
+	# retrieve user's name and email from the Git configuration
+
+	my $config = $git_repo->config();
+	my $name   = $config->str('user.name');
+	my $email  = $config->str('user.email');
+	display($dbg_commit+1,1,"name($name) email($email)");
+
+	# create a new Git signature
+
+	my $sig = Git::Raw::Signature->new($name, $email, time(), 0);
+
+	# create a new commit out of the above tree,
+	# with the repository HEAD as parent
+
+	my $commit = $git_repo->commit(
+		$msg,
+		$sig, $sig,
+		[ $git_repo->head()->target() ],
+		$tree );
+
+	return $this->repoError("Could not create git_commit")
+		if !$commit;
+	display($dbg_commit,0,"gitCommit() returning $commit");
+	return 1;
 }
 
 
 
-########################
+#--------------------------------------------
 # gitChanges
-########################
+#--------------------------------------------
 
 sub gitChanges
 {
-	my ($this,$for_git_changes_pm) = @_;
-	display($dbg_git_changes+1,0,"gitChanges($this->{path})");
+	my ($this,$show_changes) = @_;
+	display($dbg_chgs,0,"getChanges($this->{path})");
+	my $git_repo = Git::Raw::Repository->open($this->{path});
+	return $this->repoError("Could not create git_repo") if !$git_repo;
 
-	my $started = 0;
-	$this->getSpecificChanges(0,\$started,$for_git_changes_pm);
-	$this->getSpecificChanges(1,\$started,$for_git_changes_pm);
-
-	my $local_changes = scalar(@{$this->{local_changes}});
-	my $remote_changes = scalar(@{$this->{remote_changes}});
-
-	display($dbg_git_changes+1,0,"gitChanges($this->{path}) local($local_changes) remote($remote_changes)")
-		if $local_changes || $remote_changes;
+	$this->{local_changes} = shared_clone([]);
+	$this->{remote_changes} = shared_clone([]);
+	return if !$this->getLocalChanges($git_repo);
+	return if !$this->getRemoteChanges($git_repo);
+	return $this->hasChanges();
 }
 
 
-sub getSpecificChanges
+sub getLocalChanges
+	# git status -s
 {
-	my ($this,$local,$pstarted,$for_git_changes_pm) = @_;
+	my ($this,$git_repo) = @_;
+	display($dbg_chgs,0,"getLocalChanges($this->{path})");
 
-	my $path = $this->{path};
-	my $branch = $this->{branch};
-	my $key = $local ? 'local_changes' : 'remote_changes';
+	my $opts = { flags => { include_untracked => 1 }};
+	my $status = $git_repo->status($opts);
+	return $this->repoError("No result from git_status")
+		if !$status;
 
-	# THIS DOES NOT SHOW unstaged files that would be added
-	# $chg->{local_diff} = git_call($dbg_git,2,$project,"diff --name-status");
-	# so I changed to "status -s  == 'show status concisely'
-	# which returns ?? for Additions, which I then map to ' A'
-
-	my $command = $local ?
-		"status -s" :
-		"diff $branch origin/$branch --name-status";
-	my $text = $this->gitCall($command);
-	$text =~ s/\?\?/ A/g if $local;
-
-	# parse returned lines
-
-	for my $line (split(/\n/,$text))
-    {
-        $line ||= '';
-        $line =~ s/\s|$//;
-
-		if ($line)
+	my $num_changes = scalar(keys %$status);
+	if ($num_changes > $MAX_SHOWN_CHANGES)
+	{
+		push @{$this->{local_changes}},"Many ($num_changes) changes";
+	}
+	else
+	{
+		for my $fn (sort keys %$status)
 		{
-			my $array = $this->{$key};
-			my $use_dbg = $for_git_changes_pm ? 0 : $dbg_git_changes;
-
-			if (!$$pstarted)
+			my $change .= "$fn ";
+			my $values = $status->{$fn};
+			my $flags = $values->{flags};
+			for my $flag (@$flags)
 			{
-				$$pstarted = 1;
-				display($use_dbg,0,"gitChanges($this->{path})");
+				$change .= "$flag;";
 			}
-
-			display($use_dbg,1,($local?"local:  ":"remote: ").$line);
-
-			push @$array,$line;
+			display($dbg_chgs,2,"local: $change");
+			push @{$this->{local_changes}},$change;
 		}
 	}
+
+	return 1;
 }
 
 
-if (0)
+sub getRemoteChanges
+	# git diff $branch origin/$branch --name-status
 {
-	my $repo = apps::gitUI::repo->new(0,'',"/junk/junk_repository",'master');
-	#$repo->gitChanges();
-	$repo->gitPush();
+	my ($this,$git_repo) = @_;
+	my $branch = $this->{branch};
+	display($dbg_chgs,0,"getRemoteChanges($this->{path}) branch=$branch");
+
+	my $ref_remote = Git::Raw::Reference->lookup("origin/$branch", $git_repo);
+	return $this->repoError("Could not get ref_remote($branch)")
+		if !$ref_remote;
+
+	my $id_remote = $ref_remote->target();
+	return $this->repoError("Could not get id_remote($branch)")
+		if !$id_remote;
+
+	my $commit = Git::Raw::Commit->lookup($git_repo,$id_remote);
+	return $this->repoError("Could not get commit($id_remote)")
+		if !$commit;
+
+	my $tree = $commit->tree();
+	return $this->repoError("Could not get tree($commit)")
+		if !$tree;
+
+	my $diff = $git_repo->diff({ tree => $tree });
+	return $this->repoError("Could not get diff($tree)")
+		if !$diff;
+
+	my $text = $diff->buffer("name_status");
+	return $this->repoError("Could not get diff text($diff)")
+		if !defined($text);
+
+	$text =~ s/^\s+|\s$//g;
+	return 1 if !$text;
+
+	my @changes = split(/\n/,$text);
+	my $num_changes = @changes;
+	if ($num_changes > $MAX_SHOWN_CHANGES)
+	{
+		push @{$this->{remote_changes}},"Many ($num_changes) changes";
+	}
+	else
+	{
+		for my $change (sort @changes)
+		{
+			display($dbg_chgs,2,"remote: $change");
+			push @{$this->{remote_changes}},$change;
+		}
+	}
+
+	return 1;
 }
+
+
+#-------------------------------------------------------
+# gitPush
+#-------------------------------------------------------
+
+sub cb_credentials
+{
+	my ($url) = @_;
+	display($dbg_creds,0,"cb_credentials($url)");
+	return '' if !getCredentials();
+	my $credentials = Git::Raw::Cred->userpass($git_user,$git_api_token);
+	return !error("Could not create git credentials")
+		if !$credentials;
+	return $credentials;
+}
+
+
+sub user_callback
+{
+	my ($CB,@params) = @_;
+	display($dbg_cb,0,"user_callback(".
+		_def($push_cb_object).", ".
+		$CB.", ".
+		$push_cb_repo->{path}.", ".
+		" cb="._def($push_cb));
+	&$push_cb($push_cb_object,$CB,$push_cb_repo,@params)
+		if $push_cb;
+}
+
+
+
+sub cb_pack
+{
+	my ($stage, $current, $total) = @_;
+	display($dbg_cb,0,"cb_pack($stage, $current, $total)");
+	user_callback($PUSH_CB_PACK,$stage, $current, $total);
+}
+sub cb_transfer
+{
+	my ($current, $total, $bytes) = @_;
+	display($dbg_cb,0,"cb_transfer($current, $total, $bytes)");
+	user_callback($PUSH_CB_TRANSFER,$current,$total,$bytes);
+}
+sub cb_reference
+{
+	my ($ref, $msg) = @_;
+	display($dbg_cb,0,"cb_reference($ref,"._def($msg).")");
+	user_callback($PUSH_CB_REFERENCE,$ref,$msg);
+}
+
+
+sub gitPush
+{
+	my ($this,$user_obj,$user_cb) = @_;
+
+	$push_cb = $user_cb;
+	$push_cb_object = $user_obj;
+	$push_cb_repo = $this;
+
+	my $branch = $this->{branch};
+	display($dbg_push,0,"gitPush($this->{path},$branch)".
+		") user_obj("._def($user_obj).
+		") user_cb("._def($user_cb).")");
+
+	my $git_repo = Git::Raw::Repository->open($this->{path});
+	return $this->repoError("Could not create git_repo")
+		if !$git_repo;
+
+	my $remote = Git::Raw::Remote->load($git_repo, 'origin');
+	return $this->repoError("Could not create remote")
+		if !$remote;
+
+	my $refspec_str = "refs/heads/$branch";
+	my $refspec = Git::Raw::RefSpec->parse($refspec_str,0);
+	return $this->repoError("Could not create refspec($refspec_str)")
+		if !$refspec;
+
+	my $push_options = { callbacks => {
+		credentials => \&cb_credentials,
+		pack_progress 			=> \&cb_pack,
+		push_transfer_progress 	=> \&cb_transfer,
+		push_update_reference 	=> \&cb_reference,
+		# push_negotation 		=> \&cb_negotiate,
+		# sideband_progress		=> \&cb_sideband,
+	}};
+
+	my $rslt ;
+	eval
+	{
+		$rslt = $remote->push([ $refspec ], $push_options);
+		1;
+	}
+	or do
+	{
+		my $err = $@;
+		error($err);
+	};
+
+	display($dbg_push,1,"gitPush() returning rslt="._def($rslt));
+	return $rslt;
+}
+
+
+
+
+
+
+
+
+
+
+
 
 
 
