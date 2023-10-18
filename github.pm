@@ -281,7 +281,7 @@ if (0)
 			{
 				for my $repo (@{$section->{repos}})
 				{
-					$repo->gitChanges(1);
+					$repo->gitChanges();
 				}
 			}
 		}

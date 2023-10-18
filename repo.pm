@@ -15,8 +15,11 @@ use Git::Raw;
 use Pub::Utils;
 use apps::gitUI::git;
 
-my $MAX_SHOWN_CHANGES = 30;
-	# any more than this results in single message
+my $TEST_JUNK_ONLY = 1;
+	# limits canCommit and canPush to /junk
+
+my $MAX_SHOW_CHANGES = 30;
+
 
 my $dbg_new = 1;
 	# ctor
@@ -53,9 +56,12 @@ my $CREDENTIAL_FILENAME = '/dat/Private/git/git_credentials.txt';
 # SIDEBAND (Resolving deltas) had too many problems,
 #   very quick, so I don't use it.
 
+our $PUSH_CB_ERROR      = -1;		# $msg
 our $PUSH_CB_PACK		= 0;		# $stage, $current, $total
 our $PUSH_CB_TRANSFER	= 1;		# $current, $total, $bytes
 our $PUSH_CB_REFERENCE  = 2;		# $ref, $msg
+
+
 
 # The callback method is of the form
 #
@@ -73,6 +79,7 @@ BEGIN
 	our @EXPORT = qw(
 		setRepoQuiet
 
+		$PUSH_CB_ERROR
 		$PUSH_CB_PACK
         $PUSH_CB_TRANSFER
         $PUSH_CB_REFERENCE
@@ -217,11 +224,13 @@ sub hasChanges
 sub canCommit
 {
 	my ($this) = @_;
+	return 0 if $TEST_JUNK_ONLY && $this->{path} !~ /junk/;
 	return @{$this->{local_changes}};
 }
 sub canPush
 {
 	my ($this) = @_;
+	return 0 if $TEST_JUNK_ONLY && $this->{path} !~ /junk/;
 	return @{$this->{remote_changes}};
 }
 
@@ -436,15 +445,14 @@ sub gitCommit
 	# git add -A
 	# git commit  -m \"$msg\"
 {
-	my ($this,$call_back,$msg,$pattern) = @_;
-	$pattern ||= '*';
-	display($dbg_commit,0,"gitCommit($this->{path},$pattern) msg='$msg'");
+	my ($this,$call_back,$msg) = @_;
+	display($dbg_commit,0,"gitCommit($this->{path}) msg='$msg'");
 	my $git_repo = Git::Raw::Repository->open($this->{path});
 	return $this->repoError("Could not create git_repo") if !$git_repo;
 
 	# build the add_opts
 
-	my $add_opts = { paths => [$pattern]};
+	my $add_opts = { paths => ['*']};
 	$add_opts->{notification} = $call_back if $call_back;
 
 	# add files to the repository default index
@@ -492,7 +500,7 @@ sub gitCommit
 
 sub gitChanges
 {
-	my ($this,$show_changes) = @_;
+	my ($this) = @_;
 	display($dbg_chgs,0,"getChanges($this->{path})");
 	my $git_repo = Git::Raw::Repository->open($this->{path});
 	return $this->repoError("Could not create git_repo") if !$git_repo;
@@ -516,25 +524,22 @@ sub getLocalChanges
 	return $this->repoError("No result from git_status")
 		if !$status;
 
-	my $num_changes = scalar(keys %$status);
-	if ($num_changes > $MAX_SHOWN_CHANGES)
+	my $num_changes = keys %$status;
+	display($dbg_chgs,2,"local:  $num_changes changed files")
+		if $num_changes > $MAX_SHOW_CHANGES;
+
+	for my $fn (sort keys %$status)
 	{
-		push @{$this->{local_changes}},"Many ($num_changes) changes";
-	}
-	else
-	{
-		for my $fn (sort keys %$status)
+		my $change .= "$fn ";
+		my $values = $status->{$fn};
+		my $flags = $values->{flags};
+		for my $flag (@$flags)
 		{
-			my $change .= "$fn ";
-			my $values = $status->{$fn};
-			my $flags = $values->{flags};
-			for my $flag (@$flags)
-			{
-				$change .= "$flag;";
-			}
-			display($dbg_chgs,2,"local: $change");
-			push @{$this->{local_changes}},$change;
+			$change .= "$flag;";
 		}
+		display($dbg_chgs,2,"local: $change")
+			if $num_changes <= $MAX_SHOW_CHANGES;
+		push @{$this->{local_changes}},$change;
 	}
 
 	return 1;
@@ -577,17 +582,14 @@ sub getRemoteChanges
 
 	my @changes = split(/\n/,$text);
 	my $num_changes = @changes;
-	if ($num_changes > $MAX_SHOWN_CHANGES)
+	display($dbg_chgs,2,"remote: $num_changes changed files")
+		if $num_changes > $MAX_SHOW_CHANGES;
+
+	for my $change (sort @changes)
 	{
-		push @{$this->{remote_changes}},"Many ($num_changes) changes";
-	}
-	else
-	{
-		for my $change (sort @changes)
-		{
-			display($dbg_chgs,2,"remote: $change");
-			push @{$this->{remote_changes}},$change;
-		}
+		display($dbg_chgs,2,"remote: $change")
+			if $num_changes <= $MAX_SHOW_CHANGES;
+		push @{$this->{remote_changes}},$change;
 	}
 
 	return 1;
@@ -606,6 +608,7 @@ sub cb_credentials
 	my $credentials = Git::Raw::Cred->userpass($git_user,$git_api_token);
 	return !error("Could not create git credentials")
 		if !$credentials;
+	display($dbg_cb,0,"cb_credentials() returning $credentials");
 	return $credentials;
 }
 
@@ -613,13 +616,13 @@ sub cb_credentials
 sub user_callback
 {
 	my ($CB,@params) = @_;
-	display($dbg_cb,0,"user_callback(".
-		_def($push_cb_object).", ".
-		$CB.", ".
-		$push_cb_repo->{path}.", ".
-		" cb="._def($push_cb));
-	&$push_cb($push_cb_object,$CB,$push_cb_repo,@params)
+	my $show = join(",",@params);
+	display($dbg_cb,0,"user_callback($CB,$show)");
+	my $rslt = 0;
+	$rslt = &$push_cb($push_cb_object,$CB,$push_cb_repo,@params)
 		if $push_cb;
+	display($dbg_cb,0,"user_callback() returning $rslt");
+	return $rslt;
 }
 
 
@@ -628,19 +631,25 @@ sub cb_pack
 {
 	my ($stage, $current, $total) = @_;
 	display($dbg_cb,0,"cb_pack($stage, $current, $total)");
-	user_callback($PUSH_CB_PACK,$stage, $current, $total);
+	my $rslt = user_callback($PUSH_CB_PACK,$stage, $current, $total);
+	display($dbg_cb,0,"cb_pack() returning $rslt");
+	return $rslt;
 }
 sub cb_transfer
 {
 	my ($current, $total, $bytes) = @_;
 	display($dbg_cb,0,"cb_transfer($current, $total, $bytes)");
-	user_callback($PUSH_CB_TRANSFER,$current,$total,$bytes);
+	my $rslt = user_callback($PUSH_CB_TRANSFER,$current,$total,$bytes);
+	display($dbg_cb,0,"cb_transfer() returning $rslt");
+	return $rslt;
 }
 sub cb_reference
 {
 	my ($ref, $msg) = @_;
 	display($dbg_cb,0,"cb_reference($ref,"._def($msg).")");
-	user_callback($PUSH_CB_REFERENCE,$ref,$msg);
+	my $rslt = user_callback($PUSH_CB_REFERENCE,$ref,$msg);
+	display($dbg_cb,0,"cb_reference() returning $rslt");
+	return $rslt;
 }
 
 
@@ -670,6 +679,8 @@ sub gitPush
 	return $this->repoError("Could not create refspec($refspec_str)")
 		if !$refspec;
 
+	warning(0,0,"progres_cb=".\&cb_pack);
+
 	my $push_options = { callbacks => {
 		credentials => \&cb_credentials,
 		pack_progress 			=> \&cb_pack,
@@ -688,7 +699,25 @@ sub gitPush
 	or do
 	{
 		my $err = $@;
-		error($err);
+
+		# THIS IS LIKELY A Git::Raw::Error
+		# from which have to get the scalar message
+		# to pass back through shared memory threads
+
+		my $msg = ref($err) =~ /Git::Raw::Error/ ?
+			$err->message() : $err;
+
+		# For some reason this error does not show in ui
+
+		error($msg);
+
+		# strip off the 'at /base/apps/gitUI/repo.pm line XXX part
+		# and pass it as a callback.
+
+		$msg =~ s/at \/base.*$//;
+
+		user_callback($PUSH_CB_ERROR,$msg);
+
 	};
 
 	display($dbg_push,1,"gitPush() returning rslt="._def($rslt));

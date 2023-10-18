@@ -38,7 +38,6 @@ sub new
 	display($dbg_win,0,"pathWindow::new($frame,$id,"._def($book).","._def($data).")");
 	my $this = $class->SUPER::new($book,$id);
 	$this->MyWindow($frame,$book,$id,'Paths',$data);	## ,$instance);
-	# $this->{frame} = $frame;
 
 	$this->{ctrl_sections} = [];
 	parseRepos();
@@ -46,7 +45,6 @@ sub new
 	$this->populate();
 
 	EVT_SIZE($this, \&onSize);
-
 	return $this;
 }
 

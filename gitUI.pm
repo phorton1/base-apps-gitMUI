@@ -14,6 +14,7 @@ use Wx::Event qw(
 	EVT_IDLE );
 use Pub::Utils;
 use Pub::WX::Frame;
+use Pub::WX::Dialogs;
 use apps::gitUI::repo;
 use apps::gitUI::repos;
 use apps::gitUI::Resources;
@@ -26,7 +27,7 @@ my $dbg_frame = 0;
 my $dbg_cmds = 0;
 	# 0 = main command functions
 	# -1 = details
-my $dbg_thread = 0;
+my $dbg_thread = -1;
 	# 0 = msin thread calls
 	# -1 = details
 our $dbg_idle = 1;
@@ -35,30 +36,13 @@ our $dbg_idle = 1;
 
 # THREADING SETUP
 
-my $REDIRECT_STDERR = 1;
-	# redirect STDER to $stderr_filename for push command
+my $USE_THREADS = 1;
 
-my $THREADED_NONE = 0;
-my $THREADED_FORK = 1;
-my $THREADED_THREAD = 2;
-	# how to do threading ($THREADED_THREAD curreently working)
+my $command_thread;
 
-my $HOW_THREADED = $THREADED_THREAD;
 my $THREAD_EVENT:shared = Wx::NewEventType;
-
-my $fork_num = 0;
-	# if $HOW_THREADED == $THREADED_FORK
-my $push_thread;
-	# if $HOW_THREADED == $THREADED_THREAD
-
-my $stderr_filename;
-my $stderr_handle;
-	# if $REDIRECT_STDERR
-my $last_size:shared = 0;
-	# last bytes read from $stderr_handle in onIdle();
-
 my $command_aborted:shared = 0;
-	# abortCommand() called by progressDialog.pm
+my $command_error_abort_reported:shared = 0;
 
 
 #--------------------------------------
@@ -71,8 +55,6 @@ sub new
 	my ($class, $parent) = @_;
 
 	Pub::WX::Frame::setHowRestore($RESTORE_MAIN_RECT);
-	$stderr_filename= "$temp_dir/stderr_for_push_command.txt";
-		# after $temp_dir setup in gitUI::git.pm
 
 	my $this = $class->SUPER::new($parent);	# ,-1,'gitUI',[50,50],[600,680]);
 
@@ -112,12 +94,8 @@ sub createPane
 sub initCommand
 {
 	my ($this) = @_;
-
-	close($stderr_handle) if $stderr_handle;
-	$stderr_handle = undef;
-	unlink $stderr_filename;
 	$command_aborted = 0;
-	$last_size = 0;
+	$command_error_abort_reported = 0;
 }
 
 
@@ -128,6 +106,7 @@ sub abortCommand
 	{
 		warning(0,0,"abortCommand()");
 		$command_aborted = 1;
+		$this->sendThreadEvent({ aborted => 1});
 	}
 }
 
@@ -135,49 +114,36 @@ sub abortCommand
 sub onGitCommand
 {
 	my ($this,$event) = @_;
-	my $id = $event->GetId();
-	$this->{command_name} = $resources->{command_data}->{$id}->[0];
-	display($dbg_cmds,0,"onGitCommand($id)=$this->{command_name}");
+	my $command_id = $event->GetId();
+	$this->{command_id} = $command_id;
+	$this->{command_name} = $resources->{command_data}->{$command_id}->[0];
+	display($dbg_cmds,0,"onGitCommand($command_id)=$this->{command_name}");
 
 	$this->initCommand();
+	$command_thread = undef;
 
 	return if !parseRepos();
 	my $repo_list = getRepoList();
-
 	my $data = '';
 		# Commit needs to get the description
 
-	$this->{progress} = apps::gitUI::progressDialog->new($this,$id,scalar(@$repo_list));
+	my $progress = $this->{progress} = apps::gitUI::progressDialog->new(
+		$this,
+		$this->{command_name},
+		\&abortCommand);
 
-	if ($HOW_THREADED == $THREADED_FORK)
-	{
-		$fork_num++;
-		my $child_pid = fork();
-		if (!defined($child_pid))
-		{
-			error("FS_FORK($fork_num) FAILED!");
-			return;
-		}
-		if (!$child_pid)	# child fork
-		{
-			display($dbg_thread,0,"THREADED_FORK_START($fork_num) pid=$$");
-			$this->doThreadedCommand($repo_list,$id,$data);
-			display($dbg_thread,0,"THREADED_FORK_END($fork_num) pid=$$");
-			exit();
-		}
-	}
-	elsif ($HOW_THREADED == $THREADED_THREAD)
+	if ($USE_THREADS)
 	{
 		display($dbg_thread,1,"starting THREAD");
 		@_ = ();
-		$push_thread = threads->create(	# barfs: my $thread = threads->create(
-			\&doThreadedCommand,$this,$repo_list,$id,$data);
-		$push_thread->detach(); 			# barfs;
+		$command_thread = threads->create(	# barfs: my $thread = threads->create(
+			\&doThreadedCommand,$this,$repo_list,$data);
+		$command_thread->detach(); 			# barfs;
 		display($dbg_thread,1,"THREAD_STARTED");
 	}
 	else
 	{
-		$this->doThreadedCommand($repo_list,$id,$data);
+		$this->doThreadedCommand($repo_list,$data);
 	}
 
 	# $this->{progress}->Destroy();
@@ -186,121 +152,141 @@ sub onGitCommand
 }
 
 
-
 sub doThreadedCommand
 {
-	my ($this,$repo_list,$id,$data) = @_;
-	display($dbg_cmds,0,"doThreadedCommand($id)=$this->{command_name}");
+	my ($this,$repo_list,$data) = @_;
+	my $command_id = $this->{command_id};
+	display($dbg_cmds,0,"doThreadedCommand($command_id)=$this->{command_name}");
 	display($dbg_cmds+1,1,"data='$data'");
 
+	my $num_repos = @$repo_list;
+	my $action_name =
+		$command_id == $COMMAND_PUSH ? "Pushing" :
+		$command_id == $COMMAND_COMMIT ? "Commit" : '';
+
+	my $repo_num = 0;
 	my $num_actions = 0;
+	my $num_changed_repos = 0;
+	my $num_changed_local_files = 0;
+	my $num_changed_remote_files = 0;
+	my $num_changed_local_repos = 0;
+	my $num_changed_remote_repos = 0;
 	for my $repo (@$repo_list)
 	{
+		# Commit and Push are currently disabled except for /junk
+		# see $TEST_JUNK_ONLY in repo.pm
+
+		# comment in following line to save time doing push(junk) over and over again
+		# to not call gitChanges on every repo every time.
+		#
+		# next if $repo->{path} !~ /junk/;
+
 		last if $command_aborted;
+
+		$repo->gitChanges();
+
+		$repo_num++;
+
+		my $num_local = @{$repo->{local_changes}};
+		my $num_remote = @{$repo->{local_changes}};
+
+		$num_changed_local_files += $num_local;
+		$num_changed_remote_files += $num_remote;
+		$num_changed_local_repos++ if $num_local;
+		$num_changed_remote_repos++ if $num_remote;
+		$num_changed_repos++ if $num_local || $num_remote;
+
+		$num_actions++ if
+			($command_id == $COMMAND_PUSH && $repo->canPush()) ||
+			($command_id == $COMMAND_COMMIT && $repo->canCommit());
+
+		my $status_msg =
+			$command_id == $COMMAND_PUSH ? "$num_actions/$num_repos canPush" :
+			$command_id == $COMMAND_COMMIT ? "$num_actions/$num_repos canCommit" :
+			"$num_changed_repos/$num_repos changed";
+
 		$this->sendThreadEvent({
-			what => 'checkRepo',
-			data  => $repo->{path} });
+			main_msg    => 'Checking',
+			main_name   => $repo->{path},
+			main_status => $status_msg,
+			main_range  => $num_repos,
+			main_done   => $repo_num });
 
 		last if $command_aborted;
-
-		# GRRR - getting superflous changes,
-		# then i 'turned on' debugging with '1' parameter
-		# and they went away ...
-
-		if ($id != $COMMAND_TAGS)
-		{
-			$repo->gitChanges(1);
-			$this->{progress}->addChanges(
-				scalar(@{$repo->{local_changes}}),
-				scalar(@{$repo->{remote_changes}}));
-				# threadsafe
-		}
-
-		last if $command_aborted;
-
-		if ($id == $COMMAND_PUSH && $repo->canPush())
-		{
-			$this->sendThreadEvent({what => 'incActionNeeded'});
-			$num_actions++;
-		}
 	}
 
+	my $rslt = 1;
 	if ($num_actions)
 	{
-		local *SAVED_STDERR;
-		if ($id == $COMMAND_PUSH && $REDIRECT_STDERR)
-		{
-			open(*SAVED_STDERR, ">&", STDERR);
-			open(STDERR, ">",  $stderr_filename );
-		}
+		$this->sendThreadEvent({
+			main_msg    => $this->{command_name},
+			main_name   => '',
+			main_status => "$num_actions repos",
+			main_range  => $num_actions,
+			main_done   => 0 });
 
+		my $num_actions_done = 0;
 		for my $repo (@$repo_list)
 		{
 			# next if $repo->{path} ne '/junk/junk_repository';
 
 			my $doit = 0;
-			$doit = 1 if $id == $COMMAND_PUSH && $repo->canPush();
-			$doit = 1 if $id == $COMMAND_COMMIT && $repo->canCommit();
+			$doit = 1 if $command_id == $COMMAND_PUSH && $repo->canPush();
+			$doit = 1 if $command_id == $COMMAND_COMMIT && $repo->canCommit();
 
 			if ($doit)
 			{
-				display($dbg_cmds+1,2,"doThreadedCommand($this->{command_name}) startAction($repo->{path})");
-
-				last if $command_aborted;
-				$this->sendThreadEvent({
-					what => 'startAction',
-					data  => $repo->{path} });
+				display($dbg_cmds+1,2,"doThreadedCommand($this->{command_name}) doing($repo->{path})");
 
 				last if $command_aborted;
 
-				# There's some convoluted logic to get 'git push' messages
-				# to display in the progressDialog() progress ..
-				#
-				# We generally use both the local $USE_SHARED_LOCK_SEM
-				# AND $WITH_SEMAPHORES = $HOW_SEMAPHORE_LOCAL to prevent
-				# calls to STDOUT from overlapping, and especially, separately,
-				# in repo::gitCall() where it pipes input in from backticks.
-				# That was necessary to get gitChanges() to work with threads.
-				#
-				# We redirect STDERR to a file called $stderr, above, AFTER we
-				# have called gitChanges, so that we can capture the STDERR
-				# output the 'git_push call' from $repo->gitPush() below.
-				# We then temporarily turn off the semaphores so that, in this
-				# case, other process (onIdle()) can run while the backticks
-				# are underway.
-				#
-				# The use of debugging output in this is probably problematic.
-				# I currently have all debugging from onIdle(() to progressDialog::
-				# handleMessage() turned off.  It seems to be working.
-
-				if ($id == $COMMAND_PUSH)
+				if ($command_id == $COMMAND_PUSH)
 				{
-					display($dbg_cmds+1,2,"doThreadedCommand() calling repo->gitPush()");
-					my $save_with = $WITH_SEMAPHORES;
-					my $save_local = $USE_SHARED_LOCK_SEM;
-					$WITH_SEMAPHORES = 0;
-					$USE_SHARED_LOCK_SEM = 0;
+					$this->sendThreadEvent({
+						main_name   => $repo->{path},
+						sub_name    => $action_name });
 
-					$repo->gitPush();
+					$rslt = $repo->gitPush($this,\&push_callback);
+					last if !$rslt;		# error was reported via callback
 
-					$WITH_SEMAPHORES = $save_with;
-					$USE_SHARED_LOCK_SEM = $save_local;
-				}
-			}
+					if (!$command_aborted)
+					{
+						$num_actions_done++;
+						$this->sendThreadEvent({
+							main_status => "$num_actions_done/$num_actions repos",
+							main_done   => $num_actions_done });
+					}
+
+				}	# PUSH
+			}	# doit
 		}	# for each repo
-
-		open( STDERR, ">&", SAVED_STDERR) if
-			$id == $COMMAND_PUSH && $REDIRECT_STDERR;
-
 	}	# $num_actions
 
 
-	$this->sendThreadEvent({ what =>
-		$command_aborted ? "aborted" :
-		!$num_actions ? "noActions" :
-		"done" });
+	# The abort sequence from aborting Transfer is strange.
+	# The progressDialog calls abortCommand() which sets
+	# $command_aborted, which sendThreadedEvent(aborted),
+	# which then tells the dialog to display the message
+	# in red.  However, the process continues until the
+	# next $PUSH_CB_TRANSFER which then returns GIT_EUSER
+	# to the libgit2 C code, which then terminates the Push,
+	# and ends up here, which calls sendThreadedEvent(aborted)
+	# again.
 
-	$this->initCommand();
+	if ($rslt)
+	{
+		my $params = $command_aborted ? { aborted => 1} : {
+			done => 1,
+			num_actions => $num_actions,
+			num_changed_repos		 => $num_changed_repos,
+			num_changed_local_files  => $num_changed_local_files,
+			num_changed_remote_files => $num_changed_remote_files,
+			num_changed_local_repos  => $num_changed_local_repos,
+			num_changed_remote_repos => $num_changed_remote_repos };
+		$this->sendThreadEvent( $params );
+	}
+
+
 	display($dbg_cmds,0,"doThreadedCommand() finished");
 
 }	# doThreadedCommand()
@@ -313,21 +299,21 @@ sub doThreadedCommand
 
 sub sendThreadEvent
 {
-	my ($this,$packet) = @_;
-	display($dbg_thread+1,1,"sendThreadEvent($packet->{what})");
+	my ($this,$params) = @_;
+	my $show = join(",",keys %$params);
+	display($dbg_thread+1,1,"sendThreadEvent($show)");
 
-	if ($HOW_THREADED)
+	if ($USE_THREADS)
 	{
-		my $evt = new Wx::PlThreadEvent( -1, $THREAD_EVENT, shared_clone($packet) );
+		my $evt = new Wx::PlThreadEvent( -1, $THREAD_EVENT, shared_clone($params) );
 		Wx::PostEvent( $this, $evt );
 	}
 	else
 	{
-		$this->updateProgress($packet->{what},$packet->{data});
+		$this->updateProgress($params);
 	}
 
 }
-
 
 
 sub onThreadEvent
@@ -345,60 +331,204 @@ sub onThreadEvent
 		return;
 	}
 
-	my $hash = $event->GetData();
-	my $what = $hash->{what};
-	my $data = $hash->{data} || '';
-	display($dbg_thread+1,0,"onThreadEvent($what) data=".length($data)." bytes");
+	my $params = $event->GetData();
+	my $show = join(",",keys %$params);
+	display($dbg_thread+1,0,"onThreadEvent($show)");
 
-	$this->updateProgress($what,$data);
+	$this->updateProgress($params);
 }
 
 
 sub updateProgress
 {
-	my ($this,$what,$data) = @_;
-	return if !$this->{progress};
-	if ($what eq 'checkRepo')
+	my ($this,$params) = @_;
+	my $progress = $this->{progress};
+	my $command_id = $this->{command_id};
+	return if !$progress;
+
+	my $show = join(",",keys %$params);
+	display($dbg_thread+1,1,"updateProgress($show)");
+
+	# we prevent more than one error/abort window
+	# from popping up here .. we have to use $already_reported
+	# to set the shared $command_error_abort_reported BEFORE
+	# we pop up the error/abort dialog to prevent re-entering.
+
+	if ($params->{error})
 	{
-		$this->{progress}->checkRepo($data);
+		my $err = $params->{error};
+		my $already_reported = $command_error_abort_reported;
+		$command_error_abort_reported = 1;
+
+		# for some reason the original error() in repo.pm
+		# does not show in the UI, and so we need to show it here
+
+		$this->showError($err)
+			if !$already_reported;
+		$progress->setParams({
+			main_msg => 'Error !!!',
+			main_name => $err });
+		$progress->setDone('Close');
 	}
-	elsif ($what eq 'incActionNeeded')
+	elsif ($params->{aborted})
 	{
-		$this->{progress}->incActionNeeded();
+		my $already_reported = $command_error_abort_reported;
+		$command_error_abort_reported = 1;
+
+		$progress->setParams({
+			main_msg => 'Aborted!' });
+		$progress->setDone('Close');
+		okDialog($this,
+			"$this->{command_name} command was aborted.",
+			"$this->{command_name} ABORTED!")
+			if !$already_reported;
 	}
-	elsif ($what eq 'startAction')
+	elsif ($params->{done})
 	{
-		$this->{progress}->startAction($data);
-	}
-	elsif ($what eq 'handleMessage')
-	{
-		$this->{progress}->handleMessage($data);
-	}
-	elsif ($what =~ /^done|noActions|aborted$/)
-	{
-		$this->{progress}->finish($what);
-		$this->initCommand();
+		if ($command_id == $COMMAND_CHANGES)
+		{
+			$progress->setDone('Done');
+
+			my $use_name = '';
+			$use_name .= "local($params->{num_changed_local_repos},$params->{num_changed_local_files}) "
+				if $params->{num_changed_local_repos};
+			$use_name .= "remote($params->{num_changed_remote_repos},$params->{num_changed_remote_files}) "
+				if $params->{num_changed_remote_repos};
+			my $final = { main_name => $use_name };
+			$final->{main_message} = "NO CHANGES!!"
+				if !$params->{num_changed_local_repos} &&
+				   !$params->{num_changed_remote_repos};
+			$progress->setParams($final);
+		}
+		else
+		{
+			my $num_actions = $params->{num_actions};
+			my $what = $command_id == $COMMAND_PUSH ?
+				"pushed" : "committed" ;
+			my $use_name = $num_actions ?
+				"$num_actions repos $what" :
+				"NOTHING TO DO!!";
+			my $main_msg = $num_actions ?
+				"Done!!" :
+				"Done";
+			$progress->setParams({
+				main_msg => $main_msg,
+				main_name => $use_name });
+
+			$progress->setDone('Close');
+		}
+
 		for my $pane (@{$this->{panes}})
 		{
 			my $id = $pane->GetId();
 			$pane->updateLinks() if $id == $ID_PATH_WINDOW;
 		}
 	}
+	else
+	{
+		$progress->setParams($params);
+	}
 }
 
 
+#---------------------------------------------
+# push_callback
+#----------------------------------------------
+# PACK is called first, stage is 0 on first, 1 thereafter
+# 	when done, $total = the number of objects for the push
+# TRANSFER show the current, and total objects and bytes
+#   transferred thus far.
+# REFERENCE is the last (set of) messages as git updates
+#   the local repository's origin/$branch to the HEAD.
+#   There could be multiple, but I usually only see one.
+#   The push is complete when REFERENCE $msg is undef.
 
-sub notifyPushProgress
-	# obsolete
-	# only called from repo.pm if $DO_ASYNCH_PUSH
+my $transfer_start:shared = 0;
+
+sub pct_msg
 {
-	my ($this,$buf) = @_;
-	display($dbg_cmds+1,0,"notifyPushProgress($buf)");
-	$this->sendThreadEvent({
-		what => 'handleMessage',
-		data  => $buf });
-	return !$command_aborted;
+	my ($lval,$rval) = @_;
+	my $pct = $lval && $rval ? int(($lval * 100) / $rval) : 0;
+	return sprintf("%3d%%  $lval/$rval",$pct);
 }
+
+sub push_callback
+{
+	my ($this, $CB, $repo, @params) = @_;
+	my $show = join(",",@params);
+	display($dbg_thread+1,0,"push_callback($CB,$show)");
+
+	# ABORTING PUSH FROM CALLBACK.
+	# We give priority to abort and short return here.
+	#
+	# from libgit2  errors.h
+	# 	"GIT_EUSER is a special error that is never generated by libgit2
+	#  	 code.  You can return it from a callback (e.g to stop an iteration)
+	#  	 to know that it was generated by the callback and not by libgit2."
+	#
+	# The error is not returned to libgit2 except for $PUSH_CB_TRANSFER,
+	# where I specifically modified Raw.xs to pass it back.
+	# That causes the push to actually end.
+
+	my $GIT_EUSER = -7;
+	if ($command_aborted)
+	{
+		warning($dbg_thread,-1,"push_callback returning GIT_EUSER=-7");
+		return $GIT_EUSER;
+	}
+
+	# display(0,0,"push_callback $CB ".join(',',@params));
+	# print "push_callback $CB ".join(',',@params);
+
+	if ($CB == $PUSH_CB_PACK)
+	{
+		my ($stage, $current, $total) = @params;
+		my $values = {
+			sub_msg => 'Packing',
+			sub_name => '',
+			sub_status => '',
+			sub_range => $total,
+			sub_done => $current };
+		$this->sendThreadEvent($values);
+	}
+	elsif ($CB == $PUSH_CB_TRANSFER)
+	{
+		my ($current, $total, $bytes) = @params;
+		$transfer_start ||= time();
+		my $denom = time() - $transfer_start;
+		my $rate = $current && $denom ?
+			int($bytes / ($denom * 1024))." kBs" : '';
+		my $kb = int(($bytes + 512) / 1024)." kB";
+		my $pct_msg = pct_msg($current,$total);
+		my $values = {
+			sub_msg => 'Transfer',
+			sub_name => $pct_msg."   ".$kb,
+			sub_status => $rate,
+			sub_range => $total,
+			sub_done => $current };
+		$this->sendThreadEvent($values);
+	}
+	elsif ($CB == $PUSH_CB_REFERENCE)
+	{
+		my ($ref, $msg) = @params;
+		my $values = {
+			sub_msg => defined($msg) ? 'Refs' : "PUSH DONE!!" };
+		$this->sendThreadEvent($values);
+	}
+	elsif ($CB == $PUSH_CB_ERROR)
+	{
+		my ($err) = @params;
+		$this->sendThreadEvent({error => $err});
+	}
+	else
+	{
+		error("UNKNOWN PUSH CB($CB)!!");
+	}
+
+	return 0;
+}
+
+
 
 
 
@@ -410,65 +540,7 @@ sub onIdle
 {
 	my ($this, $event ) = @_;
 
-	if ($this->{progress} && -f $stderr_filename)
-	{
-		# display($dbg_cmds,0,"onIdle() checking $stderr");
-
-		my ($dev,$ino,$in_mode,$nlink,$uid,$gid,$rdev,$size,
-			$atime,$mtime,$ctime,$blksize,$blocks) = stat($stderr_filename);
-
-		if ($last_size != $size)
-		{
-			display($dbg_idle,1,"onIdle() $last_size to $size");
-			my $bytes = $size - $last_size;
-			$last_size = $size;
-			return if $bytes <= 0;
-
-			if (!$stderr_handle)
-			{
-				display($dbg_idle,2,"onIdle() opening $stderr_filename for input");
-				if (!open($stderr_handle,"<$stderr_filename"))
-				{
-					error("Could not open $stderr_filename for input");
-					$this->{progress} = '';
-					return;
-				}
-				if (!$stderr_handle)
-				{
-					error("no stderr_handle to $stderr_filename");
-					$this->{progress} = '';
-					return;
-				}
-			}
-
-
-			my $buf;
-			my $got = sysread($stderr_handle,$buf,$bytes);
-			if ($got != $bytes)
-			{
-				error("STDERR FILE ERROR got($got) expected($bytes)");
-				$this->{progress} = '';
-				return;
-			}
-			else
-			{
-				display($dbg_idle,3,"onIdle() got (((($buf))))");
-				$this->{progress}->handleMessage($buf);
-
-			}	# $got == $bytes
-		}	# $last_size != $size
-	}	# $this->{progress} && -f $stderr
-
-	# shut the handle if it's open
-
-	elsif ($stderr_handle)
-	{
-		display($dbg_cmds,2,"onIdle() closing $stderr_filename");
-		close($stderr_handle);
-		$stderr_handle = undef;
-	}
-
-	$event->RequestMore();
+	# $event->RequestMore();
 }
 
 
