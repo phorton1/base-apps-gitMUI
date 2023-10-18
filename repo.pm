@@ -647,6 +647,11 @@ sub cb_reference
 {
 	my ($ref, $msg) = @_;
 	display($dbg_cb,0,"cb_reference($ref,"._def($msg).")");
+	# change semantic of &msg == undef meaning "done" to
+	# setting the message itself to "done". to prevent
+	# "use of undefined variable" errors when trying to
+	# show params by simple join.
+	$msg = 'done' if !defined($msg);
 	my $rslt = user_callback($PUSH_CB_REFERENCE,$ref,$msg);
 	display($dbg_cb,0,"cb_reference() returning $rslt");
 	return $rslt;

@@ -511,8 +511,10 @@ sub push_callback
 	elsif ($CB == $PUSH_CB_REFERENCE)
 	{
 		my ($ref, $msg) = @params;
+		# prh changed undef to 'done'  in repo.pm
+
 		my $values = {
-			sub_msg => defined($msg) ? 'Refs' : "PUSH DONE!!" };
+			sub_msg => $msg eq 'done' ? "PUSH DONE!!" : 'Refs' };
 		$this->sendThreadEvent($values);
 	}
 	elsif ($CB == $PUSH_CB_ERROR)
