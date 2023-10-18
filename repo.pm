@@ -15,7 +15,7 @@ use Git::Raw;
 use Pub::Utils;
 use apps::gitUI::git;
 
-my $TEST_JUNK_ONLY = 1;
+our $TEST_JUNK_ONLY = 1;
 	# limits canCommit and canPush to /junk
 
 my $MAX_SHOW_CHANGES = 30;
@@ -27,14 +27,15 @@ my $dbg_config = 1;
 	# 0 show header in checkConfig
 	# -1 = show details in checkConfig
 
-my $dbg_chgs:shared = 0;
-my $dbg_commit:shared = 0;
-my $dbg_push:shared = 0;
-my $dbg_tag:shared = 0;
+my $dbg_chgs = 0;
+my $dbg_add = 0;
+my $dbg_commit = 0;
+my $dbg_push = 0;
+my $dbg_tag = 0;
 
-my $dbg_creds:shared = 0;
+my $dbg_creds = 0;
 	# push credentials callback
-my $dbg_cb:shared = 0;
+my $dbg_cb = 0;
 	# push callbacks
 
 
@@ -77,6 +78,9 @@ BEGIN
 {
  	use Exporter qw( import );
 	our @EXPORT = qw(
+
+		$TEST_JUNK_ONLY
+
 		setRepoQuiet
 
 		$PUSH_CB_ERROR
@@ -112,6 +116,7 @@ my $push_cb_repo;
 sub new
 {
 	my ($class, $num, $section, $path, $branch) = @_;
+	$branch ||= 'master';
 	my $this = shared_clone({
 		num 	=> $num,
 		path 	=> $path,
@@ -128,8 +133,9 @@ sub new
 		needs	 => shared_clone([]),       # a list of the abitrary dependencies this repository has
 		friend   => shared_clone([]),       # a hash of repositories this repository relates to or can use
 		group    => shared_clone([]),       # a list of arbitrary groups that this repository belongs to
-		local_changes =>  shared_clone([]),	# list of lines of change text matching 'local: ...'
-		remote_changes => shared_clone([]),	# list of lines of change text matching 'remote: ...'
+		unstaged_changes => shared_clone({}),	# changes pending Add
+		staged_changes   => shared_clone({}),	# changes pending Commit
+		remote_changes   => shared_clone({}),	# changes pending Push
 		errors   => shared_clone([]),
 		warnings => shared_clone([]),
 		notes 	 => shared_clone([]), });
@@ -219,19 +225,28 @@ sub repoNote
 sub hasChanges
 {
 	my ($this) = @_;
-	return @{$this->{local_changes}} + @{$this->{remote_changes}};
+	return
+		scalar(keys %{$this->{unstaged_changes}}) +
+		scalar(keys %{$this->{staged_changes}}) +
+		scalar(keys %{$this->{remote_changes}});
+}
+sub canAdd
+{
+	my ($this) = @_;
+	return 0 if $TEST_JUNK_ONLY && $this->{path} !~ /junk/;
+	return scalar(keys %{$this->{unstaged_changes}});
 }
 sub canCommit
 {
 	my ($this) = @_;
 	return 0 if $TEST_JUNK_ONLY && $this->{path} !~ /junk/;
-	return @{$this->{local_changes}};
+	return scalar(keys %{$this->{staged_changes}});
 }
 sub canPush
 {
 	my ($this) = @_;
 	return 0 if $TEST_JUNK_ONLY && $this->{path} !~ /junk/;
-	return @{$this->{remote_changes}};
+	return scalar(keys %{$this->{remote_changes}});
 }
 
 
@@ -398,38 +413,202 @@ sub checkGitConfig
 
 
 
+
 #--------------------------------------------
-# gitTag
+# gitChanges
 #--------------------------------------------
 
-sub gitTag
+sub gitChanges
 {
-	my ($this,$tag) = @_;
-	display($dbg_tag,0,"gitTag($tag,$this->{path})");
+	my ($this) = @_;
+	display($dbg_chgs,0,"getChanges($this->{path})");
 	my $git_repo = Git::Raw::Repository->open($this->{path});
 	return $this->repoError("Could not create git_repo") if !$git_repo;
 
-	my $config = $git_repo->config();
-	my $name   = $config->str('user.name');
-	my $email  = $config->str('user.email');
-	display($dbg_tag+1,1,"name($name) email($email)");
-	my $sig = Git::Raw::Signature->new($name, $email, time(), 0);
+	$this->{unstaged_changes} = shared_clone({});
+	$this->{staged_changes} = shared_clone({});
+	$this->{remote_changes} = shared_clone({});
 
-	my $ref = Git::Raw::Reference->lookup("HEAD", $git_repo);
-	return $this->repoError("Could not get ref(HEAD)")
+	return if !$this->getLocalChanges($git_repo);
+	return if !$this->getRemoteChanges($git_repo);
+	return $this->hasChanges();
+}
+
+
+sub getLocalChanges
+	# git status -s
+{
+	my ($this,$git_repo) = @_;
+	display($dbg_chgs,0,"getLocalChanges($this->{path})");
+
+	my $opts = { flags => { include_untracked => 1 }};
+	my $status = $git_repo->status($opts);
+	return $this->repoError("No result from git_status")
+		if !$status;
+
+	my $num_changes = keys %$status;
+	display($dbg_chgs,2,"local:  $num_changes changed files")
+		if $num_changes > $MAX_SHOW_CHANGES;
+
+	# I assume that only one flag is given per file
+
+	# flags
+	#  	index_new
+	#	index_modified
+	#	index_deleted
+	#	index_renamed
+	#	worktree_new
+	#	worktree_modified
+	#	worktree_deleted
+	#	worktree_renamed
+	#	worktree_unreadable
+	#	conflicted				# this probably happens during a merge
+	#	ignored					# I wont get these cuz I don't ask for em
+
+	for my $fn (sort keys %$status)
+	{
+		my $values = $status->{$fn};
+		my $flags = $values->{flags};
+		my $flag = shift @$flags;
+
+		my $key =
+			$flag =~ s/^worktree_// ? 'unstaged_changes' :
+			$flag =~ s/^index_// ? 'staged_changes' : '';
+		my $what =
+			$flag eq 'new' ? "A" :
+			$flag eq 'modified' ? "M" :
+			$flag eq 'deleted' ? "D" :
+			$flag eq 'renamed' ? "R" : "?";
+
+		display($dbg_chgs,2,"$key: $what $fn")
+			if $num_changes <= $MAX_SHOW_CHANGES;
+		$this->{$key}->{$fn} = $what;
+	}
+
+	return 1;
+}
+
+
+
+
+sub getTree
+	# get a tree for diff/tag
+	# $name may be HEAD or origin/$branch
+{
+	my ($this, $git_repo, $name) = @_;
+
+	my $ref = Git::Raw::Reference->lookup($name, $git_repo);
+	return $this->repoError("Could not get ref($name)")
 		if !$ref;
-	my $ref2 = $ref->target();
-	my $id = $ref2->target();
-	return $this->repoError("Could not get id_remote(HEAD)")
+
+	my $id = $ref->target();
+	return $this->repoError("Could not get id for ref($name)")
 		if !$id;
 
-	print "ref=$ref id=$id\n";
+	# recurse once on $id for HEAD
 
-	my $msg = '';
-	my $rslt = $git_repo->tag($tag, $msg, $sig, $id );
-	display($dbg_tag,0,"gitTag($tag) returning"._def($rslt));
+	if ($name eq 'HEAD')
+	{
+		$id = $id->target();
+		return $this->repoError("Could not get id2 for ref($name)")
+			if !$id;
+	}
 
-	return $rslt;
+	my $commit = Git::Raw::Commit->lookup($git_repo,$id);
+	return $this->repoError("Could not get commit($name) for id($id)")
+		if !$commit;
+
+	my $tree = $commit->tree();
+	return $this->repoError("Could not get tree($name) from commit($commit)")
+		if !$tree;
+
+	return $tree;
+}
+
+
+
+sub getRemoteChanges
+	# git diff $branch origin/$branch --name-status
+{
+	my ($this,$git_repo) = @_;
+	my $branch = $this->{branch};
+	display($dbg_chgs,0,"getRemoteChanges($this->{path}) branch=$branch");
+
+	# Get the local HEAD and 'remote' origin/$branch trees
+
+	my $tree_remote = $this->getTree($git_repo, "origin/$branch");
+	return if !$tree_remote;
+
+	my $tree_head = $this->getTree($git_repo, "HEAD");
+	return if !$tree_head;
+
+	# Diff the Remote tree against HEAD
+	# short return if no changes
+
+	my $diff = $tree_remote->diff({ tree => $tree_head });
+	return $this->repoError("Could not get diff()")
+		if !$diff;
+
+	my $text = $diff->buffer("name_status");
+	return $this->repoError("Could not get diff text($diff)")
+		if !defined($text);
+
+	$text =~ s/^\s+|\s$//g;
+	return 1 if !$text;
+
+	# Split the text into lines and process them
+	# Occasionallly I get an asterisk at the end of the filename
+	# and I don't knowo aht it means.
+
+	my @changes = split(/\n/,$text);
+	my $num_changes = @changes;
+	display($dbg_chgs,2,"remote: $num_changes changed files")
+		if $num_changes > $MAX_SHOW_CHANGES;
+
+	for my $change (sort @changes)
+	{
+		# next if $change =~ /\*$/;
+		my ($what,$fn) = split("\t",$change);
+		display($dbg_chgs,2,"change($change) remote: $what $fn")
+			if $num_changes <= $MAX_SHOW_CHANGES;
+		$this->{remote_changes}->{$fn} = $what;
+	}
+
+	return 1;
+}
+
+
+
+#--------------------------------------------
+# gitAdd
+#--------------------------------------------
+
+sub gitAdd
+	# git add -A
+{
+	my ($this,$msg) = @_;
+	my $num = scalar(keys %{$this->{unstaged_changes}});
+	display($dbg_add,0,"gitAdd($this->{path}) $num unstaged_changes");
+
+	my $git_repo = Git::Raw::Repository->open($this->{path});
+	return $this->repoError("Could not create git_repo") if !$git_repo;
+
+	# add files to the repository default index
+
+	my $index = $git_repo->index();
+	return $this->repoError("Could not get index") if !$index;
+
+	$index->add_all({ paths => ['*']});
+	$index->write;
+
+	# move the changes from 'unstaged' to 'staged'
+
+	display($dbg_add+1,1,"moving $num unstaged_changes to staged_changes");
+	mergeHash($this->{staged_changes},$this->{unstaged_changes});
+	$this->{unstaged_changes} = shared_clone({});
+
+	display($dbg_add,0,"gitCommit() returning 1");
+	return 1;
 }
 
 
@@ -438,28 +617,18 @@ sub gitTag
 # gitCommit
 #--------------------------------------------
 
-
 sub gitCommit
-	# callback gets $path, $pattern
-	# callback returns -1 to abort, 0 to add, 1 to skip
-	# git add -A
 	# git commit  -m \"$msg\"
 {
-	my ($this,$call_back,$msg) = @_;
-	display($dbg_commit,0,"gitCommit($this->{path}) msg='$msg'");
+	my ($this,$msg) = @_;
+	my $num = scalar(keys %{$this->{staged_changes}});
+	display($dbg_commit,0,"gitCommit($this->{path}) $num staged_changes msg='$msg'");
+
 	my $git_repo = Git::Raw::Repository->open($this->{path});
 	return $this->repoError("Could not create git_repo") if !$git_repo;
 
-	# build the add_opts
-
-	my $add_opts = { paths => ['*']};
-	$add_opts->{notification} = $call_back if $call_back;
-
-	# add files to the repository default index
-
 	my $index = $git_repo->index();
-	$index->add_all($add_opts);
-	$index->write;
+	return $this->repoError("Could not get index") if !$index;
 
 	# create a new tree out of the repository index
 
@@ -488,112 +657,17 @@ sub gitCommit
 
 	return $this->repoError("Could not create git_commit")
 		if !$commit;
-	display($dbg_commit,0,"gitCommit() returning $commit");
+
+	# move the changes from 'staged' to 'remote'
+
+	display($dbg_commit+1,1,"moving $num staged_changes to remote_changes");
+	mergeHash($this->{remote_changes},$this->{staged_changes});
+	$this->{staged_changes} = shared_clone({});
+
+	display($dbg_commit,0,"gitCommit() returning 1");
 	return 1;
 }
 
-
-
-#--------------------------------------------
-# gitChanges
-#--------------------------------------------
-
-sub gitChanges
-{
-	my ($this) = @_;
-	display($dbg_chgs,0,"getChanges($this->{path})");
-	my $git_repo = Git::Raw::Repository->open($this->{path});
-	return $this->repoError("Could not create git_repo") if !$git_repo;
-
-	$this->{local_changes} = shared_clone([]);
-	$this->{remote_changes} = shared_clone([]);
-	return if !$this->getLocalChanges($git_repo);
-	return if !$this->getRemoteChanges($git_repo);
-	return $this->hasChanges();
-}
-
-
-sub getLocalChanges
-	# git status -s
-{
-	my ($this,$git_repo) = @_;
-	display($dbg_chgs,0,"getLocalChanges($this->{path})");
-
-	my $opts = { flags => { include_untracked => 1 }};
-	my $status = $git_repo->status($opts);
-	return $this->repoError("No result from git_status")
-		if !$status;
-
-	my $num_changes = keys %$status;
-	display($dbg_chgs,2,"local:  $num_changes changed files")
-		if $num_changes > $MAX_SHOW_CHANGES;
-
-	for my $fn (sort keys %$status)
-	{
-		my $change .= "$fn ";
-		my $values = $status->{$fn};
-		my $flags = $values->{flags};
-		for my $flag (@$flags)
-		{
-			$change .= "$flag;";
-		}
-		display($dbg_chgs,2,"local: $change")
-			if $num_changes <= $MAX_SHOW_CHANGES;
-		push @{$this->{local_changes}},$change;
-	}
-
-	return 1;
-}
-
-
-sub getRemoteChanges
-	# git diff $branch origin/$branch --name-status
-{
-	my ($this,$git_repo) = @_;
-	my $branch = $this->{branch};
-	display($dbg_chgs,0,"getRemoteChanges($this->{path}) branch=$branch");
-
-	my $ref_remote = Git::Raw::Reference->lookup("origin/$branch", $git_repo);
-	return $this->repoError("Could not get ref_remote($branch)")
-		if !$ref_remote;
-
-	my $id_remote = $ref_remote->target();
-	return $this->repoError("Could not get id_remote($branch)")
-		if !$id_remote;
-
-	my $commit = Git::Raw::Commit->lookup($git_repo,$id_remote);
-	return $this->repoError("Could not get commit($id_remote)")
-		if !$commit;
-
-	my $tree = $commit->tree();
-	return $this->repoError("Could not get tree($commit)")
-		if !$tree;
-
-	my $diff = $git_repo->diff({ tree => $tree });
-	return $this->repoError("Could not get diff($tree)")
-		if !$diff;
-
-	my $text = $diff->buffer("name_status");
-	return $this->repoError("Could not get diff text($diff)")
-		if !defined($text);
-
-	$text =~ s/^\s+|\s$//g;
-	return 1 if !$text;
-
-	my @changes = split(/\n/,$text);
-	my $num_changes = @changes;
-	display($dbg_chgs,2,"remote: $num_changes changed files")
-		if $num_changes > $MAX_SHOW_CHANGES;
-
-	for my $change (sort @changes)
-	{
-		display($dbg_chgs,2,"remote: $change")
-			if $num_changes <= $MAX_SHOW_CHANGES;
-		push @{$this->{remote_changes}},$change;
-	}
-
-	return 1;
-}
 
 
 #-------------------------------------------------------
@@ -667,9 +741,8 @@ sub gitPush
 	$push_cb_repo = $this;
 
 	my $branch = $this->{branch};
-	display($dbg_push,0,"gitPush($this->{path},$branch)".
-		") user_obj("._def($user_obj).
-		") user_cb("._def($user_cb).")");
+	my $num = scalar(keys %{$this->{remote_changes}});
+	display($dbg_push,0,"gitPush($branch,$this->{path}) $num remote_chanes)");
 
 	my $git_repo = Git::Raw::Repository->open($this->{path});
 	return $this->repoError("Could not create git_repo")
@@ -725,6 +798,11 @@ sub gitPush
 
 	};
 
+	if ($rslt)
+	{
+		display($dbg_commit+1,1,"clearing $num remote_changes");
+		$this->{remote_changes} = shared_clone({});
+	}
 	display($dbg_push,1,"gitPush() returning rslt="._def($rslt));
 	return $rslt;
 }
@@ -732,7 +810,53 @@ sub gitPush
 
 
 
+#--------------------------------------------
+# gitTag
+#--------------------------------------------
 
+sub gitTag
+{
+	my ($this,$tag) = @_;
+	display($dbg_tag,0,"gitTag($tag,$this->{path})");
+	my $git_repo = Git::Raw::Repository->open($this->{path});
+	return $this->repoError("Could not create git_repo") if !$git_repo;
+
+	my $config = $git_repo->config();
+	my $name   = $config->str('user.name');
+	my $email  = $config->str('user.email');
+	display($dbg_tag+1,1,"name($name) email($email)");
+	my $sig = Git::Raw::Signature->new($name, $email, time(), 0);
+
+	my $ref = Git::Raw::Reference->lookup("HEAD", $git_repo);
+	return $this->repoError("Could not get ref(HEAD)")
+		if !$ref;
+	my $ref2 = $ref->target();
+	my $id = $ref2->target();
+	return $this->repoError("Could not get id_remote(HEAD)")
+		if !$id;
+
+	print "ref=$ref id=$id\n";
+
+	my $msg = '';
+	my $rslt = $git_repo->tag($tag, $msg, $sig, $id );
+	display($dbg_tag,0,"gitTag($tag) returning"._def($rslt));
+
+	return $rslt;
+}
+
+
+
+
+###########################################
+# test main
+###########################################
+
+
+if (0)
+{
+	my $repo = apps::gitUI::repo->new(0,'',"/junk/junk_repository");
+	$repo->gitChanges();
+}
 
 
 

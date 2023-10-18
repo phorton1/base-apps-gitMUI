@@ -124,7 +124,7 @@ sub onGitCommand
 
 	return if !parseRepos();
 	my $repo_list = getRepoList();
-	my $data = '';
+	my $data = 'test commit '.localtime();
 		# Commit needs to get the description
 
 	my $progress = $this->{progress} = apps::gitUI::progressDialog->new(
@@ -164,22 +164,26 @@ sub doThreadedCommand
 		$command_id == $COMMAND_PUSH ? "Pushing" :
 		$command_id == $COMMAND_COMMIT ? "Commit" : '';
 
+
+	# DO THE CHANGES FIRST AS A FULL GAUGE
+	# obtaining $num_actions for other $command-ids
+
 	my $repo_num = 0;
 	my $num_actions = 0;
 	my $num_changed_repos = 0;
-	my $num_changed_local_files = 0;
-	my $num_changed_remote_files = 0;
-	my $num_changed_local_repos = 0;
-	my $num_changed_remote_repos = 0;
+	my $num_unstaged_files = 0;
+	my $num_staged_files = 0;
+	my $num_remote_files = 0;
+	my $num_unstaged_repos = 0;
+	my $num_staged_repos = 0;
+	my $num_remote_repos = 0;
+
 	for my $repo (@$repo_list)
 	{
-		# Commit and Push are currently disabled except for /junk
+		# Commands disaabled except for /junk if $TEST_JUNK_ONLY
 		# see $TEST_JUNK_ONLY in repo.pm
 
-		# comment in following line to save time doing push(junk) over and over again
-		# to not call gitChanges on every repo every time.
-		#
-		# next if $repo->{path} !~ /junk/;
+		next if $TEST_JUNK_ONLY && $repo->{path} !~ /junk/;
 
 		last if $command_aborted;
 
@@ -187,22 +191,28 @@ sub doThreadedCommand
 
 		$repo_num++;
 
-		my $num_local = @{$repo->{local_changes}};
-		my $num_remote = @{$repo->{local_changes}};
+		my $num_unstaged = keys %{$repo->{unstaged_changes}};
+		my $num_staged =   keys %{$repo->{staged_changes}};
+		my $num_remote =   keys %{$repo->{remote_changes}};
 
-		$num_changed_local_files += $num_local;
-		$num_changed_remote_files += $num_remote;
-		$num_changed_local_repos++ if $num_local;
-		$num_changed_remote_repos++ if $num_remote;
-		$num_changed_repos++ if $num_local || $num_remote;
+		$num_unstaged_files += $num_unstaged;
+		$num_staged_files   += $num_staged;
+		$num_remote_files   += $num_remote;
+		$num_unstaged_repos ++ if $num_unstaged;
+		$num_staged_repos   ++ if $num_staged;
+		$num_remote_repos   ++ if $num_remote;
+
+		$num_changed_repos  ++ if $num_unstaged || $num_staged || $num_remote;
 
 		$num_actions++ if
-			($command_id == $COMMAND_PUSH && $repo->canPush()) ||
-			($command_id == $COMMAND_COMMIT && $repo->canCommit());
+			($command_id == $COMMAND_ADD && $repo->canAdd()) ||
+			($command_id == $COMMAND_COMMIT && $repo->canCommit()) ||
+			($command_id == $COMMAND_PUSH && $repo->canPush());
 
 		my $status_msg =
-			$command_id == $COMMAND_PUSH ? "$num_actions/$num_repos canPush" :
+			$command_id == $COMMAND_ADD ? "$num_actions/$num_repos canAdd" :
 			$command_id == $COMMAND_COMMIT ? "$num_actions/$num_repos canCommit" :
+			$command_id == $COMMAND_PUSH ? "$num_actions/$num_repos canPush" :
 			"$num_changed_repos/$num_repos changed";
 
 		$this->sendThreadEvent({
@@ -214,6 +224,8 @@ sub doThreadedCommand
 
 		last if $command_aborted;
 	}
+
+	# DO THE COMMAND if $num_actions
 
 	my $rslt = 1;
 	if ($num_actions)
@@ -228,11 +240,12 @@ sub doThreadedCommand
 		my $num_actions_done = 0;
 		for my $repo (@$repo_list)
 		{
-			# next if $repo->{path} ne '/junk/junk_repository';
+			# canXXX() disaabled except for /junk if $TEST_JUNK_ONLY
 
 			my $doit = 0;
-			$doit = 1 if $command_id == $COMMAND_PUSH && $repo->canPush();
+			$doit = 1 if $command_id == $COMMAND_ADD && $repo->canAdd();
 			$doit = 1 if $command_id == $COMMAND_COMMIT && $repo->canCommit();
+			$doit = 1 if $command_id == $COMMAND_PUSH && $repo->canPush();
 
 			if ($doit)
 			{
@@ -240,24 +253,21 @@ sub doThreadedCommand
 
 				last if $command_aborted;
 
-				if ($command_id == $COMMAND_PUSH)
-				{
-					$this->sendThreadEvent({
-						main_name   => $repo->{path},
-						sub_name    => $action_name });
+				$this->sendThreadEvent({
+					main_name   => $repo->{path},
+					sub_name    => $action_name });
 
-					$rslt = $repo->gitPush($this,\&push_callback);
-					last if !$rslt;		# error was reported via callback
+				$rslt = $repo->gitAdd() if $command_id == $COMMAND_ADD;
+				$rslt = $repo->gitCommit($data) if $command_id == $COMMAND_COMMIT;
+				$rslt = $repo->gitPush($this,\&push_callback) if $command_id == $COMMAND_PUSH;
 
-					if (!$command_aborted)
-					{
-						$num_actions_done++;
-						$this->sendThreadEvent({
-							main_status => "$num_actions_done/$num_actions repos",
-							main_done   => $num_actions_done });
-					}
+				last if $command_aborted || !$rslt;
 
-				}	# PUSH
+				$num_actions_done++;
+				$this->sendThreadEvent({
+					main_status => "$num_actions_done/$num_actions repos",
+					main_done   => $num_actions_done });
+
 			}	# doit
 		}	# for each repo
 	}	# $num_actions
@@ -278,14 +288,15 @@ sub doThreadedCommand
 		my $params = $command_aborted ? { aborted => 1} : {
 			done => 1,
 			num_actions => $num_actions,
-			num_changed_repos		 => $num_changed_repos,
-			num_changed_local_files  => $num_changed_local_files,
-			num_changed_remote_files => $num_changed_remote_files,
-			num_changed_local_repos  => $num_changed_local_repos,
-			num_changed_remote_repos => $num_changed_remote_repos };
+			num_changed_repos	=> $num_changed_repos,
+			num_unstaged_files 	=> $num_unstaged_files,
+			num_staged_files 	=> $num_staged_files,
+			num_remote_files 	=> $num_remote_files,
+			num_unstaged_repos 	=> $num_unstaged_repos,
+			num_staged_repos 	=> $num_staged_repos,
+			num_remote_repos 	=> $num_remote_repos };
 		$this->sendThreadEvent( $params );
 	}
-
 
 	display($dbg_cmds,0,"doThreadedCommand() finished");
 
@@ -390,21 +401,26 @@ sub updateProgress
 			$progress->setDone('Done');
 
 			my $use_name = '';
-			$use_name .= "local($params->{num_changed_local_repos},$params->{num_changed_local_files}) "
-				if $params->{num_changed_local_repos};
-			$use_name .= "remote($params->{num_changed_remote_repos},$params->{num_changed_remote_files}) "
-				if $params->{num_changed_remote_repos};
+			$use_name .= "unstaged($params->{num_unstaged_repos},$params->{num_unstaged_files}) "
+				if $params->{num_unstaged_repos};
+			$use_name .= "staged($params->{num_staged_repos},$params->{num_staged_files}) "
+				if $params->{num_staged_repos};
+			$use_name .= "remote($params->{num_remote_repos},$params->{num_remote_files}) "
+				if $params->{num_remote_repos};
+
 			my $final = { main_name => $use_name };
-			$final->{main_message} = "NO CHANGES!!"
-				if !$params->{num_changed_local_repos} &&
-				   !$params->{num_changed_remote_repos};
+			$final->{main_msg} = $params->{num_changed_repos} ?
+				"CHANGES" :"NO CHANGES!!";
 			$progress->setParams($final);
 		}
 		else
 		{
 			my $num_actions = $params->{num_actions};
-			my $what = $command_id == $COMMAND_PUSH ?
-				"pushed" : "committed" ;
+
+			my $what =
+				$command_id == $COMMAND_PUSH ? "pushed" :
+				$command_id == $COMMAND_COMMIT ? "committed" :
+				$command_id == $COMMAND_ADD ? "added" : '';
 			my $use_name = $num_actions ?
 				"$num_actions repos $what" :
 				"NOTHING TO DO!!";
@@ -532,11 +548,10 @@ sub push_callback
 
 
 
-
-
 #-----------------------------------------------
 # onIdle()
 #-----------------------------------------------
+# Does nothing at this time
 
 sub onIdle
 {

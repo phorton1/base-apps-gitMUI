@@ -184,8 +184,9 @@ sub updateLinks
 			{
 				my $repo = repoFromId($id);
 				my $color =
-					@{$repo->{local_changes}} ? $color_red :
-					@{$repo->{remote_changes}} ? $color_magenta :
+					keys %{$repo->{unstaged_changes}} ? $color_orange :
+					keys %{$repo->{staged_changes}} ? $color_red :
+					keys %{$repo->{remote_changes}} ? $color_magenta :
 					$repo->{private} ? $color_blue :
 					$color_green;
 				$ctrl->SetForegroundColour($color);
@@ -251,8 +252,8 @@ sub populate
 			display($dbg_pop,1,"hyperLink($id,$display_name)");
 
 			my $color =
-				@{$repo->{local_changes}} ? $color_red :
-				@{$repo->{remote_changes}} ? $color_magenta :
+				keys %{$repo->{staged_changes}} ? $color_red :
+				keys %{$repo->{remote_changes}} ? $color_magenta :
 				$repo->{private} ? $color_blue :
 				$color_green;
 

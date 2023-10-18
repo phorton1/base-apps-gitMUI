@@ -22,6 +22,7 @@ BEGIN
 		$ID_PATH_WINDOW
 
 		$COMMAND_CHANGES
+		$COMMAND_ADD
 		$COMMAND_COMMIT
 		$COMMAND_PUSH
 		$COMMAND_TAGS
@@ -47,6 +48,7 @@ our (
 	# git things ...
 
 	$COMMAND_CHANGES,	# should be auto active commands
+	$COMMAND_ADD,
 	$COMMAND_COMMIT,
 	$COMMAND_PUSH,		# only one actually implemented
 	$COMMAND_TAGS,
@@ -68,8 +70,9 @@ our (
 
 mergeHash($resources->{command_data},{
 	$COMMAND_CHANGES		=> ['Changes',	'Update local and remote changes for repositories'],
-	$COMMAND_COMMIT			=> ['Commit',	'Commit repositories with a comment'],
-	$COMMAND_PUSH			=> ['Push',		'Push any commited local changes'],
+	$COMMAND_ADD			=> ['Add',		'Add unstaged changes to staged'],
+	$COMMAND_COMMIT			=> ['Commit',	'Commit staged changes with a comment'],
+	$COMMAND_PUSH			=> ['Push',		'Push commited changes'],
 	$COMMAND_TAGS			=> ['Tags',		'Add Tag to selected repositories'],
     $COMMAND_REPOS      	=> ['Repos',	'Update local repository info cache from github'],
 	$COMMAND_PATH_WIN		=> ['Paths',	'Show repos organized by Sections'],
@@ -93,6 +96,7 @@ my @main_menu = ( 'view_menu,&View' );
 unshift @{$resources->{view_menu}},(
 	$COMMAND_CHANGES,
 		$ID_SEPARATOR,
+	$COMMAND_ADD,
 	$COMMAND_COMMIT,
 	$COMMAND_PUSH,		# only one actually implemented
 	$COMMAND_TAGS,
