@@ -26,25 +26,12 @@
 # 		in git, theee can be placed anywhere
 # 		in this system, I only look at the main repo direcotry
 #
-# Here is the .gitignore for /base
+# EXCLUDED SUBDIRECTORIES MUST BE MARKED WITH
 #
-#			apps/*
-#			Pub/*
-#			MBE/*
-#			My/
-#			Pub
-#			MBE
-#			My
+#      MBE**
 #
-# /base/MBE
-#
-#			CM
-#			PA
-#			Server
-#			CM/*
-#			PA/*
-#			Server/
-
+# Where MBE is the name of a sub-project, and ** means git
+# will ignore everything starting with that.
 
 
 
@@ -73,6 +60,32 @@ my $filter =
 my @monitors;
 my $thread;
 
+
+
+
+sub parseGitIgnore
+{
+	my ($path) = @_;
+	my $retval = [];
+	my $text = getTextFile("$path/.gitignore") || '';
+	my @lines = split(/\n/,$text);
+	for my $line (@lines)
+	{
+		$line =~ s/^\s+|\s+$//g;
+		if ($line =~ /^(.*)\*\*$/)
+		{
+			my $re = $1;
+			$re =~ s/\(/\\\(/g;		# change parents to RE
+			$re =~ s/\)/\\\)/g;
+			push @$retval,$re
+		}
+	}
+	return $retval;
+}
+
+
+
+
 sub allRepos
 {
     my ($class,$callback) = @_;
@@ -80,10 +93,8 @@ sub allRepos
     my $this = {};
     bless $this,$class;
 	$this->{callback} = $callback;
-
 	my $repo_list = getRepoList();
 	return if !$repo_list;
-
 	for my $repo (@$repo_list)
 	{
 		return if !createMonitor($repo->{path});
@@ -97,18 +108,76 @@ sub allRepos
 
 sub createMonitor
 {
-	my ($path) = @_;
-	my $include_subfolders = 0;
+	my ($path,$report_path) = @_;
+
+	$report_path ||= $path;
+
+	my $include_subfolders = 1;
+	my $exclude_subdirs =  parseGitIgnore($path);
+	if (@$exclude_subdirs)
+	{
+		$include_subfolders = 0;
+		display($dbg_mon,0,"EXCLUDE SUBDIRS on path($path)");
+		return 0 if !createSubMonitors($path,$exclude_subdirs);
+	}
+
     my $monitor = Win32::ChangeNotify->new($path,$include_subfolders,$filter);
     if (!$monitor)
     {
         error("apps::gitUI::monitor::creeateMonitor() - Could not create monitor($path)");
         return 0;
     }
-	push @monitors,{ path => $path, mon => $monitor };
+	push @monitors,{ path => $report_path, mon => $monitor };
 	return 1;
 }
 
+
+
+sub createSubMonitors
+{
+	my ($path,$exclude_subdirs) = @_;
+
+	return error("createSubMonitors() not opendir $path")
+		if !opendir(DIR,$path);
+
+    while (my $entry=readdir(DIR))
+    {
+        next if $entry =~ /^(\.|\.\.)$/;
+		next if $entry =~/^\.git$/;
+			# don't include .git itself
+		my $sub_path = "$path/$entry";
+		my $is_dir = -d $sub_path ? 1 : 0;
+		if ($is_dir)
+		{
+			my $skipit = 0;
+			for my $exclude (@$exclude_subdirs)
+			{
+				if ($entry =~ /^$exclude$/)
+				{
+					$skipit = 1;
+					last;
+				}
+			}
+
+			if ($skipit)
+			{
+				display($dbg_mon,0,"skipping subdir $entry");
+			}
+			else
+			{
+				display($dbg_mon,0,"CREATING SUB_MONITOR $entry");
+				if (!createMonitor($sub_path,$path))
+				{
+					closedir DIR;
+					return 0;
+				}
+			}
+		}
+	}
+
+	closedir DIR;
+	return 1;
+}
 
 
 
