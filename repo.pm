@@ -15,7 +15,7 @@ use Git::Raw;
 use Pub::Utils;
 use apps::gitUI::git;
 
-our $TEST_JUNK_ONLY = 1;
+our $TEST_JUNK_ONLY = 0;
 	# limits canCommit and canPush to /junk
 
 my $MAX_SHOW_CHANGES = 30;

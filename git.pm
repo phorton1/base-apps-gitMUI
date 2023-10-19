@@ -39,8 +39,8 @@ use threads;
 use threads::shared;
 use Pub::Utils;
 
-$temp_dir = "/base/temp/gitUI";
-$data_dir = "/base/temp/gitUI";
+$temp_dir = "/base_data/temp/gitUI";
+$data_dir = "/base_data/data/gitUI";
 	# we set these here, even though they aren't used
 	# until gitUI::github.pm, cuz it's easy to find.
 
@@ -71,6 +71,7 @@ my @id_path_mappings = (
 	"phorton1"	       , "/src/phorton1",
     "projects"         , "/src/projects",
     "www"              , "/var/www",
+	"komodoEditTools", , "/Users/Patrick/AppData/Local/ActiveState/KomodoEdit/8.5/tools",
 	"fusionAddIns"	   , "/Users/Patrick/AppData/Roaming/Autodesk/Autodesk Fusion 360/API/AddIns",
 );
 

@@ -39,8 +39,8 @@ sub new
 	my $this = $class->SUPER::new($book,$id);
 	$this->MyWindow($frame,$book,$id,'Paths',$data);	## ,$instance);
 
+	$this->SetBackgroundColour($color_white);
 	$this->{ctrl_sections} = [];
-	parseRepos();
 
 	$this->populate();
 
@@ -252,6 +252,7 @@ sub populate
 			display($dbg_pop,1,"hyperLink($id,$display_name)");
 
 			my $color =
+				keys %{$repo->{unstaged_changes}} ? $color_orange :
 				keys %{$repo->{staged_changes}} ? $color_red :
 				keys %{$repo->{remote_changes}} ? $color_magenta :
 				$repo->{private} ? $color_blue :

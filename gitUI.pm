@@ -19,6 +19,7 @@ use apps::gitUI::repo;
 use apps::gitUI::repos;
 use apps::gitUI::Resources;
 use apps::gitUI::pathWindow;
+use apps::gitUI::commitWindow;
 use apps::gitUI::progressDialog;
 use base qw(Pub::WX::Frame);
 
@@ -59,14 +60,30 @@ sub new
 	my $this = $class->SUPER::new($parent);	# ,-1,'gitUI',[50,50],[600,680]);
 
     $this->CreateStatusBar();
-	$this->createPane($ID_PATH_WINDOW);
+	#$this->createPane($ID_PATH_WINDOW);
+	#$this->createPane($ID_COMMIT_WINDOW);
+
+	# The minimum size of the window is from commitWidow.pm
+	# plus fudge factors for the height due to menu, tab bar
+	# and status window, and a bit for the frame outline
+
+	my $FUDGE_HEIGHT_EXTRA = 40;
+	my $FUDGE_WIDTH_EXTRA = 10;
+	$this->SetMinSize([
+		$WIN_MIN_WIDTH + $FUDGE_WIDTH_EXTRA,
+		$WIN_MIN_HEIGHT + $FUDGE_HEIGHT_EXTRA]);
+
 
 	EVT_IDLE($this,\&onIdle);
-	EVT_MENU_RANGE($this, $COMMAND_CHANGES, $COMMAND_TAGS, \&onGitCommand);
+	EVT_MENU_RANGE($this, $ID_PATH_WINDOW, $ID_REPO_DETAILS, \&onOpenWindowById);
+	EVT_MENU_RANGE($this, $COMMAND_CHANGES, $COMMAND_TAG, \&onGitCommand);
 	EVT_COMMAND($this, -1, $THREAD_EVENT, \&onThreadEvent );
+
+	return if !parseRepos();
 
 	return $this;
 }
+
 
 
 sub createPane
@@ -81,9 +98,22 @@ sub createPane
 	    $book ||= $this->{book};
         return apps::gitUI::pathWindow->new($this,$id,$book,$data);
     }
+	elsif ($id == $ID_COMMIT_WINDOW)
+	{
+		$book ||= $this->{book};
+        return apps::gitUI::commitWindow->new($this,$id,$book,$data);
+	}
     return $this->SUPER::createPane($id,$book,$data);
 }
 
+
+sub onOpenWindowById
+{
+	my ($this,$event) = @_;
+	my $window_id = $event->GetId();
+	display($dbg_frame,0,"gitUI::Frame::onOpenWindowById($window_id)");
+	$this->createPane($window_id);
+}
 
 
 #################################################################
@@ -122,7 +152,6 @@ sub onGitCommand
 	$this->initCommand();
 	$command_thread = undef;
 
-	return if !parseRepos();
 	my $repo_list = getRepoList();
 	my $data = 'test commit '.localtime();
 		# Commit needs to get the description
