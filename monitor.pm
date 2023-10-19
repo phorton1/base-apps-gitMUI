@@ -21,9 +21,32 @@
 #	 cwd = "{USERPROFILE}/AppData/Local/Temp/".format(**os.environ)
 #
 
+# ISSUE WITH USING .gitignore
+#
+# 		in git, theee can be placed anywhere
+# 		in this system, I only look at the main repo direcotry
+#
+# Here is the .gitignore for /base
+#
+#			apps/*
+#			Pub/*
+#			MBE/*
+#			My/
+#			Pub
+#			MBE
+#			My
+#
+# /base/MBE
+#
+#			CM
+#			PA
+#			Server
+#			CM/*
+#			PA/*
+#			Server/
 
 
-kjlkjlkjlkj
+
 
 package apps::gitUI::monitor;
 use strict;
