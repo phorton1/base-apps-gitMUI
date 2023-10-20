@@ -27,7 +27,7 @@ my $dbg_config = 1;
 	# 0 show header in checkConfig
 	# -1 = show details in checkConfig
 
-my $dbg_chgs = 0;
+my $dbg_chgs = 1;
 my $dbg_add = 0;
 my $dbg_commit = 0;
 my $dbg_push = 0;

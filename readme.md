@@ -27,6 +27,39 @@ So I can cache the timestamps of the following files
 I don't have a fast way of determining if "unstaged_changes" were
 	added due to new/delete/changed files
 
+Can I quickly determine if a repo is "big"??
+
+I don't think using use Win32::ChangeNotify is a good solution.
+
+
+What if?
+	For each repo I cache the 'most recent dt change' as
+		the latet of the above timestamps.
+	I have a thread which monitors the timestamps and
+		checks for changes and notifies for active repos.
+	A certain number of the most recent repos (say 10)
+		are considered active, and are checked for local
+		unstaged changes in the thread, which also modifies their timestamp.
+
+
+	The user specifies an amount of time (say 48 hours)
+		by which a repo is automatically determined to be 'active'
+	A manual scan sets the most recent time if any unstaged changes.
+		so infrequent changes to big repos like Perl can be dealt
+		with via a manual scan, but normally, the (background threaded)
+		scan only works on the 'active' repos.
+
+
+	I keep track of a number of 'active' repos, say 10
+	- a manual rescan will force any new repos with unstaged_changes into
+	  'active' mode.
+
+	  changed
+		any repo with an add,commit, or push in the last 24 hour (period of time)
+			is 'active'.
+
+	I run a full scan (in a thread) on startup
+		.. it will take some time for the batch of changes to show
 
 
 

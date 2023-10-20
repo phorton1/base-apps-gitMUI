@@ -27,10 +27,19 @@ our $font_normal = Wx::Font->new(9,wxFONTFAMILY_DEFAULT,wxFONTSTYLE_NORMAL,wxFON
 our $font_bold = Wx::Font->new(9,wxFONTFAMILY_DEFAULT,wxFONTSTYLE_NORMAL,wxFONTWEIGHT_BOLD);
 
 
+# This is a weird place for this, but it is includable by both gitUI & command
+
+
+our $THREAD_EVENT:shared = Wx::NewEventType;
+
+
 BEGIN
 {
  	use Exporter qw( import );
 	our @EXPORT = qw(
+
+		$THREAD_EVENT
+
 		$color_black
 		$color_red
 		$color_green
