@@ -22,6 +22,7 @@ use base qw(Wx::Window Pub::WX::Window);
 my $dbg_win = 0;
 my $dbg_pop = 1;
 my $dbg_layout = 1;
+my $dbg_notify = 0;
 
 
 my $BASE_ID = 1000;
@@ -275,6 +276,39 @@ sub populate
 	}
 	$this->doLayout();
 }
+
+
+
+sub notifyRepoChanged
+{
+	my ($this,$repo) = @_;
+	display($dbg_notify,"notifyRepoChanged($repo->{path})");
+
+	for my $ctrl_section (@{$this->{ctrl_sections}})
+	{
+		for my $ctrl (@{$ctrl_section->{ctrls}})
+		{
+			my $id = $ctrl->GetId();
+			if ($id > 0)
+			{
+				my $found_repo = repoFromId($id);
+				if ($repo->{path} eq $found_repo->{path})
+				{
+					my $color =
+						keys %{$repo->{unstaged_changes}} ? $color_orange :
+						keys %{$repo->{staged_changes}} ? $color_red :
+						keys %{$repo->{remote_changes}} ? $color_magenta :
+						$repo->{private} ? $color_blue :
+						$color_green;
+					$ctrl->SetForegroundColour($color);
+					$ctrl->Refresh();
+					return;
+				}
+			}
+		}
+	}
+}
+
 
 
 

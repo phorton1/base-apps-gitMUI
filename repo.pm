@@ -469,20 +469,22 @@ sub getLocalChanges
 	{
 		my $values = $status->{$fn};
 		my $flags = $values->{flags};
-		my $flag = shift @$flags;
 
-		my $key =
-			$flag =~ s/^worktree_// ? 'unstaged_changes' :
-			$flag =~ s/^index_// ? 'staged_changes' : '';
-		my $what =
-			$flag eq 'new' ? "A" :
-			$flag eq 'modified' ? "M" :
-			$flag eq 'deleted' ? "D" :
-			$flag eq 'renamed' ? "R" : "?";
+		for my $flag (@$flags)
+		{
+			my $key =
+				$flag =~ s/^worktree_// ? 'unstaged_changes' :
+				$flag =~ s/^index_// ? 'staged_changes' : '';
+			my $what =
+				$flag eq 'new' ? "A" :
+				$flag eq 'modified' ? "M" :
+				$flag eq 'deleted' ? "D" :
+				$flag eq 'renamed' ? "R" : "?";
 
-		display($dbg_chgs,2,"$key: $what $fn")
-			if $num_changes <= $MAX_SHOW_CHANGES;
-		$this->{$key}->{$fn} = $what;
+			display($dbg_chgs,2,"$key: $what $fn")
+				if $num_changes <= $MAX_SHOW_CHANGES;
+			$this->{$key}->{$fn} = $what;
+		}
 	}
 
 	return 1;

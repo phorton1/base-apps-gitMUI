@@ -36,7 +36,7 @@ my $USE_MONITOR = 1;
 
 my $monitor;
 
-
+my $NOTIFY_REPO_EVENT:shared = Wx::NewEventType;
 
 #--------------------------------------
 # methods
@@ -69,6 +69,8 @@ sub new
 	EVT_MENU_RANGE($this, $ID_PATH_WINDOW, $ID_REPO_DETAILS, \&onOpenWindowById);
 	EVT_MENU_RANGE($this, $COMMAND_CHANGES, $COMMAND_TAG, \&onGitCommand);
 	EVT_COMMAND($this, -1, $THREAD_EVENT, \&onThreadEvent );
+	EVT_COMMAND($this, -1, $NOTIFY_REPO_EVENT, \&onRepoChanged );
+
 
 	return if !parseRepos();
 
@@ -118,18 +120,29 @@ sub onOpenWindowById
 # monitor
 #------------------------------
 
-sub monitor_callback
+sub onRepoChanged
 {
-	my ($repo) = @_;
-	my $this = getAppFrame();
-	display($dbg_mon,0,"monitor_callback($repo->{path})");
+	my ($this,$event) = @_;
+	my $repo = $event->GetData();
+	display($dbg_mon,0,"onRepoChanged($repo->{path})");
 	for my $pane (@{$this->{panes}})
 	{
+		display($dbg_mon,1,"pane($pane) can=".$pane->can("notifyRepoChanged"));
 		if ($pane && $pane->can("notifyRepoChanged"))
 		{
 			$pane->notifyRepoChanged($repo);
 		}
 	}
+}
+
+
+sub monitor_callback
+{
+	my ($repo) = @_;
+	my $this = getAppFrame();
+	display($dbg_mon,0,"monitor_callback($repo->{path})");
+	my $evt = new Wx::PlThreadEvent( -1, $NOTIFY_REPO_EVENT, shared_clone($repo) );
+	Wx::PostEvent( $this, $evt );
 }
 
 

@@ -481,6 +481,12 @@ sub checkRepo
 	my ($entry,$repo) = @_;
 
 	my $rslt = $repo->gitChanges();
+
+	display($dbg_mon,0,"checkRepo($repo->{path}) ".
+		"unstaged($entry->{unstaged_changes},".scalar(keys %{$repo->{unstaged_changes}}).") ".
+		"staged($entry->{staged_changes},".scalar(keys %{$repo->{staged_changes}}).") ".
+		"remote($entry->{remote_changes},".scalar(keys %{$repo->{remote_changes}}).")");
+
 	return if !defined($rslt);
 	my $started = 0;
 	my $repo_changed = 0;
@@ -488,7 +494,6 @@ sub checkRepo
 	$repo_changed = 1 if checkChanges($entry,$repo,'staged_changes',\$started);
 	$repo_changed = 1 if checkChanges($entry,$repo,'remote_changes',\$started);
 	&$the_callback($repo) if $repo_changed;
-
 	return $repo_changed;
 }
 

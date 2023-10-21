@@ -10,6 +10,7 @@ use threads::shared;
 use Pub::Utils;
 use apps::gitUI::repo;
 use apps::gitUI::styles; 	# for $THREAD_EVENT!!
+use apps::gitUI::Resources;
 use apps::gitUI::progressDialog;
 use base qw(Pub::WX::Frame);
 
