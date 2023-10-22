@@ -16,7 +16,7 @@ use Pub::Utils;
 use apps::gitUI::git;
 
 our $TEST_JUNK_ONLY = 0;
-	# limits canCommit and canPush to /junk
+	# limits visible repos to /junk
 
 my $MAX_SHOW_CHANGES = 30;
 
@@ -126,7 +126,7 @@ sub new
 
 		private  => 0,						# if PRIVATE in file
 		forked   => 0,						# if FORKED [optional_blah] in file
-		selected => 0,						# if selected for commit, tag, push
+		selected => 0,						# if selected for push, tag
 		parent   => '',						# "Forked from ..." or "Copied from ..."
 		descrip  => '',						# description from github
 		uses 	 => shared_clone([]),		# a list of the repositories this repository USES
@@ -195,7 +195,7 @@ sub repoError
 	error("repo($this->{path}): ".$msg,$call_level)
 		if !$repo_quiet;
 	push @{$this->{errors}},$msg;
-	return 0;
+	return undef;
 }
 
 sub repoWarning
@@ -233,19 +233,19 @@ sub hasChanges
 sub canAdd
 {
 	my ($this) = @_;
-	return 0 if $TEST_JUNK_ONLY && $this->{path} !~ /junk/;
+	# return 0 if $TEST_JUNK_ONLY && $this->{path} !~ /junk/;
 	return scalar(keys %{$this->{unstaged_changes}});
 }
 sub canCommit
 {
 	my ($this) = @_;
-	return 0 if $TEST_JUNK_ONLY && $this->{path} !~ /junk/;
+	# return 0 if $TEST_JUNK_ONLY && $this->{path} !~ /junk/;
 	return scalar(keys %{$this->{staged_changes}});
 }
 sub canPush
 {
 	my ($this) = @_;
-	return 0 if $TEST_JUNK_ONLY && $this->{path} !~ /junk/;
+	# return 0 if $TEST_JUNK_ONLY && $this->{path} !~ /junk/;
 	return scalar(keys %{$this->{remote_changes}});
 }
 
@@ -271,19 +271,14 @@ sub checkGitConfig
 	my $path = $this->{path};
     display($dbg_config+1,0,"checkGitConfig($path)");
 
-    if (!(-d $path))
-    {
-        $this->repoError("validateGitConfig($path) path not found");
-        return;
-    }
+    return $this->repoError("validateGitConfig($path) path not found")
+		if !(-d $path);
 
     my $git_config_file = "$path/.git/config";
     my $text = getTextFile($git_config_file);
-    if (!$text)
-    {
-        $this->repoError("checkGitConfig($path) could not open .git/config");
-        return;
-    }
+    return $this->repoError("checkGitConfig($path) no text in .git/config")
+		if !$text;
+
 
 	my $branch;
 	my %branches;
@@ -419,20 +414,47 @@ sub checkGitConfig
 #--------------------------------------------
 
 sub gitChanges
+	# returns undef if any problems
+	# returns 1 if the any of the hashes of changes has changed
+	# returns 0 otherwise
+	## places advisory lock on $repo_list during atomic change assignment
 {
 	my ($this) = @_;
 	display($dbg_chgs,0,"getChanges($this->{path})");
 	my $git_repo = Git::Raw::Repository->open($this->{path});
 	return $this->repoError("Could not create git_repo") if !$git_repo;
 
-	$this->{unstaged_changes} = shared_clone({});
-	$this->{staged_changes} = shared_clone({});
-	$this->{remote_changes} = shared_clone({});
+	my $changes_changed = 0;
 
-	return if !$this->getLocalChanges($git_repo);
-	return if !$this->getRemoteChanges($git_repo);
-	return $this->hasChanges();
+	my $rslt = $this->getLocalChanges($git_repo);
+	return if !defined($rslt);
+	$changes_changed += $rslt;
+
+	$rslt = $this->getRemoteChanges($git_repo);
+	return if !defined($rslt);
+	$changes_changed += $rslt;
+
+	display($dbg_chgs,0,"gitChanges($this->{path}) returning $changes_changed");
+	return $changes_changed;
 }
+
+
+sub assignHashIfChanged
+{
+	my ($this,$key,$changes,$changed) = @_;
+	my $hash = $this->{$key};
+	$changed ||= scalar(keys %$hash) != scalar(keys %$changes);
+	if ($changed)
+	{
+		display($dbg_chgs,0,"assignHashIfChanged($key,$this->{path})");
+		my $repo_list = apps::gitUI::repos::getRepoList();
+		## lock $repo_list;
+		$this->{$key} = $changes;
+		return 1;
+	}
+	return 0;
+}
+
 
 
 sub getLocalChanges
@@ -441,10 +463,19 @@ sub getLocalChanges
 	my ($this,$git_repo) = @_;
 	display($dbg_chgs,0,"getLocalChanges($this->{path})");
 
-	my $opts = { flags => { include_untracked => 1 }};
+	my $opts = { flags => {
+		include_untracked => 1,
+		recurse_untracked_dirs => 1 }};
 	my $status = $git_repo->status($opts);
 	return $this->repoError("No result from git_status")
 		if !$status;
+
+	my $unstaged_changed = 0;
+	my $staged_changed = 0;
+	my $unstaged_changes = $this->{unstaged_changes};
+	my $staged_changes = $this->{staged_changes};
+	my $new_unstaged_changes = shared_clone({});
+	my $new_staged_changes = shared_clone({});
 
 	my $num_changes = keys %$status;
 	display($dbg_chgs,2,"local:  $num_changes changed files")
@@ -472,22 +503,44 @@ sub getLocalChanges
 
 		for my $flag (@$flags)
 		{
-			my $key =
-				$flag =~ s/^worktree_// ? 'unstaged_changes' :
-				$flag =~ s/^index_// ? 'staged_changes' : '';
+			my $show = 'unstaged';
+			my $old_hash = $unstaged_changes;
+			my $new_hash = $new_unstaged_changes;
+			my $pbool = \$unstaged_changed;
+
+			if ($flag =~ s/^index_//)
+			{
+				$show = 'staged';
+				$old_hash = $staged_changes;
+		        $new_hash = $new_staged_changes;
+                $pbool = \$staged_changed;
+			}
+			elsif ($flag !~ s/^worktree_//)
+			{
+				warning(0,0,"unknown change $fn - $flag");
+				next;
+			}
+
 			my $what =
 				$flag eq 'new' ? "A" :
 				$flag eq 'modified' ? "M" :
 				$flag eq 'deleted' ? "D" :
 				$flag eq 'renamed' ? "R" : "?";
 
-			display($dbg_chgs,2,"$key: $what $fn")
+			display($dbg_chgs,2,"$show: $what $fn")
 				if $num_changes <= $MAX_SHOW_CHANGES;
-			$this->{$key}->{$fn} = $what;
+			$new_hash->{$fn} = $what;
+			$$pbool = 1 if
+				!$old_hash->{$fn} ||
+				$old_hash->{$fn} ne $new_hash->{$fn};
 		}
 	}
 
-	return 1;
+	my $changes_changed = 0;
+	$changes_changed += $this->assignHashIfChanged('unstaged_changes',$new_unstaged_changes,$unstaged_changed);
+	$changes_changed += $this->assignHashIfChanged('staged_changes',$new_staged_changes,$staged_changed);
+	display($dbg_chgs,0,"getLocalChanges($this->{path}) returning $changes_changed");
+	return $changes_changed;
 }
 
 
@@ -556,11 +609,15 @@ sub getRemoteChanges
 		if !defined($text);
 
 	$text =~ s/^\s+|\s$//g;
-	return 1 if !$text;
+	return 0 if !$text;
 
 	# Split the text into lines and process them
 	# Occasionallly I get an asterisk at the end of the filename
 	# and I don't knowo aht it means.
+
+	my $remote_changed = 0;
+	my $remote_changes = $this->{remote_changes};
+	my $new_remote_changes = shared_clone({});
 
 	my @changes = split(/\n/,$text);
 	my $num_changes = @changes;
@@ -573,10 +630,18 @@ sub getRemoteChanges
 		my ($what,$fn) = split("\t",$change);
 		display($dbg_chgs,2,"change($change) remote: $what $fn")
 			if $num_changes <= $MAX_SHOW_CHANGES;
-		$this->{remote_changes}->{$fn} = $what;
+
+
+		$new_remote_changes->{$fn} = $what;
+		$remote_changed = 1 if
+			!$remote_changes->{$fn} ||
+			$remote_changes->{$fn} ne $new_remote_changes->{$fn};
+
 	}
 
-	return 1;
+	my $changes_changed = $this->assignHashIfChanged('remote_changes',$new_remote_changes,$remote_changed);
+	display($dbg_chgs,0,"getRemoteChanges($this->{path}) returning $changes_changed");
+	return $changes_changed;
 }
 
 

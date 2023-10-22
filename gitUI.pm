@@ -25,6 +25,7 @@ use apps::gitUI::commitWindow;
 use apps::gitUI::progressDialog;
 use base qw(Pub::WX::Frame);
 
+$TEST_JUNK_ONLY = 1;
 
 my $dbg_frame = 0;
 	# lifecycle, major commands

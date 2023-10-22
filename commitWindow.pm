@@ -192,9 +192,7 @@ sub notifyRepoChanged
 	my ($this,$repo) = @_;
 
 	display($dbg_notify,0,"notifyRepoChanged($repo->{path})");
-	$this->{unstaged}->setContent();
 	$this->{unstaged}->populate();
-	$this->{staged}->setContent();
 	$this->{staged}->populate();
 }
 

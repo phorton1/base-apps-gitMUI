@@ -146,13 +146,17 @@ sub parseRepos
 
 				$repo = apps::gitUI::repo->new($repo_num++,$section_name,$path,$branch);
 
-				push @$repo_list,$repo;
-				$repo_hash->{$path} = $repo;
+				if (!$TEST_JUNK_ONLY || $path =~ /junk/)
+				{
+					push @$repo_list,$repo;
+					$repo_hash->{$path} = $repo;
+				}
 
 				if (!$section_started)
 				{
 					$section = apps::gitUI::section->new($section_num++,$section_path,$section_name);
-					push @$repo_sections,$section;
+					push @$repo_sections,$section
+						if (!$TEST_JUNK_ONLY || $path =~ /junk/);
 					$section_started = 1;
 				}
 

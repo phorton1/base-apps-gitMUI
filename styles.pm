@@ -23,6 +23,9 @@ our $color_white    = Wx::Colour->new(0xff, 0xff, 0xff);
 our $color_light_green  = Wx::Colour->new(0xA0, 0xFF, 0xA0);
 our $color_light_orange = Wx::Colour->new(0xff, 0xB0, 0xA0);
 
+our $color_dark_cyan    = Wx::Colour->new(0x00, 0x80, 0x80);
+
+
 our $font_normal = Wx::Font->new(9,wxFONTFAMILY_DEFAULT,wxFONTSTYLE_NORMAL,wxFONTWEIGHT_NORMAL);
 our $font_bold = Wx::Font->new(9,wxFONTFAMILY_DEFAULT,wxFONTSTYLE_NORMAL,wxFONTWEIGHT_BOLD);
 
@@ -54,6 +57,8 @@ BEGIN
 
 		$color_light_green
 		$color_light_orange
+
+		$color_dark_cyan
 
 		$font_normal
         $font_bold
