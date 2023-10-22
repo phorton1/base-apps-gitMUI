@@ -49,7 +49,7 @@ sub new
 	$this->{content} = [];
 
 	$this->SetBackgroundColour(
-		$is_staged?$color_light_green:$color_light_orange);
+		$is_staged? $color_git_staged : $color_git_unstaged);
 	Wx::StaticText->new($this,-1, $is_staged ?
 		'Staged Changed (Will Commit)' : 'Unstaged Changes',
 		[5,5]);

@@ -1,4 +1,10 @@
 #!/usr/bin/perl
+#
+# PRH TODO: StageAll and UnstageAll buttons in headers
+# PRH TODO: NEED ARROW KEYS
+# PRH TODO: need implement stub for diff window
+# PRH TODO: then can work on stage, unstage, and revert
+#
 #-------------------------------------------
 # apps::gitUI::listCtrl
 #-------------------------------------------
@@ -18,14 +24,11 @@
 #  short clicking on entry will
 #	 repo: will open regular gitUI to the repo
 #    toggle selection of repo items
-#  long clicking on entry will
+#  TODO: context menu for right clicks
 #    repo: show repo detils
 #    file: call the shell except for certain overidden types
 #		.pm, .md -> komodo
-# some other ideas
-#
-# 		use shorter {id} for repos
-#       show number of items for repos
+
 
 
 package apps::gitUI::listCtrl;
@@ -33,11 +36,11 @@ use strict;
 use warnings;
 use threads;
 use threads::shared;
+use Win32::GUI;
 use Wx qw(:everything);
 use Wx::Event qw(
 	EVT_PAINT
-	EVT_LEFT_DOWN
-	EVT_LEFT_UP);
+	EVT_LEFT_DOWN );
 use apps::gitUI::styles;
 use Pub::Utils;
 use base qw(Wx::ScrolledWindow);	# qw(Wx::Window);
@@ -48,7 +51,7 @@ my $dbg_draw = 0;
 my $dbg_sel = 0;
 
 
-my $ROW_HEIGHT  = 20;
+my $ROW_HEIGHT  = 18;
 
 
 BEGIN {
@@ -60,8 +63,8 @@ BEGIN {
 
 
 
-my $selected_brush = Wx::Brush->new($color_dark_cyan,wxBRUSHSTYLE_SOLID);
-
+my $selected_brush = Wx::Brush->new($color_item_selected,wxBRUSHSTYLE_SOLID);
+my $selected_pen = Wx::Pen->new($color_item_selected,1,wxPENSTYLE_SOLID);
 
 sub new
 {
@@ -73,14 +76,18 @@ sub new
     $this->{parent} = $parent;
 	$this->{name} = $name;
 	$this->{trees} = {};
+	$this->{selection} = {};
+		# a nested hash of trees by id and 1 by filename
+		# of ALL durrently selected files.
+	$this->{anchor} = '';
+		# the anchor item, if any for SHIFT selection
 
 	$this->SetVirtualSize([0,0]);
 	$this->SetBackgroundColour($color_white);
 	$this->SetScrollRate(0,$ROW_HEIGHT);
 
 	EVT_PAINT($this, \&onPaint);
-	EVT_LEFT_DOWN($this,\&onLeftClick);
-    EVT_LEFT_UP($this,\&onLeftUp);
+	EVT_LEFT_DOWN($this,\&onLeftDown);
 
 	return $this;
 }
@@ -92,11 +99,12 @@ sub new
 
 sub item
 {
-	my ($type) = @_;
+	my ($tree,$fn,$type) = @_;
 	my $item = {
+		tree => $tree,
+		fn	 => $fn,
 		type => $type,
-		exists => 1,
-		selected => 0, };
+		exists => 1 };
 	return $item;
 }
 
@@ -108,14 +116,16 @@ sub tree
 	my $items = {};
 
 	my $tree = {
-		repo => $repo,
+		id => $repo->{id},
+		repo => $repo,		# unused so far
 		items => $items,
 		exists => 1,
-		expanded => 1, };
+		expanded => 1,
+		num_selected => 0 };
 	for my $fn (keys %$changes)
 	{
 		my $type = $changes->{$fn};
-		$items->{$fn} = item($type);
+		$items->{$fn} = item($tree,$fn,$type);
 	}
 	return $tree;
 }
@@ -169,7 +179,7 @@ sub updateRepo
 			my $item = $items->{$fn};
 			if (!$item)
 			{
-				$items->{$fn} = item($type);
+				$items->{$fn} = item($tree,$fn,$type);
 			}
 			else
 			{
@@ -280,8 +290,13 @@ sub onPaint
 
 	# clear the update rectangle
 	# not using $dc->Clear();
+	#
+	# the 9pt font I am using is 11 pixels high, from 3..13 when drawn at 0
+	# the proper ROW_HEIGHT for equidistant spacing would be 17 with 3
+	# above and 3 below the text, but I use 18 and allow one extra pixel
+	# at the bottom
 
-	$dc->SetPen(wxTRANSPARENT_PEN);
+	$dc->SetPen(wxWHITE_PEN);
 	$dc->SetBrush(wxWHITE_BRUSH);
 	$dc->DrawRectangle($update_rect->x,$update_rect->y,$update_rect->width,$update_rect->height);
 
@@ -295,7 +310,7 @@ sub onPaint
 		display(0,0,"trees($id)=$tree");
 
 		$item_rect->SetY($ypos);
-		drawTree($dc,$item_rect,$id,$tree) if $update_rect->Intersects($item_rect);
+		$this->drawTree($dc,$item_rect,$id,$tree) if $update_rect->Intersects($item_rect);
 
 		$ypos += $ROW_HEIGHT;
 		last if $ypos >= $bottom;
@@ -307,7 +322,7 @@ sub onPaint
 			{
 				$item_rect->SetY($ypos);
 
-				drawItem($dc,$item_rect,$fn,$items->{$fn})
+				$this->drawItem($dc,$item_rect,$fn,$items->{$fn})
 					if $update_rect->Intersects($item_rect);
 
 				$ypos += $ROW_HEIGHT;
@@ -321,13 +336,16 @@ sub onPaint
 
 
 
-my $TOGGLE_LEFT = 5;
-my $TOGGLE_RIGHT = 14;
-my $TEXT_LEFT   = 15;
+my $TOGGLE_LEFT  = 4;			# icon location
+my $TOGGLE_RIGHT = 11;			# mouse area
+my $ICON_LEFT    = 12;			# icon location
+my $ICON_RIGHT   = 27;			# mouse area - selected rectangle is two to left of TEXT left
+my $TEXT_LEFT    = 30;
+
 
 sub drawTree
 {
-	my ($dc,$rect,$id,$tree) = @_;
+	my ($this,$dc,$rect,$id,$tree) = @_;
 
 	display($dbg_draw,0,"drawTree($rect,$id,$tree)");
 
@@ -335,6 +353,8 @@ sub drawTree
 	my $width = $rect->width;
 	my $expanded = $tree->{expanded};
 	my $num_items = scalar(keys %{$tree->{items}});
+	my $num_selected = $tree->{num_selected};
+	my $name = "$id (".($num_selected?"$num_selected/":'')."$num_items)";
 
 	display($dbg_draw,0,"drawTree($ypos) exp($expanded) num($num_items) $id");
 
@@ -342,7 +362,7 @@ sub drawTree
 	$dc->SetTextForeground($color_blue);
 
 	$dc->DrawText($expanded?"^":">",$TOGGLE_LEFT,$ypos);
-	$dc->DrawText("$id ($num_items)",$TEXT_LEFT,$ypos);
+	$dc->DrawText($name,$TEXT_LEFT,$ypos);
 }
 
 
@@ -350,28 +370,52 @@ sub drawTree
 
 sub drawItem
 {
-	my ($dc,$rect,$fn,$item) = @_;
+	my ($this,$dc,$rect,$fn,$item) = @_;
 
 	my $ypos = $rect->y();
 	my $width = $rect->width();
 	my $type = $item->{type};
+	my $tree = $item->{tree};
+	my $id = $tree->{id};
+	my $tree_sel = $this->{selection}->{$id};
+	my $selected = $tree_sel ? $tree_sel->{$fn} : 0;
+	$selected ||= 0;
 
-	display($dbg_draw,0,"drawItem($ypos) sel($item->{selected}) $type $fn");
+	display($dbg_draw,0,"drawItem($ypos) sel($selected) $type $fn");
 
-	my $fg_color =
-		$item->{selected} ? $color_white :
-		$type eq 'repo' ? $color_blue :
-		$type eq 'A'    ? $color_green :
-		$type eq 'D'	? $color_red :
-		$type eq 'R'	? $color_purple :
+	my $staged = $this->{name} eq 'staged';
+	my $bm_color =
+		$type eq 'M' ? $staged ? $color_green : $color_blue :
+		$type eq 'D' ? $color_red :
 		$color_black;
-	my $font = $type eq 'repo' ? $font_bold : $font_normal;
+	my $bm =
+		$type eq 'M' ? $staged ? $bm_folder_check : $bm_folder_lines :
+		$type eq 'D' ? $staged ? $bm_folder_x : $bm_folder_question :
+		$bm_folder;
 
-	$dc->SetBrush($item->{selected} ? $selected_brush : wxWHITE_BRUSH);
-	$dc->DrawRectangle($TEXT_LEFT,$ypos,$width-$TEXT_LEFT,$ROW_HEIGHT);
+	# bitmaps are drawn using the text foreground color
 
-	$dc->SetFont($font);
-	$dc->SetTextForeground($fg_color);
+	# display(0,0,"Drawing bitmap");
+	# display(0,0,"width=".$bm->GetWidth()." height=".$bm->GetHeight());
+	# display(0,0,"ok=".$bm->IsOk());
+	# display(0,0,"calling DrawBitmap");
+
+	$dc->SetTextForeground($bm_color);
+	$dc->DrawBitmap($bm, $ICON_LEFT, $ypos, 0);
+
+	# display(0,0,"back from DrawBitmap");
+
+	# draw the selected rectangle
+	# an extra two pixels to the left
+
+	$dc->SetPen($selected ? $selected_pen : wxWHITE_PEN);
+	$dc->SetBrush($selected ? $selected_brush : wxWHITE_BRUSH);
+	$dc->DrawRectangle($TEXT_LEFT-2,$ypos,$width-$TEXT_LEFT+2,$ROW_HEIGHT);
+
+	# draw the text
+
+	$dc->SetFont($font_normal);
+	$dc->SetTextForeground($selected ? $color_white : $color_black);
 	$dc->DrawText($fn,$TEXT_LEFT,$ypos);
 }
 
@@ -380,21 +424,56 @@ sub drawItem
 #-----------------------------------------------
 # Mouse Handling
 #-----------------------------------------------
+# The window is single selection if no keys pressed,
+# multiple selection if keys pressed, and handles
+# SHIFT selection:
+#
+#   We save the last_selected item in terms of it's unscrolled Y position
+#		if they toggle an item to selected. where -1 means none
+#	A click on anything except for another file (or repo name) invalidates last_selected
+#   A click on the same item toggles its state.
+#
+# See comments below for details.
+#
+# REFRESH
+#    We either refresh a single item, and the tree if it is visible
+#    during a single item toggle, or we refresh the whole window.
+#    during any complicated actions.
 
-sub mouseCommon
+
+sub onLeftDown
 {
-	my ($this,$event,$down) = @_;
+	my ($this,$event) = @_;
+
+	return if !(keys %{$this->{trees}});
+		# nothing in the window
+
 	my $cp = $event->GetPosition();
-	my ($x,$y) = $this->CalcUnscrolledPosition($cp->x,$cp->y);
-	display($dbg_sel,0,"mouseCommon($down) xy($x,$y)");
+	my ($sx,$sy) = ($cp->x,$cp->y);
+	my ($ux,$uy) = $this->CalcUnscrolledPosition($sx,$sy);
+
+	my $sz = $this->GetSize();
+	my $win_width = $sz->GetWidth();
+	my $win_height = $sz->GetHeight();
+	$this->{win_srect} = Wx::Rect->new(0,0,$win_width,$win_height);
+
+	my $VK_SHIFT = 0x10;
+	my $VK_CONTROL = 0x11;
+	my $anchor = $this->{anchor};
+	my $selection = $this->{selection};
+	my $shift_key = Win32::GUI::GetAsyncKeyState($VK_SHIFT)?1:0;
+	my $ctrl_key = Win32::GUI::GetAsyncKeyState($VK_CONTROL)?1:0;
+
+	display($dbg_sel,0,"onLeftDown($ux,$uy) ctrl($ctrl_key) shift($shift_key)");
 
 	# find the tree and/or item for unscrolled position $x,$y
 
 	my $ypos = 0;
-	my $found_tree = '';
-	my $toggle_tree = '';
-	my $found_item = '';
-	my $item_ypos = 0;
+	$this->{found_tree} = '';
+	$this->{found_item} = '';
+	$this->{tree_sy} = 0;
+	$this->{item_sy} = 0;
+
 	my $trees = $this->{trees};
 
 	for my $id (sort keys %$trees)
@@ -404,26 +483,22 @@ sub mouseCommon
 		my $tree_height = $tree->{expanded} ?
 			(scalar(keys %$items) + 1) * $ROW_HEIGHT : $ROW_HEIGHT;
 
-		if ($y >= $ypos && $y <= $ypos + $tree_height-1)
+		if ($uy >= $ypos && $uy <= $ypos + $tree_height-1)
 		{
-			$found_tree = $tree;
+			$this->{found_tree} = $tree;
+			$this->{tree_sy} = $ypos;
 			display($dbg_sel,1,"foundTree($id) at ypos($ypos) with height($tree_height)");
-			if ($y < $ypos + $ROW_HEIGHT)
-			{
-				$toggle_tree = $tree
-					if $x >= $TOGGLE_LEFT && $x <= $TOGGLE_RIGHT;
-			}
-			else	# assert(expanded)
+			if ($uy >= $ypos + $ROW_HEIGHT)
 			{
 				my $items = $tree->{items};
-				my $off = $y - $ypos - $ROW_HEIGHT;
+				my $off = $uy - $ypos - $ROW_HEIGHT;
 				my $idx = int($off / $ROW_HEIGHT);
-				$item_ypos = $ypos + ($idx + 1) * $ROW_HEIGHT;
+				$this->{item_sy} = $ypos + ($idx + 1) * $ROW_HEIGHT;
 					# save off the item position for optimized refresh
 					# it is $idx+1 cuz the 0th item is below the tree header
-				my $fn = (sort keys %$items)[$idx];
-				$found_item = $items->{$fn};
-				display($dbg_sel,1,"foundItem($fn,$found_item->{type}) at off($off) idx($idx)");
+				my $found_fn = (sort keys %$items)[$idx];
+				$this->{found_item} = $items->{$found_fn};
+				display($dbg_sel,1,"foundItem($found_fn,$this->{found_item}->{type}) at off($off) idx($idx)");
 				last;
 			}
 			last;
@@ -434,47 +509,365 @@ sub mouseCommon
 		}
 	}
 
+	# gitGUI always has an item selected and remembers the last item
+	#	actually selected between reboots
+	# 	our window does not remember any selection between reboots
+	#
+	# No SHIFT or CTRL deletes all selection except the current
+	#   item (if it happens to be selected), as well as the anchor
+	#
+	# if not both SHIFT and an anchor, toggle the state of the
+	#   item.  If it item gets selected, set the anchor, otherwise
+	#   clear the anchor.
+	# else (SHIFT and anchor)
+	#	select all items between the anchor and the current item, inclusive
+	#
+	# NOTE that we allow a SHIFT with an anchor to end on a repo or blank
+	#	space at the end of window and treat it as a selection command
+	#   from the anchor to the selected tree/item (or the last visible
+	#   tree/item if in the white space).
 
-	if ($down)
+	$this->{refresh_rect} = Wx::Rect->new(-1,-1,$win_width,$win_height);
+		# in scrolled coordinates
+		# x == -1 implies unitialized for optimized single selection toggle case
+
+	if ($shift_key && $anchor)
 	{
-		$this->{found_tree} = $found_tree;
-		$this->{found_item} = $found_item;
-		$this->{toggle_tree} = $toggle_tree;
+		$this->{refresh_rect} = $this->{win_srect} 	# refresh whole window
+			if $this->addShiftSelection();			# if selection changed
 	}
-	elsif ($toggle_tree && $toggle_tree eq $this->{toggle_tree})
+	elsif ($ctrl_key && !$this->{found_item})
 	{
-		$toggle_tree->{expanded} = !$toggle_tree->{expanded};
-		$this->Refresh();
+		# ctrl key currently does nothing if clicked on a repo tree
 	}
-	elsif ($found_item && $found_item eq $this->{found_item})
+	elsif ($this->{found_item})
 	{
-		$found_item->{selected} = !$found_item->{selected};
+		if ($ux <= $ICON_RIGHT)
+		{
+			if ($ux >= $ICON_LEFT)
+			{
+				display($dbg_sel,0,"ACTION_ON_ALL_SELECTED");
+			}
+		}
+		else
+		{
+			if (!$shift_key && !$ctrl_key)
+			{
 
-		my $sz = $this->GetSize();
-		my $width = $sz->GetWidth();
-		my ($unused_atx,$aty) = $this->CalcScrolledPosition(0,$item_ypos);
-			# turn the unscrolled $item_pos into it's scrolled position
-			# to build rectangle to call refreshRect
-		my $rect = Wx::Rect->new(0,$aty,$width,$ROW_HEIGHT);
-		$this->RefreshRect($rect);
+				$this->{refresh_rect} = $this->{win_srect} 	# refresh whole window
+					if $this->deleteSectionsExcept();       # if this wasn't already the only selection
+			}
+
+			$this->toggleSelection();
+		}
 	}
-}
+	elsif ($this->{found_tree})
+	{
+		if ($ux <= $TOGGLE_RIGHT)
+		{
+			$this->{found_tree}->{expanded} = !$this->{found_tree}->{expanded};
+			$this->{refresh_rect} = $this->{win_srect}; 	# refresh whole window
+		}
+		elsif ($ux <= $ICON_RIGHT)
+		{
+			if ($ux >= $ICON_LEFT)
+			{
+				display($dbg_sel,0,"ACTION_ON_SELECTED_WITHIN($this->{found_tree}->{id})");
+			}
+		}
+	}
 
+	# DONE - REFRESH AS NEEDED AND RETURN
 
-sub onLeftClick
-{
-	my ($this,$event) = @_;
-	$this->mouseCommon($event,1);
+	if ($this->{refresh_rect}->x >= 0)
+	{
+		display_rect(0,0,"REFRESH_RECT",$this->{refresh_rect});
+		$this->RefreshRect($this->{refresh_rect})
+	}
+
 	$event->Skip();
 }
 
-sub onLeftUp
+
+sub addShiftSelection
 {
-	my ($this,$event) = @_;
-	$this->mouseCommon($event,0);
-	$event->Skip();
+	my ($this) = @_;
+
+	my $found_tree  = $this->{found_tree};
+	my $found_item  = $this->{found_item};
+	my $anchor_item = $this->{anchor};
+	my $anchor_fn   = $anchor_item->{fn};
+	my $anchor_tree = $anchor_item->{tree};
+	my $anchor_id   = $anchor_tree->{id};
+
+	display($dbg_sel,0,"addShiftSelection anchor($anchor_id,$anchor_fn) found(".
+		($found_tree?$found_tree->{id}:'').",".
+		($found_item?$found_item->{fn}:'').")");
+
+	my $first_tree = $anchor_tree;
+	my $first_item = $anchor_item;
+	my $last_tree;
+	my $last_item;
+
+	# set the first and last items if a tree or item was found
+
+	my $stop_on_last = 0;
+
+	if ($found_tree)
+	{
+		# we determine the direction based on comparing the ids
+		# if going up and no item, then the whole repo was selected
+		# but its the opossite going down.
+
+		my $found_id = $found_tree->{id};
+
+		if ($found_id lt $anchor_id)
+		{
+			# going up, will include all items in the found tree
+			# if no item was specified.
+			display($dbg_sel,2,"found_id($found_id) lt anchor_id($anchor_id)");
+			$first_tree = $found_tree;
+			$found_item = $found_item;
+			$last_tree = $anchor_tree;
+			$last_item = $anchor_item;
+		}
+		elsif ($found_id gt $anchor_id)
+		{
+			# going down will STOP on the last tree if no item
+			display($dbg_sel,2,"found_id($found_id) gt anchor_id($anchor_id)");
+			$last_tree = $found_tree;
+			$last_item = $found_item;
+			$stop_on_last = 1 if !$found_item;
+		}
+
+		# within the same tree
+
+		elsif ($found_item)
+		{
+			my $found_fn = $found_item->{fn};
+			if ($found_fn lt $anchor_fn)
+			{
+				display($dbg_sel,2,"found_fn($found_fn) lt anchor_fn($anchor_fn)");
+				$first_tree = $found_tree;
+				$first_item = $found_item;
+				$last_tree = $anchor_tree;
+				$last_item = $anchor_item;
+			}
+			elsif ($found_fn gt $anchor_fn)
+			{
+				display($dbg_sel,2,"found_fn($found_fn) gt anchor_fn($anchor_fn)");
+				$last_tree = $found_tree;
+				$last_item = $found_item;
+			}
+			else
+			{
+				display($dbg_sel,2,"same SHIFT_ITEM($anchor_id,$anchor_fn) RETURNING with no change!");
+				return 0;
+			}
+		}
+	}
+
+	# else its (!$found_tree && !$found_item) so
+	# we elect all items from anchor to end
+	# by using initial assignments and null ends
+	# since they clicked PAST the last repo
+
+	# LOOP THROUGH ALL TREES
+
+	my $any_changes = 0;
+	my $trees = $this->{trees};
+
+	my $first_id = $first_tree->{id};
+	my $first_fn = $first_item ? $first_item->{fn} : '';
+	my $last_id = $last_tree ? $last_tree->{id} : '';
+	my $last_fn = $last_item ? $last_item->{fn} : '';
+
+	display($dbg_sel,1,"first($first_id,$first_fn) last($last_id,$last_fn)");
+
+	my @ids = sort keys %$trees;
+	my $id = shift @ids;
+	my $tree = $trees->{$id};
+	my $items = $tree->{items};
+	my $last = !@ids || $id eq $last_id ? 1 : 0;
+
+	while (1)
+	{
+		if ($id ge $first_id)
+		{
+			my $first = $id eq $first_id ? 1 : 0;
+			my $between = $id gt $first_id ? 1 : 0;
+
+			display($dbg_sel,1,"REPO($id) first($first) between($between) last($last) stop_on_last($stop_on_last)");
+			last if $stop_on_last && $last;
+
+			for my $fn (sort keys %$items)
+			{
+				my $addit = 0;
+
+				if ($first)
+				{
+					$addit = $fn ge $first_fn;
+					$addit = 0 if $last && $last_fn && $last_fn lt $fn;
+				}
+				elsif ($last)
+				{
+					$addit = !$last_fn || $fn le $last_fn;
+				}
+				else
+				{
+					$addit = 1;
+				}
+
+				$any_changes += $this->addShiftSel($tree,$fn)
+					if $addit;
+			}
+			last if $last;
+		}
+
+		# next tree
+
+		$id = shift @ids;
+		$tree = $trees->{$id};
+		$items = $tree->{items};
+		$last = !@ids || $id eq $last_id ? 1 : 0;
+	}
+
+	display($dbg_sel,0,"addShiftSelection() returning $any_changes");
+	return $any_changes;
 }
 
+
+sub addShiftSel
+{
+	my ($this,$tree,$fn) = @_;
+	my $selection = $this->{selection};
+	my $id = $tree->{id};
+	display($dbg_sel,0,"addShiftSel($id,$fn)");
+
+	my $tree_sel = $selection->{$id};
+	if (!$tree_sel)
+	{
+		display($dbg_sel,1,"creating new tree_sel");
+		$selection->{$id} = { $fn => 1 };
+		$tree->{num_selected}++;	# = 1
+		return 1;
+	}
+	elsif (!$tree_sel->{$fn})
+	{
+		display($dbg_sel,1,"adding to existing tree_sel");
+		$tree_sel->{$fn} = 1;
+		$tree->{num_selected}++;	# = 1
+		return 1;
+	}
+	else
+	{
+		display($dbg_sel,1,"already selected");
+	}
+	return 0;
+}
+
+
+
+sub deleteSectionsExcept
+{
+	my ($this) = @_;
+	my $selection = $this->{selection};
+	my $num_sels = scalar(keys %$selection);
+
+	my $item = $this->{found_item};
+	my $tree = $item->{tree};
+	my $fn = $item->{fn};
+	my $id = $tree->{id};
+
+	my $tree_sel = $this->{selection}->{$id};
+	my $num_tree_sels = $tree_sel ? scalar(keys %$tree_sel) : 0;
+	my $cur_sel = $tree_sel ? $tree_sel->{$fn} : 0;
+	$cur_sel ||= 0;
+
+	display($dbg_sel,0,"deleteSectionsExcept($id,$fn) num_sels() num_tree_sels($num_tree_sels) cur_sel($cur_sel)");
+
+	return 0 if !$num_sels;
+	return 0 if $cur_sel && $num_sels == 1 && $num_tree_sels == 1;
+
+	$this->{selection} = {};
+
+	my $trees = $this->{trees};
+	for my $clear_id (keys %$trees)
+	{
+		$trees->{$clear_id}->{num_selected} = 0;
+	}
+
+	if ($cur_sel)
+	{
+		$tree_sel = $this->{selection}->{$id} = {};
+		$tree_sel->{$fn} = 1;
+		$tree->{num_selected} = 1;
+	}
+	return 1;
+}
+
+
+sub toggleSelection
+{
+	my ($this) = @_;
+
+	my $item = $this->{found_item};
+	my $fn = $item->{fn};
+
+	my $tree = $item->{tree};
+	my $id = $tree->{id};
+	my $selection = $this->{selection};
+	my $tree_sel = $selection->{$id};
+	my $selected = $tree_sel ? $tree_sel->{$fn} : 0;
+	$selected |= 0;
+
+	display($dbg_sel,0,"toggleSelection($id,$fn) selected=$selected");
+
+	if ($selected)	# unselecting
+	{
+		$tree->{num_selected}--;
+		if (!$tree->{num_selected})
+		{
+			delete $selection->{$id};
+		}
+		else
+		{
+			delete $tree_sel->{$fn};
+		}
+		$this->{anchor} = '';
+	}
+	elsif (!$tree_sel)
+	{
+		$tree_sel = { $fn => 1 };
+		$selection->{$id} = $tree_sel;
+		$tree->{num_selected}++;
+		$this->{anchor} = $item;
+	}
+	else
+	{
+		$tree_sel->{$fn} = 1;
+		$tree->{num_selected}++;
+		$this->{anchor} = $item;
+	}
+
+	# optimized refresh if whole screen not already done
+
+	my $refresh_rect = $this->{refresh_rect};		# scrolled position (0..$height-1)
+	if ($refresh_rect->x < 0)
+	{
+		my $width = $this->{win_srect}->width;
+		#my ($unused1,$tree_sy) = $this->CalcScrolledPosition(0,$this->{tree_sy});
+		#my ($unused2,$item_sy) = $this->CalcScrolledPosition(0,$this->{item_sy});
+		my $tree_srect = Wx::Rect->new(0,$this->{tree_sy},$width,$ROW_HEIGHT);
+		my $item_srect = Wx::Rect->new(0,$this->{item_sy},$width,$ROW_HEIGHT);
+
+		display_rect(0,0,"refresh_rect",$item_srect);
+
+		$this->{refresh_rect} = $item_srect;		# refresh the item
+		$this->RefreshRect($tree_srect)				# and the tree if it is visible
+			if $this->{win_srect}->Intersects($tree_srect);
+	}
+}
 
 
 
