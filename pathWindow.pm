@@ -282,7 +282,7 @@ sub populate
 sub notifyRepoChanged
 {
 	my ($this,$repo) = @_;
-	display($dbg_notify,"notifyRepoChanged($repo->{path})");
+	display($dbg_notify,0,"notifyRepoChanged($repo->{path})");
 
 	for my $ctrl_section (@{$this->{ctrl_sections}})
 	{

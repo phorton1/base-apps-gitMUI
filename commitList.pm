@@ -39,8 +39,9 @@ my $PANE_TOP = 25;
 
 sub new
 {
-    my ($class,$parent,$is_staged,$splitter) = @_;
-	display($dbg_life,0,"new commitList($is_staged)");
+    my ($class,$parent,$is_staged,$splitter,$data) = @_;
+	display($dbg_life,0,"new commitList($is_staged) data="._def($data));
+	$data ||= {};
 
     my $this = $class->SUPER::new($splitter);
 
@@ -55,7 +56,7 @@ sub new
 		[5,5]);
 
     my $name = $is_staged ? 'staged' : 'unstaged';
-	$this->{list_ctrl} = apps::gitUI::listCtrl->new($this,$name,$PANE_TOP);
+	$this->{list_ctrl} = apps::gitUI::listCtrl->new($this,$name,$PANE_TOP,$data->{list_ctrl});
 
 	$this->populate();
 
@@ -105,6 +106,16 @@ sub populate
 }
 
 
+
+sub getDataForIniFile
+{
+	my ($this) = @_;
+	my $data = {};
+
+	$data->{list_ctrl} = $this->{list_ctrl}->getDataForIniFile();
+
+	return $data;
+}
 
 
 1;

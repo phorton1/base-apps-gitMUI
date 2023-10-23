@@ -68,6 +68,19 @@ my $dbg_mon = 1;
 my $dbg_win32 = 1;
 	# debug events, callbacks, etc
 
+our $MON_CB_TYPE_STATUS = 0;
+our $MON_CB_TYPE_REPO = 1;
+
+
+BEGIN {
+    use Exporter qw( import );
+	our @EXPORT = qw (
+		$MON_CB_TYPE_STATUS
+		$MON_CB_TYPE_REPO
+	);
+}
+
+
 
 # constants
 
@@ -274,14 +287,18 @@ sub run
 
 		if (!$this->{started})		# ==> $CHECK_CHANGES_ON_INIT
 		{
+			&$the_callback({ status =>"starting" }) if $rslt;
 			my $repo_list = getRepoList();
 			for my $repo (@$repo_list)
 			{
 				display($dbg_mon,0,"CHECK_CHANGES_ON_INIT($repo->{path})");
+				&$the_callback({ status =>"checking: $repo->{path}" });
 				$rslt = $repo->gitChanges();
 				last if !defined($rslt);
+				&$the_callback({ repo=>$repo }) if $rslt;
 			}
 			$this->{started} = 1;
+			&$the_callback({ status =>"started" }) if defined($rslt);
 		}
 		elsif (!$this->{paused})
 		{
@@ -309,7 +326,7 @@ sub run
 					}
 					$rslt = $repo->gitChanges();
 					last if !defined($rslt);
-					&$the_callback($repo) if $rslt;
+					&$the_callback({ repo=>$repo }) if $rslt;
 
 					# ok, this is interesting.
 					# first, i totally space on what happens if a mapped subdir is removed.

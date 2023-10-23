@@ -46,7 +46,7 @@ use Pub::Utils;
 use base qw(Wx::ScrolledWindow);	# qw(Wx::Window);
 
 
-my $dbg_ctrl = 1;
+my $dbg_ctrl = 0;
 my $dbg_draw = 1;
 my $dbg_sel = 1;
 	# 0  == everything except
@@ -70,13 +70,17 @@ my $selected_pen = Wx::Pen->new($color_item_selected,1,wxPENSTYLE_SOLID);
 
 sub new
 {
-    my ($class,$parent,$name,$PAGE_TOP) = @_;
-	display($dbg_ctrl,0,"new listCtrl($name,$PAGE_TOP)");
+    my ($class,$parent,$name,$PAGE_TOP,$data) = @_;
+	display($dbg_ctrl,0,"new listCtrl($name,$PAGE_TOP) data="._def($data));
+	$data ||= { contracted => {} };
+	display_hash($dbg_ctrl,0,"expanded",$data->{contracted});
+
     my $this = $class->SUPER::new($parent,-1,[0,$PAGE_TOP]);	# [$w,$h]); # ,wxVSCROLL | wxHSCROLL);
 	bless $this,$class;
 
     $this->{parent} = $parent;
 	$this->{name} = $name;
+	$this->{data} = $data;
 	$this->{trees} = {};
 	$this->{selection} = {};
 		# a nested hash of trees by id and 1 by filename
@@ -93,6 +97,24 @@ sub new
 
 	return $this;
 }
+
+
+sub getDataForIniFile
+{
+	my ($this) = @_;
+	my $contracted = {};
+	my $data = { contracted => $contracted };
+	my $trees = $this->{trees};
+	for my $id (sort keys %$trees)
+	{
+		$contracted->{$id} = 1
+			if !$trees->{$id}->{expanded};
+	}
+	display_hash($dbg_ctrl,0,"getDataForIniFile(expanded)",$contracted);
+	return $data;
+}
+
+
 
 
 #-----------------------------------------------
@@ -169,6 +191,12 @@ sub updateRepo
 	if (!$tree)
 	{
 		$trees->{$id} = tree($repo,$changes);
+		if ($this->{data}->{contracted}->{$id})
+		{
+			display($dbg_ctrl,1,"contracting $id");
+			$trees->{$id}->{expanded} = 0;
+			delete $this->{data}->{contracted}->{$id};
+		}
 	}
 	else
 	{

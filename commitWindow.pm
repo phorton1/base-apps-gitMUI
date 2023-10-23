@@ -64,16 +64,12 @@ sub new
 {
 	my ($class,$frame,$id,$book,$data) = @_;
 	display($dbg_life,0,"commitWindow:new("._def($data).")");
+	$data ||= {};
 
-	# parse $data if provided
+	# use $data if provided
 
-	my $left_width 	 = $INITIAL_LEFT_WIDTH;
-	my $left_top_pct = $INITIAL_LEFT_TOP_PCT;
-	if ($data)
-	{
-		$left_width = $data->{left_width} if $data->{left_width};
-		$left_top_pct = $data->{left_top_pct} if $data->{left_top_pct};
-	}
+	my $left_width = $data->{left_width} ? $data->{left_width} : $INITIAL_LEFT_WIDTH;
+	my $left_top_pct = $data->{left_top_pct} ? $data->{left_top_pct} : $INITIAL_LEFT_TOP_PCT;
 
 	# construct $this and set data members
 
@@ -100,16 +96,16 @@ sub new
 	$vert_splitter->SetMinimumPaneSize(20);
 	$left_splitter->SetMinimumPaneSize(20);
 
-	my $unstaged  = $this->{unstaged} = apps::gitUI::commitList->new($this,0,$left_splitter);
-	my $staged    = $this->{staged}   = apps::gitUI::commitList->new($this,1,$left_splitter);
-	my $right     = $this->{right} 	  = apps::gitUI::commitRight->new($this,$vert_splitter);
+	my $unstaged  = $this->{unstaged} = apps::gitUI::commitList->new($this,0,$left_splitter,$data->{unstaged});
+	my $staged    = $this->{staged}   = apps::gitUI::commitList->new($this,1,$left_splitter,$data->{staged});
+	my $right     = $this->{right} 	  = apps::gitUI::commitRight->new($this,$vert_splitter,$data->{right});
 
     $vert_splitter->SplitVertically($left_splitter,$right,300);
     $left_splitter->SplitHorizontally($unstaged,$staged,100);
 
 	# Continue ...
 
-    $this->doLayout();
+	$this->doLayout();
 
     EVT_SIZE($this,\&onSize);
 	EVT_SPLITTER_SASH_POS_CHANGED($this, $ID_SPLITTER_VERT, \&onSashPosChanged);
@@ -194,6 +190,22 @@ sub notifyRepoChanged
 	display($dbg_notify,0,"notifyRepoChanged($repo->{path})");
 	$this->{unstaged}->populate();
 	$this->{staged}->populate();
+}
+
+
+
+sub getDataForIniFile
+{
+	my ($this) = @_;
+	my $data = {};
+
+	$data->{left_width} = $this->{left_width};
+	$data->{left_top_pct} = $this->{left_top_pct};
+
+	$data->{unstaged} = $this->{unstaged}->getDataForIniFile();
+	$data->{staged} = $this->{unstaged}->getDataForIniFile();
+
+	return $data;
 }
 
 

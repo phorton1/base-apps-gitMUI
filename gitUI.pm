@@ -25,7 +25,7 @@ use apps::gitUI::commitWindow;
 use apps::gitUI::progressDialog;
 use base qw(Pub::WX::Frame);
 
-$TEST_JUNK_ONLY = 1;
+$TEST_JUNK_ONLY = 0;
 
 my $dbg_frame = 0;
 	# lifecycle, major commands
@@ -37,7 +37,12 @@ my $USE_MONITOR = 1;
 
 my $monitor;
 
-my $NOTIFY_REPO_EVENT:shared = Wx::NewEventType;
+my $MONITOR_EVENT:shared = Wx::NewEventType;
+
+sub getMonitor
+{
+	return $monitor;
+}
 
 #--------------------------------------
 # methods
@@ -48,13 +53,16 @@ sub new
 {
 	my ($class, $parent) = @_;
 
-	Pub::WX::Frame::setHowRestore($RESTORE_MAIN_RECT);
+	return if !parseRepos();
+
+	Pub::WX::Frame::setHowRestore($RESTORE_ALL);
+		# $RESTORE_MAIN_RECT);
 
 	my $this = $class->SUPER::new($parent);	# ,-1,'gitUI',[50,50],[600,680]);
 
     $this->CreateStatusBar();
 	#$this->createPane($ID_PATH_WINDOW);
-	#$this->createPane($ID_COMMIT_WINDOW);
+	# $this->createPane($ID_COMMIT_WINDOW);
 
 	# The minimum size of the window is from commitWidow.pm
 	# plus fudge factors for the height due to menu, tab bar
@@ -66,14 +74,10 @@ sub new
 		$WIN_MIN_WIDTH + $FUDGE_WIDTH_EXTRA,
 		$WIN_MIN_HEIGHT + $FUDGE_HEIGHT_EXTRA]);
 
-
 	EVT_MENU_RANGE($this, $ID_PATH_WINDOW, $ID_REPO_DETAILS, \&onOpenWindowById);
 	EVT_MENU_RANGE($this, $COMMAND_CHANGES, $COMMAND_TAG, \&onGitCommand);
 	EVT_COMMAND($this, -1, $THREAD_EVENT, \&onThreadEvent );
-	EVT_COMMAND($this, -1, $NOTIFY_REPO_EVENT, \&onRepoChanged );
-
-
-	return if !parseRepos();
+	EVT_COMMAND($this, -1, $MONITOR_EVENT, \&onMonitorEvent );
 
 	if ($USE_MONITOR)
 	{
@@ -121,17 +125,24 @@ sub onOpenWindowById
 # monitor
 #------------------------------
 
-sub onRepoChanged
+sub onMonitorEvent
 {
 	my ($this,$event) = @_;
-	my $repo = $event->GetData();
-	display($dbg_mon,0,"onRepoChanged($repo->{path})");
-	for my $pane (@{$this->{panes}})
+	my $data = $event->GetData();
+	my $repo = $data->{repo};
+	my $is_repo = $repo ? 1 : 0;
+	my $show = $data->{status} || $repo->{path};
+	$this->SetStatusText("monitor: $show");
+	display($dbg_mon,0,"onMonitorEvent($is_repo,$show)");
+	if ($is_repo)
 	{
-		display($dbg_mon,1,"pane($pane) can=".$pane->can("notifyRepoChanged"));
-		if ($pane && $pane->can("notifyRepoChanged"))
+		for my $pane (@{$this->{panes}})
 		{
-			$pane->notifyRepoChanged($repo);
+			display($dbg_mon,1,"pane($pane) can=".$pane->can("notifyRepoChanged"));
+			if ($pane && $pane->can("notifyRepoChanged"))
+			{
+				$pane->notifyRepoChanged($repo);
+			}
 		}
 	}
 }
@@ -139,10 +150,13 @@ sub onRepoChanged
 
 sub monitor_callback
 {
-	my ($repo) = @_;
+	my ($data) = @_;
 	my $this = getAppFrame();
-	display($dbg_mon,0,"monitor_callback($repo->{path})");
-	my $evt = new Wx::PlThreadEvent( -1, $NOTIFY_REPO_EVENT, shared_clone($repo) );
+
+	my $show = $data->{status} || $data->{repo}->{path};
+	display($dbg_mon,0,"monitor_callback($show");
+
+	my $evt = new Wx::PlThreadEvent( -1, $MONITOR_EVENT, shared_clone($data) );
 	Wx::PostEvent( $this, $evt );
 }
 
