@@ -215,7 +215,7 @@ sub doThreadedCommand
 					main_name   => $repo->{path},
 					sub_name    => $action_name });
 
-				$rslt = $repo->gitAdd() if $command_id == $COMMAND_ADD;
+				$rslt = $repo->gitIndex() if $command_id == $COMMAND_ADD;
 				$rslt = $repo->gitCommit($data) if $command_id == $COMMAND_COMMIT;
 				$rslt = $repo->gitPush($this,\&push_callback) if $command_id == $COMMAND_PUSH;
 

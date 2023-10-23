@@ -18,14 +18,20 @@
 #  > = toggle button for repositories
 #      expand / contract
 #  [ ] = icon showing type of thing
-#		clicking it will stage the thing
-#       if repo has no selected items, will act on all
-#       if repo has selected items will act on only those
+#       repo: shows '+' if any selected items
+#             clicking on '+' acts on repo's selected items
+#       item: if item is selected, this means to
+#             act on ALL selected items.
+#           if item is not selected, it acts on the
+#             given item without otherwise changing
+#             the selection set.
 #  short clicking on entry will
-#	 repo: will open regular gitUI to the repo
-#    toggle selection of repo items
+#	 repo: shows repo details
+#    item: toggle toggle selection state
+#          see comments on onLeftDown() for gruesome
+#          details of SHIFT and CTRL handling
 #  TODO: context menu for right clicks
-#    repo: show repo detils
+#    repo: open gitGUI
 #    file: call the shell except for certain overidden types
 #		.pm, .md -> komodo
 
@@ -47,6 +53,7 @@ use base qw(Wx::ScrolledWindow);	# qw(Wx::Window);
 
 
 my $dbg_ctrl = 0;
+my $dbg_pop = 1;
 my $dbg_draw = 1;
 my $dbg_sel = 1;
 	# 0  == everything except
@@ -56,6 +63,11 @@ my $dbg_actions = 0;
 
 
 my $ROW_HEIGHT  = 18;
+
+my $ACTION_DO_ALL = 0;				# do all files in all trees
+my $ACTION_DO_REPO = 1;				# do selected files within repo
+my $ACTION_DO_SELECTED = 2;			# do all selected files
+my $ACTION_DO_SINGLE_FILE = 3;		# do a single (unselected) file
 
 
 BEGIN {
@@ -70,7 +82,9 @@ my $selected_pen = Wx::Pen->new($color_item_selected,1,wxPENSTYLE_SOLID);
 
 sub new
 {
-    my ($class,$parent,$name,$PAGE_TOP,$data) = @_;
+    my ($class,$parent,$is_staged,$PAGE_TOP,$data) = @_;
+    my $name = $is_staged ? 'staged' : 'unstaged';
+
 	display($dbg_ctrl,0,"new listCtrl($name,$PAGE_TOP) data="._def($data));
 	$data ||= { contracted => {} };
 	display_hash($dbg_ctrl,0,"expanded",$data->{contracted});
@@ -79,6 +93,7 @@ sub new
 	bless $this,$class;
 
     $this->{parent} = $parent;
+	$this->{is_staged} = $is_staged;
 	$this->{name} = $name;
 	$this->{data} = $data;
 	$this->{trees} = {};
@@ -162,7 +177,7 @@ sub startUpdate
 	my ($this) = @_;
 	my $trees = $this->{trees};
 	my $num_trees = scalar(keys %$trees);
-	display($dbg_ctrl,0,"startUpdate($this->{name}) trees($num_trees)");
+	display($dbg_pop,0,"startUpdate($this->{name}) trees($num_trees)");
 	for my $id (keys %$trees)
 	{
 		my $tree = $trees->{$id};
@@ -183,7 +198,7 @@ sub updateRepo
 {
 	my ($this,$repo,$changes) = @_;
 	my $num_changes = scalar(keys %$changes);
-	display($dbg_ctrl,0,"updateRepo($this->{name},$repo->{id}) num_changes($num_changes) path=$num_changes");
+	display($dbg_pop,0,"updateRepo($this->{name},$repo->{id}) num_changes($num_changes) path=$num_changes");
 
 	my $id = $repo->{id};
 	my $trees = $this->{trees};
@@ -227,7 +242,7 @@ sub endUpdate
 	my @delete_trees;
 	my $trees = $this->{trees};
 	my $num_trees = scalar(keys %$trees);
-	display($dbg_ctrl,0,"endUpdate($this->{name}) trees($num_trees)");
+	display($dbg_pop,0,"endUpdate($this->{name}) trees($num_trees)");
 	for my $id (sort keys %$trees)
 	{
 		my $tree = $trees->{$id};
@@ -249,7 +264,7 @@ sub endUpdate
 				}
 				else
 				{
-					display($dbg_ctrl,1,"delete_item($fn) from $tree($id)");
+					display($dbg_pop,1,"delete_item($fn) from $tree($id)");
 					push @delete_items,$fn;
 				}
 			}
@@ -260,7 +275,7 @@ sub endUpdate
 		}
 		else
 		{
-			display($dbg_ctrl,0,"delete tree($id)");
+			display($dbg_pop,0,"delete tree($id)");
 			push @delete_trees,$id;
 		}
 	}
@@ -276,7 +291,7 @@ sub endUpdate
 	$this->Refresh();
 
 	$num_trees = scalar(keys %$trees);
-	display($dbg_ctrl,0,"endUpdate($this->{name}) finished with num_trees($num_trees) vheight($vheight)");
+	display($dbg_pop,0,"endUpdate($this->{name}) finished with num_trees($num_trees) vheight($vheight)");
 
 }
 
@@ -359,7 +374,7 @@ sub onPaint
 
 
 
-my $TOGGLE_LEFT  = 4;			# icon location
+my $TOGGLE_LEFT  = 1;			# icon location
 my $TOGGLE_RIGHT = 11;			# mouse area
 my $ICON_LEFT    = 12;			# icon location
 my $ICON_RIGHT   = 27;			# mouse area - selected rectangle is two to left of TEXT left
@@ -381,10 +396,16 @@ sub drawTree
 
 	display($dbg_draw,0,"drawTree($ypos) exp($expanded) num($num_items) $id");
 
+	my $bm = $expanded ? $bm_up_arrow : $bm_right_arrow;
+
+	if ($num_selected)
+	{
+		$dc->SetTextForeground($color_green);
+		$dc->DrawBitmap($bm_plus, $ICON_LEFT, $ypos+2, 0);
+	}
 	$dc->SetFont($font_bold);
 	$dc->SetTextForeground($color_blue);
-
-	$dc->DrawText($expanded?"^":">",$TOGGLE_LEFT,$ypos);
+	$dc->DrawBitmap($bm, $TOGGLE_LEFT, $ypos+3, 0);
 	$dc->DrawText($name,$TEXT_LEFT,$ypos);
 }
 
@@ -416,15 +437,8 @@ sub drawItem
 
 	# bitmaps are drawn using the text foreground color
 
-	# display(0,0,"Drawing bitmap");
-	# display(0,0,"width=".$bm->GetWidth()." height=".$bm->GetHeight());
-	# display(0,0,"ok=".$bm->IsOk());
-	# display(0,0,"calling DrawBitmap");
-
 	$dc->SetTextForeground($bm_color);
 	$dc->DrawBitmap($bm, $ICON_LEFT, $ypos, 0);
-
-	# display(0,0,"back from DrawBitmap");
 
 	# draw the selected rectangle
 	# an extra two pixels to the left
@@ -460,6 +474,12 @@ sub drawItem
 #    We either refresh a single item, and the tree if it is visible
 #    during a single item toggle, or we refresh the whole window.
 #    during any complicated actions.
+
+sub notifyTreeSelected
+{
+	my ($this,$tree) = @_;
+	$this->{parent}->{parent}->notifyContent({ repo=>$tree->{repo} });
+}
 
 
 sub onLeftDown
@@ -569,7 +589,18 @@ sub onLeftDown
 		{
 			if ($ux >= $ICON_LEFT)
 			{
-				display($dbg_actions,0,"ACTION_ON_ALL_SELECTED");
+				my $fn = $this->{found_item}->{fn};
+				my $id = $this->{found_tree}->{id};
+				my $sel_tree = $this->{selection}->{$id};
+				my $selected = $sel_tree && $sel_tree->{$fn};
+				my $how = $selected ?
+					$ACTION_DO_SELECTED :
+					$ACTION_DO_SINGLE_FILE;
+				my $show = $selected ?
+					'ACTION_DO_SELECTED' :
+					'ACTION_DO_SINGLE_FILE';
+				display($dbg_actions,0,$show);
+				$this->doAction($how);
 			}
 		}
 		else
@@ -595,7 +626,11 @@ sub onLeftDown
 		{
 			if ($ux >= $ICON_LEFT)
 			{
-				display($dbg_actions,0,"ACTION_ON_SELECTED_WITHIN($this->{found_tree}->{id})");
+				my $tree = $this->{found_tree};
+				my $id = $tree->{id};
+				display($dbg_actions,0,"ACTION_DO_REPO");
+				$this->doAction($ACTION_DO_REPO)
+					if $this->{selection}->{$id};
 			}
 		}
 	}
@@ -607,6 +642,9 @@ sub onLeftDown
 		display_rect($dbg_sel,0,"REFRESH_RECT",$this->{refresh_rect});
 		$this->RefreshRect($this->{refresh_rect})
 	}
+
+	$this->notifyTreeSelected($this->{found_tree})
+		if $this->{found_tree} && !$this->{found_item};
 
 	$event->Skip();
 }
@@ -830,6 +868,17 @@ sub deleteSectionsExcept
 }
 
 
+
+sub notifyItemSelected
+{
+	my ($this,$tree,$item) = @_;
+	$tree->{num_selected}++;
+	$this->{anchor} = $item;
+	my $filename = $tree->{repo}->{path}."/".$item->{fn};
+	$this->{parent}->{parent}->notifyContent({ filename=>$filename });
+}
+
+
 sub toggleSelection
 {
 	my ($this) = @_;
@@ -863,14 +912,12 @@ sub toggleSelection
 	{
 		$tree_sel = { $fn => 1 };
 		$selection->{$id} = $tree_sel;
-		$tree->{num_selected}++;
-		$this->{anchor} = $item;
+		$this->notifyItemSelected($tree,$item);
 	}
 	else
 	{
 		$tree_sel->{$fn} = 1;
-		$tree->{num_selected}++;
-		$this->{anchor} = $item;
+		$this->notifyItemSelected($tree,$item);
 	}
 
 	# optimized refresh if whole screen not already done
@@ -889,6 +936,92 @@ sub toggleSelection
 		$this->{refresh_rect} = $item_srect;		# refresh the item
 		$this->RefreshRect($tree_srect)				# and the tree if it is visible
 			if $this->{win_srect}->Intersects($tree_srect);
+	}
+}
+
+
+
+#-----------------------------------------
+# doAction
+#-----------------------------------------
+# my $ACTION_DO_ALL = 0;				# do all files in all trees
+#	  optimized to call gitIndex() with no paths
+# my $ACTION_DO_REPO = 1;				# do selected files within repo
+# my $ACTION_DO_SELECTED = 2;			# do all selected files
+# my $ACTION_DO_SINGLE_FILE = 3;		# do a single (unselected) file
+
+
+sub doActionTree
+	# in all cases, the tree's selection is going away
+{
+	my ($this,$how,$tree) = @_;
+	my $id = $tree->{id};
+	display($dbg_actions,0,"doActionTree($this->{name},$how,$id)");
+
+	my $tree_sel = $this->{selection}->{$id};
+	delete $this->{selection}->{$id};
+	$tree->{num_selected} = 0;
+
+	my $doit = 1;						# do all by default
+	my $paths = '';
+	if ($how == $ACTION_DO_REPO ||		# do all selected files within repo
+		$how == $ACTION_DO_SELECTED)	# do all selected files
+	{
+		$doit = 0;
+		$paths = [];
+		for my $fn (sort keys %$tree_sel)
+		{
+			$doit = 1;
+			push @$paths,$fn;
+		}
+	}
+
+	if ($doit)
+	{
+		my $repo = $tree->{repo};
+		display($dbg_actions,1,"calling gitIndex($this->{is_staged},$paths)");
+		return $repo->gitIndex($this->{is_staged},$paths);
+	}
+	return 0;
+}
+
+
+sub doAction
+{
+	my ($this,$how) = @_;
+
+	$how ||= $ACTION_DO_ALL;
+	display($dbg_actions,0,"doAction($this->{name},$how)");
+	$this->{selection} = {} if $how == $ACTION_DO_ALL;
+	$this->{anchor} = '';
+
+	if ($how == $ACTION_DO_SINGLE_FILE)
+	{
+		my $tree = $this->{found_tree};
+		my $item = $this->{found_item};
+		my $repo = $tree->{repo};
+		my $fn = $item->{fn};
+		$repo->gitIndex($this->{is_staged},[$fn]);
+	}
+	elsif ($how == $ACTION_DO_REPO)
+	{
+		$this->doActionTree($how,$this->{found_tree});
+	}
+	else
+	{
+		my $trees = $this->{trees};
+		my $selection = $this->{selection};
+		for my $id (sort keys %$trees)
+		{
+			my $doit = $how == $ACTION_DO_ALL;
+			$doit = 1 if $selection->{$id};	# $ACTION_DO_SELECTED
+			return if $doit && !$this->doActionTree($how,$trees->{$id});
+
+			# we currently wait for the callback to delete
+			# unused trees, but we know they went away
+			# if $ACTION_DO_ALL and or we could determine
+			# if all items were selected for $ACTION_DO_SELECTED
+		}
 	}
 }
 

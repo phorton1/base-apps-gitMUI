@@ -28,7 +28,7 @@ my $dbg_config = 1;
 	# -1 = show details in checkConfig
 
 my $dbg_chgs = 1;
-my $dbg_add = 0;
+my $dbg_index = 1;
 my $dbg_commit = 0;
 my $dbg_push = 0;
 my $dbg_tag = 0;
@@ -631,12 +631,10 @@ sub getRemoteChanges
 		display($dbg_chgs,2,"change($change) remote: $what $fn")
 			if $num_changes <= $MAX_SHOW_CHANGES;
 
-
 		$new_remote_changes->{$fn} = $what;
 		$remote_changed = 1 if
 			!$remote_changes->{$fn} ||
 			$remote_changes->{$fn} ne $new_remote_changes->{$fn};
-
 	}
 
 	my $changes_changed = $this->assignHashIfChanged('remote_changes',$new_remote_changes,$remote_changed);
@@ -647,37 +645,158 @@ sub getRemoteChanges
 
 
 #--------------------------------------------
-# gitAdd
+# gitIndex
 #--------------------------------------------
+# A bit complicated to explain.
+# We are moving files between 'unstaged' and 'staged' areas.
+# It is optimized if $paths is not given.
+# Here's what we do:
+#
+# If !$paths
+#	unstaged:
+#		$index->add_all('*')
+#	staged:
+#		unstage('*')
+#
+# If $paths:
+#
+# 	unstaged:
+#		A : $index->add()
+#		M : $index->add()
+#       D : $index->remove()
+#	staged:
+#		A : $index->remove()
+#		M : unstage($path)
+#       D : unstage($path)
 
-sub gitAdd
+
+sub gitIndex
 	# git add -A
 {
-	my ($this,$msg) = @_;
-	my $num = scalar(keys %{$this->{unstaged_changes}});
-	display($dbg_add,0,"gitAdd($this->{path}) $num unstaged_changes");
+	my ($this,$is_staged,$paths) = @_;
+
+	my $show = $is_staged ? 'staged' : 'unstaged';
+
+	display($dbg_index,0,"gitIndex($show) paths="._def($paths));
+
+	# Create the repo and get the index
 
 	my $git_repo = Git::Raw::Repository->open($this->{path});
 	return $this->repoError("Could not create git_repo") if !$git_repo;
 
-	# add files to the repository default index
-
 	my $index = $git_repo->index();
 	return $this->repoError("Could not get index") if !$index;
 
-	$index->add_all({ paths => ['*']});
-	$index->write;
+	# Loop through @$paths or call add_all() or unstage(*)
+	# my $entries = debugIndex($index,"BEFORE",$this->{path});
 
-	# move the changes from 'unstaged' to 'staged'
+	if ($paths)
+	{
+		my $unstaged = $this->{unstaged_changes};
+		my $staged = $this->{staged_changes};
+		for my $path (@$paths)
+		{
+			my $u_type = $unstaged->{$path} || ' ';
+			my $s_type = $staged->{$path} || ' ';
 
-	display($dbg_add+1,1,"moving $num unstaged_changes to staged_changes");
-	mergeHash($this->{staged_changes},$this->{unstaged_changes});
-	$this->{unstaged_changes} = shared_clone({});
+			display($dbg_index,1,"---> u($u_type) s($s_type) $path");
 
-	display($dbg_add,0,"gitCommit() returning 1");
+			if (!$is_staged)
+			{
+				$u_type eq 'D' ?
+					$index->remove($path) :
+					$index->add($path);
+				$index->write;
+			}
+			elsif ($s_type eq 'A')
+			{
+				$index->remove($path);
+				$index->write;
+			}
+			else
+			{
+				return if !$this->unstage($git_repo,$path);
+			}
+		}
+	}
+	elsif (!$is_staged)		# Add everything to the index (works)
+	{
+		$index->add_all({ paths => ['*'] });
+		$index->write;
+	}
+	else					# Remove everything from the index by using unstage(*)
+	{
+		return if !$this->unstage($git_repo,'*');
+	}
+
+	# DONE !!
+	# debugIndex($index,"AFTER",$this->{path});
+
+	# in git_changes, which only calls "Add" right now,
+	# we want this to move all unstaged items to the staged hash
+	# in the UI, we reset the hashes to trigger a monitor callback
+
+	if (getAppFrame())
+	{
+		$this->{'staged_changes'} = shared_clone({});
+	}
+	else
+	{
+		mergeHash($this->{staged_changes},$this->{unstaged_changes});
+	}
+	$this->{'unstaged_changes'} = shared_clone({});
+
+	display($dbg_index,0,"gitIndex() returning 1");
 	return 1;
 }
 
+
+sub unstage
+	# for unstaging M (modified) and D (delete) items, we need
+	# to reset the index for all paths or a particular particular
+	# path back to the HEAD commit. A 'soft' reset changes the
+	# index without changing the working directory!)
+{
+	my ($this, $git_repo, $path) = @_;
+	display($dbg_index,0,"unstage($path");
+
+	# get the ID of the HEAD commit
+
+	my $ref = Git::Raw::Reference->lookup("HEAD", $git_repo);
+	return $this->repoError("Could not get ref(HEAD)")
+		if !$ref;
+	my $ref2 = $ref->target();
+	my $head_id = $ref2->target();
+
+	$git_repo->reset( $head_id, {
+		type => 'mixed',
+		paths => [ $path ] });
+
+	return 1;
+}
+
+
+sub debugIndex
+{
+	my ($index,$what,$path) = @_;
+
+	my $entry_count = $index->entry_count();
+	my @entry_list = $index->entries();
+	print "$what($path) entry_count($entry_count)\n";
+	my $count = 0;
+	my $entries = {};
+	for my $entry (@entry_list)
+	{
+		my $mode = $entry->mode();
+		my $path = $entry->path();
+		my $size = $entry->size();
+		my $stage = $entry->stage();
+		$entries->{$path} = $entry;
+		print "    entry($count) stage($stage) size($size) mode($mode) path=$path\n";
+		$count++;
+	}
+	return $entries;
+}
 
 
 #--------------------------------------------
@@ -911,6 +1030,60 @@ sub gitTag
 	return $rslt;
 }
 
+
+
+#---------------------------------------
+# toText
+#---------------------------------------
+
+sub textLine
+{
+	my ($this,$key) = @_;
+	my $line = pad($key,10)." = ".$this->{$key}."\n";
+	return $line;
+}
+
+sub arrayText
+{
+	my ($this,$key) = @_;
+	my $array = $this->{$key};
+	return '' if !@$array;
+
+	my $text = "$key\n";
+	for my $item (@$array)
+	{
+		$text .= pad('',10).$item."\n";
+	}
+	return $text;
+}
+
+
+
+sub toText
+{
+	my ($this) = @_;
+	my $text = '';
+
+	$text .= $this->textLine('num');
+	$text .= $this->textLine('branch');
+	$text .= $this->textLine('section');
+	$text .= $this->textLine('path');
+	$text .= $this->textLine('private');
+	$text .= $this->textLine('forked');
+	$text .= $this->textLine('selected');
+	$text .= $this->textLine('parent');
+	$text .= $this->textLine('descrip');
+
+	$text .= $this->arrayText('uses');
+	$text .= $this->arrayText('needs');
+	$text .= $this->arrayText('friend');
+	$text .= $this->arrayText('group');
+	$text .= $this->arrayText('errors');
+	$text .= $this->arrayText('warnings');
+	$text .= $this->arrayText('notes');
+
+	return $text;
+}
 
 
 

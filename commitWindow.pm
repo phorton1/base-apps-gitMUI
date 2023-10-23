@@ -28,8 +28,6 @@ my $dbg_splitters = 0;
 BEGIN {
     use Exporter qw( import );
 	our @EXPORT = qw (
-		$WIN_MIN_WIDTH
-		$WIN_MIN_HEIGHT
 	);
 }
 
@@ -39,18 +37,13 @@ my (
 	$ID_SPLITTER_LEFT ) = (9000..9100);
 
 
-my $MIN_LEFT_WIDTH 	        = 80;
-my $MIN_RIGHT_WIDTH         = 240;
+my $MIN_LEFT_WIDTH 	        = 5;
+my $MIN_RIGHT_WIDTH         = 5;
 my $MIN_LEFT_TOP_PCT        = 20;
 my $MAX_LEFT_TOP_PCT        = 80;
 my $INITIAL_LEFT_WIDTH  	= 200;
 my $INITIAL_LEFT_TOP_PCT    = 50;
 
-
-our $WIN_MIN_WIDTH = $MIN_LEFT_WIDTH + $MIN_RIGHT_WIDTH + 1;
-our $WIN_MIN_HEIGHT = $COMMAND_AREA_HEIGHT + $MIN_DIFF_AREA_HEIGHT;
-	# $COMMAND_AREA_HEIGHT and $MIN_DIFF_AREA_HEIGHT are from commitRight.pm
-	# These values are used by the gitUI Frame::SetMinimumSize();
 
 
 my $win_instance = 0;
@@ -122,6 +115,14 @@ sub onClose
 	display($dbg_life,0,"commitWindow::onClose() called");
 	$this->SUPER::onClose($event);
 	$event->Skip();
+}
+
+
+sub notifyContent
+{
+	my ($this,$data) = @_;
+	display($dbg_life,0,"commitWindow::notifyContent() called");
+	$this->{right}->notifyContent($data);
 }
 
 

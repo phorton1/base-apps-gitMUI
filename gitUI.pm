@@ -16,6 +16,7 @@ use Pub::WX::Frame;
 use Pub::WX::Dialogs;
 use apps::gitUI::repo;
 use apps::gitUI::repos;
+use apps::gitUI::github;
 use apps::gitUI::styles; 	# for $THREAD_EVENT!!
 use apps::gitUI::Resources;
 use apps::gitUI::command;
@@ -25,7 +26,7 @@ use apps::gitUI::commitWindow;
 use apps::gitUI::progressDialog;
 use base qw(Pub::WX::Frame);
 
-$TEST_JUNK_ONLY = 0;
+$TEST_JUNK_ONLY = 1;
 
 my $dbg_frame = 0;
 	# lifecycle, major commands
@@ -54,6 +55,7 @@ sub new
 	my ($class, $parent) = @_;
 
 	return if !parseRepos();
+	doGitHub(1);
 
 	Pub::WX::Frame::setHowRestore($RESTORE_ALL);
 		# $RESTORE_MAIN_RECT);
@@ -68,11 +70,7 @@ sub new
 	# plus fudge factors for the height due to menu, tab bar
 	# and status window, and a bit for the frame outline
 
-	my $FUDGE_HEIGHT_EXTRA = 40;
-	my $FUDGE_WIDTH_EXTRA = 10;
-	$this->SetMinSize([
-		$WIN_MIN_WIDTH + $FUDGE_WIDTH_EXTRA,
-		$WIN_MIN_HEIGHT + $FUDGE_HEIGHT_EXTRA]);
+	$this->SetMinSize([100,100]);
 
 	EVT_MENU_RANGE($this, $ID_PATH_WINDOW, $ID_REPO_DETAILS, \&onOpenWindowById);
 	EVT_MENU_RANGE($this, $COMMAND_CHANGES, $COMMAND_TAG, \&onGitCommand);

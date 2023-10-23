@@ -190,6 +190,8 @@ sub doGitHub
             my $path = repoIdToPath($id);
 			my $repo = getRepoHash()->{$path};
 
+			next if $TEST_JUNK_ONLY && $path !~ /junk/;
+
 			if (!$repo)
 			{
 				error("doGitHub() cannot find id($id) = path($path)");

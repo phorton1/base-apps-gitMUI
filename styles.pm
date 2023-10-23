@@ -28,12 +28,16 @@ BEGIN
 		$color_purple
 		$color_orange
 		$color_white
+		$color_light_grey
 		$color_dark_cyan
 
 		$color_git_staged
         $color_git_unstaged
 		$color_item_selected
 
+		$bm_right_arrow
+		$bm_up_arrow
+		$bm_plus
 		$bm_folder
 		$bm_folder_lines
 		$bm_folder_x
@@ -52,17 +56,18 @@ our $font_bold = Wx::Font->new(9,wxFONTFAMILY_DEFAULT,wxFONTSTYLE_NORMAL,wxFONTW
 
 
 our $color_black 	 = Wx::Colour->new(0x00, 0x00, 0x00);
-our $color_red     	 = Wx::Colour->new(0xe0, 0x00, 0x00);		# listCtrl deletes, pathWindow staged_changes
+our $color_red     	 = Wx::Colour->new(0xE0, 0x00, 0x00);		# listCtrl deletes, pathWindow staged_changes
 our $color_green   	 = Wx::Colour->new(0x00, 0x90, 0x00);		# listCtrl staged M's, pathWindow: public
-our $color_blue    	 = Wx::Colour->new(0x00, 0x00, 0xc0);		# listCtrl icons and repo line, pathWindow: private
-our $color_cyan      = Wx::Colour->new(0x00, 0xc0, 0xc0);		# unused
-our $color_magenta   = Wx::Colour->new(0xc0, 0x00, 0xc0);		# path_window: remote_changes
-our $color_yellow    = Wx::Colour->new(0xc0, 0xc0, 0x00);		# unused
+our $color_blue    	 = Wx::Colour->new(0x00, 0x00, 0xC0);		# listCtrl icons and repo line, pathWindow: private
+our $color_cyan      = Wx::Colour->new(0x00, 0xC0, 0xC0);		# unused
+our $color_magenta   = Wx::Colour->new(0xC0, 0x00, 0xC0);		# path_window: remote_changes
+our $color_yellow    = Wx::Colour->new(0xFF, 0xD7, 0x00);		# commitRight title
 our $color_grey      = Wx::Colour->new(0x99, 0x99, 0x99);		# unused
-our $color_purple    = Wx::Colour->new(0x60, 0x00, 0xc0);		# unused
-our $color_orange    = Wx::Colour->new(0xc0, 0x60, 0x00);		# path_window: unstaged_changes
-our $color_white     = Wx::Colour->new(0xff, 0xff, 0xff);
+our $color_purple    = Wx::Colour->new(0x60, 0x00, 0xC0);		# unused
+our $color_orange    = Wx::Colour->new(0xC0, 0x60, 0x00);		# path_window: unstaged_changes
+our $color_white     = Wx::Colour->new(0xFF, 0xFF, 0xFF);
 our $color_dark_cyan = Wx::Colour->new(0x00, 0x80, 0x80);		# unused
+our $color_light_grey= Wx::Colour->new(0xF0, 0xF0, 0xF0);		# commitRight panel
 
 our $color_git_staged   = Wx::Colour->new(0xA0, 0xFF, 0xA0);	# commitList(staged) green headeer
 our $color_git_unstaged = Wx::Colour->new(0xff, 0xB0, 0xA0);	# commitList(unstqaged) orange header
@@ -136,6 +141,46 @@ my $icon_blank = [
 	0b000000000000,
 	0b000000000000,
 	0b000000000000 ];
+
+
+my $icon_right_arrow = [
+	9,9,
+	0b001000000,
+	0b001100000,
+	0b001110000,
+	0b001111000,
+	0b001111100,
+	0b001111000,
+	0b001110000,
+	0b001100000,
+	0b001000000, ];
+my $icon_up_arrow = [
+	9,9,
+	0b000000000,
+	0b000000000,
+	0b000010000,
+	0b000111000,
+	0b001111100,
+	0b011111110,
+	0b111111111,
+	0b000000000,
+	0b000000000, ];
+my $icon_plus = [
+	12,12,
+	0b000000000000,
+	0b000011100000,
+	0b000011100000,
+	0b000011100000,
+	0b011111111110,
+	0b011111111110,
+	0b011111111110,
+	0b000011100000,
+	0b000011100000,
+	0b000011100000,
+	0b000011100000,
+	0b000000000000 ];
+
+
 
 my $icon_folder = [
 	12,15,
@@ -228,7 +273,9 @@ my $icon_folder_question = [
 	0b111111111111 ];
 
 
-
+our $bm_right_arrow 	= myBitMapToWxBitmap($icon_right_arrow);
+our $bm_up_arrow 		= myBitMapToWxBitmap($icon_up_arrow);
+our $bm_plus 			= myBitMapToWxBitmap($icon_plus);
 our $bm_folder 			= myBitMapToWxBitmap($icon_folder);
 our $bm_folder_lines 	= myBitMapToWxBitmap($icon_folder_lines);
 our $bm_folder_x 		= myBitMapToWxBitmap($icon_folder_x);

@@ -15,7 +15,8 @@ use threads;
 use threads::shared;
 use Wx qw(:everything);
 use Wx::Event qw(
-	EVT_SIZE );
+	EVT_SIZE
+	EVT_BUTTON );
 use apps::gitUI::styles;
 use apps::gitUI::repo;
 use apps::gitUI::repos;
@@ -35,6 +36,8 @@ BEGIN {
 
 
 my $PANE_TOP = 25;
+my $ID_DO_ALL = 1000;
+
 
 
 sub new
@@ -51,19 +54,31 @@ sub new
 
 	$this->SetBackgroundColour(
 		$is_staged? $color_git_staged : $color_git_unstaged);
+
+	Wx::Button->new($this,$ID_DO_ALL,$is_staged ?
+		"Unstage All" : "Stage All", [5,2],[75,20]);
 	Wx::StaticText->new($this,-1, $is_staged ?
 		'Staged Changed (Will Commit)' : 'Unstaged Changes',
-		[5,5]);
+		[86,5]);
 
-    my $name = $is_staged ? 'staged' : 'unstaged';
-	$this->{list_ctrl} = apps::gitUI::listCtrl->new($this,$name,$PANE_TOP,$data->{list_ctrl});
+	$this->{list_ctrl} = apps::gitUI::listCtrl->new($this,$is_staged,$PANE_TOP,$data->{list_ctrl});
 
 	$this->populate();
 
 	EVT_SIZE($this, \&onSize);
+	EVT_BUTTON($this,-1,\&onButton);
 
 	return $this;
 
+}
+
+
+sub onButton
+{
+	my ($this,$event) = @_;
+	my $id = $event->GetId();
+	display($dbg_life,0,"ACTION_ON_ALL");
+	$this->{list_ctrl}->doAction();
 }
 
 
