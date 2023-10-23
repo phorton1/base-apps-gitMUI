@@ -35,7 +35,7 @@ my $dbg_tag = 0;
 
 my $dbg_creds = 0;
 	# push credentials callback
-my $dbg_cb = 0;
+my $dbg_cb = 1;
 	# push callbacks
 
 

@@ -29,7 +29,7 @@ $TEST_JUNK_ONLY = 1;
 
 my $dbg_frame = 0;
 	# lifecycle, major commands
-my $dbg_mon = 0;
+my $dbg_mon = 1;
 
 
 my $USE_MONITOR = 1;

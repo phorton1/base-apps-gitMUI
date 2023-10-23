@@ -46,9 +46,13 @@ use Pub::Utils;
 use base qw(Wx::ScrolledWindow);	# qw(Wx::Window);
 
 
-my $dbg_ctrl = 0;
-my $dbg_draw = 0;
-my $dbg_sel = 0;
+my $dbg_ctrl = 1;
+my $dbg_draw = 1;
+my $dbg_sel = 1;
+	# 0  == everything except
+	# -1 == addShiftSel() adding of individual shift-sel items
+my $dbg_actions = 0;
+
 
 
 my $ROW_HEIGHT  = 18;
@@ -60,11 +64,9 @@ BEGIN {
 	);
 }
 
-
-
-
 my $selected_brush = Wx::Brush->new($color_item_selected,wxBRUSHSTYLE_SOLID);
 my $selected_pen = Wx::Pen->new($color_item_selected,1,wxPENSTYLE_SOLID);
+
 
 sub new
 {
@@ -155,7 +157,6 @@ sub startUpdate
 }
 
 
-
 sub updateRepo
 {
 	my ($this,$repo,$changes) = @_;
@@ -189,8 +190,6 @@ sub updateRepo
 		}
 	}
 }
-
-
 
 
 sub endUpdate
@@ -259,9 +258,6 @@ sub endUpdate
 # onPaint
 #-----------------------------------------------
 
-
-
-
 sub onPaint
 {
 	my ($this, $event) = @_;
@@ -307,7 +303,6 @@ sub onPaint
 	for my $id (sort keys %$trees)
 	{
 		my $tree = $trees->{$id};
-		display(0,0,"trees($id)=$tree");
 
 		$item_rect->SetY($ypos);
 		$this->drawTree($dc,$item_rect,$id,$tree) if $update_rect->Intersects($item_rect);
@@ -364,8 +359,6 @@ sub drawTree
 	$dc->DrawText($expanded?"^":">",$TOGGLE_LEFT,$ypos);
 	$dc->DrawText($name,$TEXT_LEFT,$ypos);
 }
-
-
 
 
 sub drawItem
@@ -471,8 +464,8 @@ sub onLeftDown
 	my $ypos = 0;
 	$this->{found_tree} = '';
 	$this->{found_item} = '';
-	$this->{tree_sy} = 0;
-	$this->{item_sy} = 0;
+	$this->{tree_uy} = 0;
+	$this->{item_uy} = 0;
 
 	my $trees = $this->{trees};
 
@@ -486,19 +479,21 @@ sub onLeftDown
 		if ($uy >= $ypos && $uy <= $ypos + $tree_height-1)
 		{
 			$this->{found_tree} = $tree;
-			$this->{tree_sy} = $ypos;
+			$this->{tree_uy} = $ypos;
 			display($dbg_sel,1,"foundTree($id) at ypos($ypos) with height($tree_height)");
 			if ($uy >= $ypos + $ROW_HEIGHT)
 			{
 				my $items = $tree->{items};
-				my $off = $uy - $ypos - $ROW_HEIGHT;
-				my $idx = int($off / $ROW_HEIGHT);
-				$this->{item_sy} = $ypos + ($idx + 1) * $ROW_HEIGHT;
+				my $off = $uy - $ypos - $ROW_HEIGHT;		# mouse y offset within tree's items
+				my $idx = int($off / $ROW_HEIGHT);			# index into tree's items
+				my $found_fn = (sort keys %$items)[$idx];	# found filename
+				$this->{found_item} = $items->{$found_fn};	# found item
+
+				$this->{item_uy} = $ypos + $ROW_HEIGHT + $idx * $ROW_HEIGHT;
 					# save off the item position for optimized refresh
 					# it is $idx+1 cuz the 0th item is below the tree header
-				my $found_fn = (sort keys %$items)[$idx];
-				$this->{found_item} = $items->{$found_fn};
-				display($dbg_sel,1,"foundItem($found_fn,$this->{found_item}->{type}) at off($off) idx($idx)");
+
+				display($dbg_sel,1,"foundItem($found_fn,$this->{found_item}->{type}) at off($off) idx($idx) item_uy($this->{item_uy})");
 				last;
 			}
 			last;
@@ -546,7 +541,7 @@ sub onLeftDown
 		{
 			if ($ux >= $ICON_LEFT)
 			{
-				display($dbg_sel,0,"ACTION_ON_ALL_SELECTED");
+				display($dbg_actions,0,"ACTION_ON_ALL_SELECTED");
 			}
 		}
 		else
@@ -572,7 +567,7 @@ sub onLeftDown
 		{
 			if ($ux >= $ICON_LEFT)
 			{
-				display($dbg_sel,0,"ACTION_ON_SELECTED_WITHIN($this->{found_tree}->{id})");
+				display($dbg_actions,0,"ACTION_ON_SELECTED_WITHIN($this->{found_tree}->{id})");
 			}
 		}
 	}
@@ -581,7 +576,7 @@ sub onLeftDown
 
 	if ($this->{refresh_rect}->x >= 0)
 	{
-		display_rect(0,0,"REFRESH_RECT",$this->{refresh_rect});
+		display_rect($dbg_sel,0,"REFRESH_RECT",$this->{refresh_rect});
 		$this->RefreshRect($this->{refresh_rect})
 	}
 
@@ -742,26 +737,26 @@ sub addShiftSel
 	my ($this,$tree,$fn) = @_;
 	my $selection = $this->{selection};
 	my $id = $tree->{id};
-	display($dbg_sel,0,"addShiftSel($id,$fn)");
+	display($dbg_sel+1,0,"addShiftSel($id,$fn)");
 
 	my $tree_sel = $selection->{$id};
 	if (!$tree_sel)
 	{
-		display($dbg_sel,1,"creating new tree_sel");
+		display($dbg_sel+1,1,"creating new tree_sel");
 		$selection->{$id} = { $fn => 1 };
 		$tree->{num_selected}++;	# = 1
 		return 1;
 	}
 	elsif (!$tree_sel->{$fn})
 	{
-		display($dbg_sel,1,"adding to existing tree_sel");
+		display($dbg_sel+1,1,"adding to existing tree_sel");
 		$tree_sel->{$fn} = 1;
 		$tree->{num_selected}++;	# = 1
 		return 1;
 	}
 	else
 	{
-		display($dbg_sel,1,"already selected");
+		display($dbg_sel+1,1,"already selected");
 	}
 	return 0;
 }
@@ -856,12 +851,12 @@ sub toggleSelection
 	if ($refresh_rect->x < 0)
 	{
 		my $width = $this->{win_srect}->width;
-		#my ($unused1,$tree_sy) = $this->CalcScrolledPosition(0,$this->{tree_sy});
-		#my ($unused2,$item_sy) = $this->CalcScrolledPosition(0,$this->{item_sy});
-		my $tree_srect = Wx::Rect->new(0,$this->{tree_sy},$width,$ROW_HEIGHT);
-		my $item_srect = Wx::Rect->new(0,$this->{item_sy},$width,$ROW_HEIGHT);
+		my ($unused1,$tree_sy) = $this->CalcScrolledPosition(0,$this->{tree_uy});
+		my ($unused2,$item_sy) = $this->CalcScrolledPosition(0,$this->{item_uy});
+		my $tree_srect = Wx::Rect->new(0,$tree_sy,$width,$ROW_HEIGHT);
+		my $item_srect = Wx::Rect->new(0,$item_sy,$width,$ROW_HEIGHT);
 
-		display_rect(0,0,"refresh_rect",$item_srect);
+		display_rect($dbg_sel,0,"refresh_rect",$item_srect);
 
 		$this->{refresh_rect} = $item_srect;		# refresh the item
 		$this->RefreshRect($tree_srect)				# and the tree if it is visible

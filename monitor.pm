@@ -63,8 +63,10 @@ use Time::HiRes qw(sleep);
 use apps::gitUI::repos;
 use Pub::Utils;
 
-my $dbg_mon = -1;
-my $dbg_win32 = 0;
+my $dbg_mon = 1;
+	# monitor life cycle, incl creation of monitors
+my $dbg_win32 = 1;
+	# debug events, callbacks, etc
 
 
 # constants
@@ -78,14 +80,16 @@ my $WIN32_FILTER =
 	FILE_NOTIFY_CHANGE_FILE_NAME  	|  # Any file name change (creating/deleting/renaming)
 	FILE_NOTIFY_CHANGE_LAST_WRITE 	|  # Any change to a file's last write time
 	# FILE_NOTIFY_CHANGE_SECURITY   |  # Any security descriptor change
-	# FILE_NOTIFY_CHANGE_SIZE   	|  # Any file size changed
+	#=FILE_NOTIFY_CHANGE_SIZE   	|  # Any file size changed
 	0;
 
 # vars
 
 my $thread;
 my $the_callback;
-my @monitors;	# if $USE_WIN32_NOTIFY
+my %monitors;
+	# NOT SHARED BUT ADDED TO BY THE THREAD!
+
 
 
 #------------------------------------------------------
@@ -95,7 +99,7 @@ my @monitors;	# if $USE_WIN32_NOTIFY
 sub parseGitIgnore
 {
 	my ($path) = @_;
-	my $retval = [];
+	my $retval = '';
 	my $text = getTextFile("$path/.gitignore") || '';
 	my @lines = split(/\n/,$text);
 	for my $line (@lines)
@@ -106,6 +110,7 @@ sub parseGitIgnore
 			my $re = $1;
 			$re =~ s/\(/\\\(/g;		# change parents to RE
 			$re =~ s/\)/\\\)/g;
+			$retval ||= [];
 			push @$retval,$re
 		}
 	}
@@ -115,37 +120,68 @@ sub parseGitIgnore
 
 sub createMonitor
 {
-	my ($path,$report_path) = @_;
+	my ($path,$parent) = @_;
+	$parent ||= '';
 
-	$report_path ||= $path;
-
-	my $include_subfolders = 1;
-	my $exclude_subdirs =  parseGitIgnore($path);
-	if (@$exclude_subdirs)
+	if (!$monitors{$path})
 	{
-		$include_subfolders = 0;
-		display($dbg_win32,0,"EXCLUDE SUBDIRS on path($path)");
-		return 0 if !createSubMonitors($path,$exclude_subdirs);
-	}
+		my $excludes = '';
+		my $include_subfolders = 1;
+		if ($parent)
+		{
+			display($dbg_mon,0,"CREATING SUB_MONITOR($path,$parent->{path})");
+		}
+		else
+		{
+			$excludes =  parseGitIgnore($path);
+			$include_subfolders = 0 if $excludes;
+		}
 
-    my $monitor = Win32::ChangeNotify->new($path,$include_subfolders,$WIN32_FILTER);
-    if (!$monitor)
-    {
-        error("apps::gitUI::monitor::creeateMonitor() - Could not create monitor($path)");
-        return 0;
-    }
-	push @monitors,{ path => $report_path, mon => $monitor };
+		my $mon = Win32::ChangeNotify->new($path,$include_subfolders,$WIN32_FILTER);
+		if (!$mon)
+		{
+			error("apps::gitUI::monitor::creeateMonitor() - Could not create monitor($path)");
+			return 0;
+		}
+
+		my $monitor = $monitors{$path} = {
+			mon => $mon,
+			path => $path,
+			parent => $parent,
+			excludes => $excludes,
+			exists => 1};
+
+		if ($excludes)
+		{
+			display($dbg_mon,0,"EXCLUDE SUBDIRS on path($path)");
+			return 0 if !createSubMonitors($monitor);
+		}
+	}
+	else
+	{
+		$monitors{$path}->{exists} = 1;
+	}
 	return 1;
 }
 
 
-
 sub createSubMonitors
 {
-	my ($path,$exclude_subdirs) = @_;
+	my ($monitor) = @_;
+	my $path = $monitor->{path};
+	my $excludes = $monitor->{excludes};
 
 	return !error("createSubMonitors() not opendir $path")
 		if !opendir(DIR,$path);
+
+	# set exists=0 on all monitors
+	# for delete pass at end
+
+	for my $p (keys %monitors)
+	{
+		my $m = $monitors{$p};
+		$m->{exists} = 0;
+	}
 
     while (my $entry=readdir(DIR))
     {
@@ -157,7 +193,7 @@ sub createSubMonitors
 		if ($is_dir)
 		{
 			my $skipit = 0;
-			for my $exclude (@$exclude_subdirs)
+			for my $exclude (@$excludes)
 			{
 				if ($entry =~ /^$exclude$/)
 				{
@@ -168,12 +204,11 @@ sub createSubMonitors
 
 			if ($skipit)
 			{
-				display($dbg_win32,0,"skipping subdir $entry");
+				display($dbg_mon,0,"skipping subdir $entry");
 			}
 			else
 			{
-				display($dbg_win32,0,"CREATING SUB_MONITOR $entry");
-				if (!createMonitor($sub_path,$path))
+				if (!createMonitor($sub_path,$monitor))
 				{
 					closedir DIR;
 					return 0;
@@ -181,8 +216,21 @@ sub createSubMonitors
 			}
 		}
 	}
-
 	closedir DIR;
+
+	# Harvest any unused monitors
+
+	for my $p (keys %monitors)
+	{
+		my $m = $monitors{$p};
+		my $parent = $m->{parent};
+		if (($parent eq $monitor) && !$m->{exists})
+		{
+			display($dbg_mon,0,"DELETING UNUSED MONITOR($p");
+			delete $monitors{$p}
+		}
+	}
+
 	return 1;
 }
 
@@ -190,7 +238,7 @@ sub createSubMonitors
 
 sub startWin32
 {
-	display($dbg_win32,0,"startWin32()");
+	display($dbg_mon,0,"startWin32()");
  	my $repo_list = getRepoList();
 	return if !$repo_list;
 	for my $repo (@$repo_list)
@@ -203,12 +251,12 @@ sub startWin32
 
 sub endWin32
 {
-	display($dbg_win32,0,"endWin32()");
-	for my $m (@monitors)
-	{
-		$m->{mon}->close();
-	}
-	@monitors = ();
+	display($dbg_mon,0,"endWin32()");
+	# for my $path (sort keys %monitors)
+	# {
+	# 	$monitors{$path}->{mon}->close();
+	# }
+	%monitors = {};
 }
 
 
@@ -238,26 +286,57 @@ sub run
 		elsif (!$this->{paused})
 		{
 			my $repo_hash = getRepoHash();
-			for my $m (@monitors)
+			for my $path (sort keys %monitors)
 			{
+				my $m = $monitors{$path};
+				next if !$m;	# could be deleted during loop
+
 				my $rslt = $m->{mon}->wait(0);
 				if (defined($rslt) && $rslt>0)
 				{
 					$m->{mon}->reset();
-					my $path = $m->{path};
-					my $repo = $repo_hash->{$path};
 
-					display($dbg_win32,0,"win_notify($path)");
+					my $parent = $m->{parent};
+					my $report_path = $parent ? $parent->{path} : $m->{path};
+					my $repo = $repo_hash->{$report_path};
+
+					display($dbg_win32,0,"win_notify($path,$report_path)");
 					if (!$repo)
 					{
-						error("Could not get $repo($path)");
+						error("Could not get repo $repo($report_path)");
 						$rslt = undef;
 						last;
 					}
-
 					$rslt = $repo->gitChanges();
 					last if !defined($rslt);
 					&$the_callback($repo) if $rslt;
+
+					# ok, this is interesting.
+					# first, i totally space on what happens if a mapped subdir is removed.
+					# 	 presumably I just wont receive any events for it
+					# but more importantly, it appears as if we added a new subdirectory
+					#    to a repo with submonitors, that we likely need to add a new
+					#    submonitor to the repo.
+					# This notion came from adding Perl/site to /junk/test_repo. Although
+					# 	 I would then claim to not undertand why I got the first 500 notifications,
+					#    after the first 500 or so files, it stopped sending notifications.
+					# I get a;; the notifications if adding to a monitored subfolder, or to
+					#    a subproject, but not on the main project.
+					# It's not particularly easy to identify this situation. I would need
+					# 	a function like addNewSubmonitors() (or another way to call
+					#   createMonitors/createSubMonitors).  Unfortunately, they're all
+					#   array at this point, and we lost the $exclude information.
+					# The ones added here, in a thread, are not available to the desctructor
+					#   and *presumably* go away when the thread exits.
+
+					# if this is a main repo as indicated by {excludes}
+					# do another pass through its dir tree to see if
+					# any new monitors need to be added ...
+
+					if ($m->{excludes})
+					{
+						createSubMonitors($m);
+					}
 				}
 			}
 		}
