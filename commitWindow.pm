@@ -23,6 +23,8 @@ use base qw(Wx::Window Pub::WX::Window);
 
 my $dbg_life = 0;
 my $dbg_splitters = 0;
+my $dbg_pop = 0;
+my $dbg_notify = 1;
 
 
 BEGIN {
@@ -121,7 +123,7 @@ sub onClose
 sub notifyContent
 {
 	my ($this,$data) = @_;
-	display($dbg_life,0,"commitWindow::notifyContent() called");
+	display($dbg_notify,0,"commitWindow::notifyContent() called");
 	$this->{right}->notifyContent($data);
 }
 
@@ -182,13 +184,13 @@ sub onSashPosChanged
 
 
 
-my $dbg_notify = 0;
+
 
 sub notifyRepoChanged
 {
 	my ($this,$repo) = @_;
 
-	display($dbg_notify,0,"notifyRepoChanged($repo->{path})");
+	display($dbg_pop,0,"notifyRepoChanged($repo->{path})");
 	$this->{unstaged}->populate();
 	$this->{staged}->populate();
 }

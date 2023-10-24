@@ -46,13 +46,15 @@ use Win32::GUI;
 use Wx qw(:everything);
 use Wx::Event qw(
 	EVT_PAINT
-	EVT_LEFT_DOWN );
+	EVT_LEFT_DOWN
+	EVT_LEFT_DCLICK );
+use apps::gitUI::repos;
 use apps::gitUI::styles;
 use Pub::Utils;
 use base qw(Wx::ScrolledWindow);	# qw(Wx::Window);
 
 
-my $dbg_ctrl = 0;
+my $dbg_ctrl = 1;
 my $dbg_pop = 1;
 my $dbg_draw = 1;
 my $dbg_sel = 1;
@@ -64,7 +66,7 @@ my $dbg_actions = 0;
 
 my $ROW_HEIGHT  = 18;
 
-my $ACTION_DO_ALL = 0;				# do all files in all trees
+my $ACTION_DO_ALL = 0;				# do all files in all repos
 my $ACTION_DO_REPO = 1;				# do selected files within repo
 my $ACTION_DO_SELECTED = 2;			# do all selected files
 my $ACTION_DO_SINGLE_FILE = 3;		# do a single (unselected) file
@@ -94,11 +96,12 @@ sub new
 
     $this->{parent} = $parent;
 	$this->{is_staged} = $is_staged;
+	$this->{key} = $is_staged ? 'staged_changes' : 'unstaged_changes';
 	$this->{name} = $name;
 	$this->{data} = $data;
-	$this->{trees} = {};
+	$this->{repos} = {};
 	$this->{selection} = {};
-		# a nested hash of trees by id and 1 by filename
+		# a nested hash of repos by id and 1 by filename
 		# of ALL durrently selected files.
 	$this->{anchor} = '';
 		# the anchor item, if any for SHIFT selection
@@ -109,6 +112,9 @@ sub new
 
 	EVT_PAINT($this, \&onPaint);
 	EVT_LEFT_DOWN($this,\&onLeftDown);
+	EVT_LEFT_DCLICK($this,\&onLeftDown);
+		# We have to register DCLICK or else we 'lose'
+		# mouse down events.
 
 	return $this;
 }
@@ -119,11 +125,11 @@ sub getDataForIniFile
 	my ($this) = @_;
 	my $contracted = {};
 	my $data = { contracted => $contracted };
-	my $trees = $this->{trees};
-	for my $id (sort keys %$trees)
+	my $repos = $this->{repos};
+	for my $id (sort keys %$repos)
 	{
 		$contracted->{$id} = 1
-			if !$trees->{$id}->{expanded};
+			if !$repos->{$id}->{expanded};
 	}
 	display_hash($dbg_ctrl,0,"getDataForIniFile(expanded)",$contracted);
 	return $data;
@@ -133,155 +139,39 @@ sub getDataForIniFile
 
 
 #-----------------------------------------------
-# building
+# updateRepos
 #-----------------------------------------------
 
-sub item
-{
-	my ($tree,$fn,$type) = @_;
-	my $item = {
-		tree => $tree,
-		fn	 => $fn,
-		type => $type,
-		exists => 1 };
-	return $item;
-}
-
-
-sub tree
-{
-	my ($repo,$changes) = @_;
-
-	my $items = {};
-
-	my $tree = {
-		id => $repo->{id},
-		repo => $repo,		# unused so far
-		items => $items,
-		exists => 1,
-		expanded => 1,
-		num_selected => 0 };
-	for my $fn (keys %$changes)
-	{
-		my $type = $changes->{$fn};
-		$items->{$fn} = item($tree,$fn,$type);
-	}
-	return $tree;
-}
-
-
-sub startUpdate
+sub updateRepos
 	# called before a bunch or addRepos
 	# to effect updating without losing selected, expanded, etc
 {
 	my ($this) = @_;
-	my $trees = $this->{trees};
-	my $num_trees = scalar(keys %$trees);
-	display($dbg_pop,0,"startUpdate($this->{name}) trees($num_trees)");
-	for my $id (keys %$trees)
-	{
-		my $tree = $trees->{$id};
-		$tree->{exists} = 0;		# does it still exist
-		$tree->{changed} = 0;
+	display($dbg_pop,0,"updateRepos($this->{name})");
 
-		my $items = $tree->{items};
-		for my $fn (keys %$items)
-		{
-			my $item = $items->{$fn};
-			$item->{exists} = 0;		# does it still exist
-		}
-	}
-}
-
-
-sub updateRepo
-{
-	my ($this,$repo,$changes) = @_;
-	my $num_changes = scalar(keys %$changes);
-	display($dbg_pop,0,"updateRepo($this->{name},$repo->{id}) num_changes($num_changes) path=$num_changes");
-
-	my $id = $repo->{id};
-	my $trees = $this->{trees};
-	my $tree = $trees->{$id};
-	if (!$tree)
-	{
-		$trees->{$id} = tree($repo,$changes);
-		if ($this->{data}->{contracted}->{$id})
-		{
-			display($dbg_ctrl,1,"contracting $id");
-			$trees->{$id}->{expanded} = 0;
-			delete $this->{data}->{contracted}->{$id};
-		}
-	}
-	else
-	{
-		$tree->{exists} = 1;
-		my $items = $tree->{items};
-		for my $fn (keys %$changes)
-		{
-			my $type = $changes->{$fn};
-			my $item = $items->{$fn};
-			if (!$item)
-			{
-				$items->{$fn} = item($tree,$fn,$type);
-			}
-			else
-			{
-				$item->{exists} = 1;
-				$item->{type} = $type;
-			}
-		}
-	}
-}
-
-
-sub endUpdate
-{
-	my ($this) = @_;
 	my $vheight = 0;
-	my @delete_trees;
-	my $trees = $this->{trees};
-	my $num_trees = scalar(keys %$trees);
-	display($dbg_pop,0,"endUpdate($this->{name}) trees($num_trees)");
-	for my $id (sort keys %$trees)
+	my $num_repos = 0;
+	$this->{repos} = {};
+	my $repo_list = getRepoList();
+	for my $repo (@$repo_list)
 	{
-		my $tree = $trees->{$id};
-		if ($tree->{exists})
+		my $id = $repo->{id};
+		my $items = $repo->{$this->{key}};
+		my $num_items = scalar(keys %$items);
+		if ($num_items)
 		{
+			$num_repos++;
 			$vheight += $ROW_HEIGHT;
-
-			my @delete_items;
-			my $items = $tree->{items};
-			for my $fn (sort keys %$items)
+			$this->{repos}->{$id} = $repo;
+			if ($this->{data}->{contracted}->{$id})
 			{
-				my $item = $items->{$fn};
-				if ($item->{exists})
-				{
-					if ($tree->{expanded})
-					{
-						$vheight += $ROW_HEIGHT;
-					}
-				}
-				else
-				{
-					display($dbg_pop,1,"delete_item($fn) from $tree($id)");
-					push @delete_items,$fn;
-				}
+				display($dbg_ctrl,1,"contracting $id");
+				$repo->{expanded} = 0;
+				delete $this->{data}->{contracted}->{$id};
 			}
-			for my $fn (@delete_items)
-			{
-				delete $items->{$fn};
-			}
+			$vheight += $num_items * $ROW_HEIGHT
+				if $repo->{expanded};
 		}
-		else
-		{
-			display($dbg_pop,0,"delete tree($id)");
-			push @delete_trees,$id;
-		}
-	}
-	for my $id (@delete_trees)
-	{
-		delete $trees->{$id};
 	}
 
 	my $sz = $this->GetSize();
@@ -290,9 +180,7 @@ sub endUpdate
 	$this->SetVirtualSize([$width,$vheight]);
 	$this->Refresh();
 
-	$num_trees = scalar(keys %$trees);
-	display($dbg_pop,0,"endUpdate($this->{name}) finished with num_trees($num_trees) vheight($vheight)");
-
+	display($dbg_pop,0,"endUpdate($this->{name}) finished with num_repos($num_repos) vheight($vheight)");
 }
 
 
@@ -309,10 +197,10 @@ sub onPaint
     my $width = $sz->GetWidth();
     my $height = $sz->GetHeight();
 
-	my $trees = $this->{trees};
-	my $num_trees = scalar(keys %$trees);
+	my $repos = $this->{repos};
+	my $num_repos = scalar(keys %$repos);
 
-	display($dbg_draw,0,"onPaint($width,$height) num_trees($num_trees)");
+	display($dbg_draw,0,"onPaint($width,$height) num_repos($num_repos)");
 		# above in pixels
 
 	my $dc = Wx::PaintDC->new($this);
@@ -339,28 +227,29 @@ sub onPaint
 	$dc->SetBrush(wxWHITE_BRUSH);
 	$dc->DrawRectangle($update_rect->x,$update_rect->y,$update_rect->width,$update_rect->height);
 
-	# Draw the Tree
+	# Draw the Repo
 
 	my $ypos = 0;
 	my $item_rect = Wx::Rect->new(0,$ypos,$width,$ROW_HEIGHT);
-	for my $id (sort keys %$trees)
+	for my $id (sort keys %$repos)
 	{
-		my $tree = $trees->{$id};
+		my $repo = $repos->{$id};
 
 		$item_rect->SetY($ypos);
-		$this->drawTree($dc,$item_rect,$id,$tree) if $update_rect->Intersects($item_rect);
+		$this->drawRepo($dc,$item_rect,$repo)
+			if $update_rect->Intersects($item_rect);
 
 		$ypos += $ROW_HEIGHT;
 		last if $ypos >= $bottom;
 
-		if ($tree->{expanded})
+		if ($repo->{expanded})
 		{
-			my $items = $tree->{items};
+			my $items = $repo->{$this->{key}};
 			for my $fn (sort keys %$items)
 			{
 				$item_rect->SetY($ypos);
 
-				$this->drawItem($dc,$item_rect,$fn,$items->{$fn})
+				$this->drawItem($dc,$item_rect,$items->{$fn})
 					if $update_rect->Intersects($item_rect);
 
 				$ypos += $ROW_HEIGHT;
@@ -381,27 +270,29 @@ my $ICON_RIGHT   = 27;			# mouse area - selected rectangle is two to left of TEX
 my $TEXT_LEFT    = 30;
 
 
-sub drawTree
+sub drawRepo
 {
-	my ($this,$dc,$rect,$id,$tree) = @_;
-
-	display($dbg_draw,0,"drawTree($rect,$id,$tree)");
+	my ($this,$dc,$rect,$repo) = @_;
+	my $id = $repo->{id};
+	display($dbg_draw,0,"drawRepo($rect,$id)");
 
 	my $ypos = $rect->y;
 	my $width = $rect->width;
-	my $expanded = $tree->{expanded};
-	my $num_items = scalar(keys %{$tree->{items}});
-	my $num_selected = $tree->{num_selected};
+	my $expanded = $repo->{expanded};
+	my $num_items = scalar(keys %{$repo->{$this->{key}}});
+	my $num_selected = $repo->{num_selected};
 	my $name = "$id (".($num_selected?"$num_selected/":'')."$num_items)";
 
-	display($dbg_draw,0,"drawTree($ypos) exp($expanded) num($num_items) $id");
+	display($dbg_draw,0,"drawRepo($ypos) exp($expanded) num($num_items) $id");
 
 	my $bm = $expanded ? $bm_up_arrow : $bm_right_arrow;
 
 	if ($num_selected)
 	{
-		$dc->SetTextForeground($color_green);
-		$dc->DrawBitmap($bm_plus, $ICON_LEFT, $ypos+2, 0);
+		my $bm2 = $this->{is_staged} ? $bm_minus : $bm_plus;
+		my $color2 = $this->{is_staged} ? $color_red : $color_green;
+		$dc->SetTextForeground($color2);
+		$dc->DrawBitmap($bm2, $ICON_LEFT, $ypos+4, 0);
 	}
 	$dc->SetFont($font_bold);
 	$dc->SetTextForeground($color_blue);
@@ -412,20 +303,21 @@ sub drawTree
 
 sub drawItem
 {
-	my ($this,$dc,$rect,$fn,$item) = @_;
+	my ($this,$dc,$rect,$item) = @_;
 
+	my $fn = $item->{fn};
 	my $ypos = $rect->y();
 	my $width = $rect->width();
 	my $type = $item->{type};
-	my $tree = $item->{tree};
-	my $id = $tree->{id};
-	my $tree_sel = $this->{selection}->{$id};
-	my $selected = $tree_sel ? $tree_sel->{$fn} : 0;
+	my $repo = $item->{repo};
+	my $id = $repo->{id};
+	my $repo_sel = $this->{selection}->{$id};
+	my $selected = $repo_sel ? $repo_sel->{$fn} : 0;
 	$selected ||= 0;
 
-	display($dbg_draw,0,"drawItem($ypos) sel($selected) $type $fn");
+	display($dbg_draw,0,"drawChange($ypos) sel($selected) $type $fn");
 
-	my $staged = $this->{name} eq 'staged';
+	my $staged = $this->{is_staged};
 	my $bm_color =
 		$type eq 'M' ? $staged ? $color_green : $color_blue :
 		$type eq 'D' ? $color_red :
@@ -471,14 +363,14 @@ sub drawItem
 # See comments below for details.
 #
 # REFRESH
-#    We either refresh a single item, and the tree if it is visible
+#    We either refresh a single item, and the repo if it is visible
 #    during a single item toggle, or we refresh the whole window.
 #    during any complicated actions.
 
-sub notifyTreeSelected
+sub notifyRepoSelected
 {
-	my ($this,$tree) = @_;
-	$this->{parent}->{parent}->notifyContent({ repo=>$tree->{repo} });
+	my ($this,$repo) = @_;
+	$this->{parent}->{parent}->notifyContent({ repo=>$repo });
 }
 
 
@@ -486,7 +378,7 @@ sub onLeftDown
 {
 	my ($this,$event) = @_;
 
-	return if !(keys %{$this->{trees}});
+	# return if !(keys %{$this->{repos}});
 		# nothing in the window
 
 	my $cp = $event->GetPosition();
@@ -507,48 +399,48 @@ sub onLeftDown
 
 	display($dbg_sel,0,"onLeftDown($ux,$uy) ctrl($ctrl_key) shift($shift_key)");
 
-	# find the tree and/or item for unscrolled position $x,$y
+	# find the repo and/or item for unscrolled position $x,$y
 
 	my $ypos = 0;
-	$this->{found_tree} = '';
+	$this->{found_repo} = '';
 	$this->{found_item} = '';
-	$this->{tree_uy} = 0;
+	$this->{repo_uy} = 0;
 	$this->{item_uy} = 0;
 
-	my $trees = $this->{trees};
+	my $repos = $this->{repos};
 
-	for my $id (sort keys %$trees)
+	for my $id (sort keys %$repos)
 	{
-		my $tree = $trees->{$id};
-		my $items = $tree->{items};
-		my $tree_height = $tree->{expanded} ?
-			(scalar(keys %$items) + 1) * $ROW_HEIGHT : $ROW_HEIGHT;
+		my $repo = $repos->{$id};
+		my $items = $repo->{$this->{key}};
+		my $num_items = scalar(keys %$items);
+		my $repo_height = $repo->{expanded} ?
+			($num_items + 1) * $ROW_HEIGHT : $ROW_HEIGHT;
 
-		if ($uy >= $ypos && $uy <= $ypos + $tree_height-1)
+		if ($uy >= $ypos && $uy <= $ypos + $repo_height-1)
 		{
-			$this->{found_tree} = $tree;
-			$this->{tree_uy} = $ypos;
-			display($dbg_sel,1,"foundTree($id) at ypos($ypos) with height($tree_height)");
+			$this->{found_repo} = $repo;
+			$this->{repo_uy} = $ypos;
+			display($dbg_sel,1,"foundRepo($id) at ypos($ypos) with height($repo_height)");
 			if ($uy >= $ypos + $ROW_HEIGHT)
 			{
-				my $items = $tree->{items};
-				my $off = $uy - $ypos - $ROW_HEIGHT;		# mouse y offset within tree's items
-				my $idx = int($off / $ROW_HEIGHT);			# index into tree's items
-				my $found_fn = (sort keys %$items)[$idx];	# found filename
-				$this->{found_item} = $items->{$found_fn};	# found item
+				my $off = $uy - $ypos - $ROW_HEIGHT;		# mouse y offset within repo's items
+				my $idx = int($off / $ROW_HEIGHT);			# index into repo's items
+				my $fn = (sort keys %$items)[$idx];			# found filename
+				$this->{found_item} = $items->{$fn};		# found item
 
 				$this->{item_uy} = $ypos + $ROW_HEIGHT + $idx * $ROW_HEIGHT;
 					# save off the item position for optimized refresh
-					# it is $idx+1 cuz the 0th item is below the tree header
+					# it is $idx+1 cuz the 0th item is below the repo header
 
-				display($dbg_sel,1,"foundItem($found_fn,$this->{found_item}->{type}) at off($off) idx($idx) item_uy($this->{item_uy})");
+				display($dbg_sel,1,"foundItem($fn,$this->{found_item}->{type}) at off($off) idx($idx) item_uy($this->{item_uy})");
 				last;
 			}
 			last;
 		}
 		else
 		{
-			$ypos += $tree_height;
+			$ypos += $repo_height;
 		}
 	}
 
@@ -567,8 +459,8 @@ sub onLeftDown
 	#
 	# NOTE that we allow a SHIFT with an anchor to end on a repo or blank
 	#	space at the end of window and treat it as a selection command
-	#   from the anchor to the selected tree/item (or the last visible
-	#   tree/item if in the white space).
+	#   from the anchor to the selected repo/item (or the last visible
+	#   repo/item if in the white space).
 
 	$this->{refresh_rect} = Wx::Rect->new(-1,-1,$win_width,$win_height);
 		# in scrolled coordinates
@@ -581,7 +473,7 @@ sub onLeftDown
 	}
 	elsif ($ctrl_key && !$this->{found_item})
 	{
-		# ctrl key currently does nothing if clicked on a repo tree
+		# ctrl key currently does nothing if clicked on a repo
 	}
 	elsif ($this->{found_item})
 	{
@@ -590,9 +482,9 @@ sub onLeftDown
 			if ($ux >= $ICON_LEFT)
 			{
 				my $fn = $this->{found_item}->{fn};
-				my $id = $this->{found_tree}->{id};
-				my $sel_tree = $this->{selection}->{$id};
-				my $selected = $sel_tree && $sel_tree->{$fn};
+				my $id = $this->{found_repo}->{id};
+				my $sel_repo = $this->{selection}->{$id};
+				my $selected = $sel_repo && $sel_repo->{$fn};
 				my $how = $selected ?
 					$ACTION_DO_SELECTED :
 					$ACTION_DO_SINGLE_FILE;
@@ -607,27 +499,26 @@ sub onLeftDown
 		{
 			if (!$shift_key && !$ctrl_key)
 			{
-
 				$this->{refresh_rect} = $this->{win_srect} 	# refresh whole window
-					if $this->deleteSectionsExcept();       # if this wasn't already the only selection
+					if $this->deleteSelectionsExcept();       # if this wasn't already the only selection
 			}
 
 			$this->toggleSelection();
 		}
 	}
-	elsif ($this->{found_tree})
+	elsif ($this->{found_repo})
 	{
 		if ($ux <= $TOGGLE_RIGHT)
 		{
-			$this->{found_tree}->{expanded} = !$this->{found_tree}->{expanded};
+			$this->{found_repo}->{expanded} = !$this->{found_repo}->{expanded};
 			$this->{refresh_rect} = $this->{win_srect}; 	# refresh whole window
 		}
 		elsif ($ux <= $ICON_RIGHT)
 		{
 			if ($ux >= $ICON_LEFT)
 			{
-				my $tree = $this->{found_tree};
-				my $id = $tree->{id};
+				my $repo = $this->{found_repo};
+				my $id = $repo->{id};
 				display($dbg_actions,0,"ACTION_DO_REPO");
 				$this->doAction($ACTION_DO_REPO)
 					if $this->{selection}->{$id};
@@ -643,8 +534,8 @@ sub onLeftDown
 		$this->RefreshRect($this->{refresh_rect})
 	}
 
-	$this->notifyTreeSelected($this->{found_tree})
-		if $this->{found_tree} && !$this->{found_item};
+	$this->notifyRepoSelected($this->{found_repo})
+		if $this->{found_repo} && !$this->{found_item};
 
 	$event->Skip();
 }
@@ -654,54 +545,54 @@ sub addShiftSelection
 {
 	my ($this) = @_;
 
-	my $found_tree  = $this->{found_tree};
+	my $found_repo  = $this->{found_repo};
 	my $found_item  = $this->{found_item};
 	my $anchor_item = $this->{anchor};
 	my $anchor_fn   = $anchor_item->{fn};
-	my $anchor_tree = $anchor_item->{tree};
-	my $anchor_id   = $anchor_tree->{id};
+	my $anchor_repo = $anchor_item->{repo};
+	my $anchor_id   = $anchor_repo->{id};
 
 	display($dbg_sel,0,"addShiftSelection anchor($anchor_id,$anchor_fn) found(".
-		($found_tree?$found_tree->{id}:'').",".
+		($found_repo?$found_repo->{id}:'').",".
 		($found_item?$found_item->{fn}:'').")");
 
-	my $first_tree = $anchor_tree;
+	my $first_repo = $anchor_repo;
 	my $first_item = $anchor_item;
-	my $last_tree;
+	my $last_repo;
 	my $last_item;
 
-	# set the first and last items if a tree or item was found
+	# set the first and last items if a repo or item was found
 
 	my $stop_on_last = 0;
 
-	if ($found_tree)
+	if ($found_repo)
 	{
 		# we determine the direction based on comparing the ids
 		# if going up and no item, then the whole repo was selected
 		# but its the opossite going down.
 
-		my $found_id = $found_tree->{id};
+		my $found_id = $found_repo->{id};
 
 		if ($found_id lt $anchor_id)
 		{
-			# going up, will include all items in the found tree
+			# going up, will include all items in the found repo
 			# if no item was specified.
 			display($dbg_sel,2,"found_id($found_id) lt anchor_id($anchor_id)");
-			$first_tree = $found_tree;
+			$first_repo = $found_repo;
 			$found_item = $found_item;
-			$last_tree = $anchor_tree;
+			$last_repo = $anchor_repo;
 			$last_item = $anchor_item;
 		}
 		elsif ($found_id gt $anchor_id)
 		{
-			# going down will STOP on the last tree if no item
+			# going down will STOP on the last repo if no item
 			display($dbg_sel,2,"found_id($found_id) gt anchor_id($anchor_id)");
-			$last_tree = $found_tree;
+			$last_repo = $found_repo;
 			$last_item = $found_item;
 			$stop_on_last = 1 if !$found_item;
 		}
 
-		# within the same tree
+		# within the same repo
 
 		elsif ($found_item)
 		{
@@ -709,15 +600,15 @@ sub addShiftSelection
 			if ($found_fn lt $anchor_fn)
 			{
 				display($dbg_sel,2,"found_fn($found_fn) lt anchor_fn($anchor_fn)");
-				$first_tree = $found_tree;
+				$first_repo = $found_repo;
 				$first_item = $found_item;
-				$last_tree = $anchor_tree;
+				$last_repo = $anchor_repo;
 				$last_item = $anchor_item;
 			}
 			elsif ($found_fn gt $anchor_fn)
 			{
 				display($dbg_sel,2,"found_fn($found_fn) gt anchor_fn($anchor_fn)");
-				$last_tree = $found_tree;
+				$last_repo = $found_repo;
 				$last_item = $found_item;
 			}
 			else
@@ -728,7 +619,7 @@ sub addShiftSelection
 		}
 	}
 
-	# else its (!$found_tree && !$found_item) so
+	# else its (!$found_repo && !$found_item) so
 	# we elect all items from anchor to end
 	# by using initial assignments and null ends
 	# since they clicked PAST the last repo
@@ -736,19 +627,19 @@ sub addShiftSelection
 	# LOOP THROUGH ALL TREES
 
 	my $any_changes = 0;
-	my $trees = $this->{trees};
+	my $repos = $this->{repos};
 
-	my $first_id = $first_tree->{id};
+	my $first_id = $first_repo->{id};
 	my $first_fn = $first_item ? $first_item->{fn} : '';
-	my $last_id = $last_tree ? $last_tree->{id} : '';
+	my $last_id = $last_repo ? $last_repo->{id} : '';
 	my $last_fn = $last_item ? $last_item->{fn} : '';
 
 	display($dbg_sel,1,"first($first_id,$first_fn) last($last_id,$last_fn)");
 
-	my @ids = sort keys %$trees;
+	my @ids = sort keys %$repos;
 	my $id = shift @ids;
-	my $tree = $trees->{$id};
-	my $items = $tree->{items};
+	my $repo = $repos->{$id};
+	my $items = $repo->{$this->{key}};
 	my $last = !@ids || $id eq $last_id ? 1 : 0;
 
 	while (1)
@@ -779,17 +670,17 @@ sub addShiftSelection
 					$addit = 1;
 				}
 
-				$any_changes += $this->addShiftSel($tree,$fn)
+				$any_changes += $this->addShiftSel($repo,$fn)
 					if $addit;
 			}
 			last if $last;
 		}
 
-		# next tree
+		# next repo
 
 		$id = shift @ids;
-		$tree = $trees->{$id};
-		$items = $tree->{items};
+		$repo = $repos->{$id};
+		$items = $repo->{$this->{key}};
 		$last = !@ids || $id eq $last_id ? 1 : 0;
 	}
 
@@ -800,24 +691,24 @@ sub addShiftSelection
 
 sub addShiftSel
 {
-	my ($this,$tree,$fn) = @_;
+	my ($this,$repo,$fn) = @_;
 	my $selection = $this->{selection};
-	my $id = $tree->{id};
+	my $id = $repo->{id};
 	display($dbg_sel+1,0,"addShiftSel($id,$fn)");
 
-	my $tree_sel = $selection->{$id};
-	if (!$tree_sel)
+	my $repo_sel = $selection->{$id};
+	if (!$repo_sel)
 	{
-		display($dbg_sel+1,1,"creating new tree_sel");
+		display($dbg_sel+1,1,"creating new repo_sel");
 		$selection->{$id} = { $fn => 1 };
-		$tree->{num_selected}++;	# = 1
+		$repo->{num_selected}++;	# = 1
 		return 1;
 	}
-	elsif (!$tree_sel->{$fn})
+	elsif (!$repo_sel->{$fn})
 	{
-		display($dbg_sel+1,1,"adding to existing tree_sel");
-		$tree_sel->{$fn} = 1;
-		$tree->{num_selected}++;	# = 1
+		display($dbg_sel+1,1,"adding to existing repo_sel");
+		$repo_sel->{$fn} = 1;
+		$repo->{num_selected}++;	# = 1
 		return 1;
 	}
 	else
@@ -829,40 +720,40 @@ sub addShiftSel
 
 
 
-sub deleteSectionsExcept
+sub deleteSelectionsExcept
 {
 	my ($this) = @_;
 	my $selection = $this->{selection};
 	my $num_sels = scalar(keys %$selection);
 
 	my $item = $this->{found_item};
-	my $tree = $item->{tree};
+	my $repo = $item->{repo};
 	my $fn = $item->{fn};
-	my $id = $tree->{id};
+	my $id = $repo->{id};
 
-	my $tree_sel = $this->{selection}->{$id};
-	my $num_tree_sels = $tree_sel ? scalar(keys %$tree_sel) : 0;
-	my $cur_sel = $tree_sel ? $tree_sel->{$fn} : 0;
+	my $repo_sel = $this->{selection}->{$id};
+	my $num_repo_sels = $repo_sel ? scalar(keys %$repo_sel) : 0;
+	my $cur_sel = $repo_sel ? $repo_sel->{$fn} : 0;
 	$cur_sel ||= 0;
 
-	display($dbg_sel,0,"deleteSectionsExcept($id,$fn) num_sels() num_tree_sels($num_tree_sels) cur_sel($cur_sel)");
+	display($dbg_sel,0,"deleteSectionsExcept($id,$fn) num_sels() num_repo_sels($num_repo_sels) cur_sel($cur_sel)");
 
 	return 0 if !$num_sels;
-	return 0 if $cur_sel && $num_sels == 1 && $num_tree_sels == 1;
+	return 0 if $cur_sel && $num_sels == 1 && $num_repo_sels == 1;
 
 	$this->{selection} = {};
 
-	my $trees = $this->{trees};
-	for my $clear_id (keys %$trees)
+	my $repos = $this->{repos};
+	for my $clear_id (keys %$repos)
 	{
-		$trees->{$clear_id}->{num_selected} = 0;
+		$repos->{$clear_id}->{num_selected} = 0;
 	}
 
 	if ($cur_sel)
 	{
-		$tree_sel = $this->{selection}->{$id} = {};
-		$tree_sel->{$fn} = 1;
-		$tree->{num_selected} = 1;
+		$repo_sel = $this->{selection}->{$id} = {};
+		$repo_sel->{$fn} = 1;
+		$repo->{num_selected} = 1;
 	}
 	return 1;
 }
@@ -871,10 +762,10 @@ sub deleteSectionsExcept
 
 sub notifyItemSelected
 {
-	my ($this,$tree,$item) = @_;
-	$tree->{num_selected}++;
+	my ($this,$repo,$item) = @_;
+	$repo->{num_selected}++;
 	$this->{anchor} = $item;
-	my $filename = $tree->{repo}->{path}."/".$item->{fn};
+	my $filename = $repo->{path}."/".$item->{fn};
 	$this->{parent}->{parent}->notifyContent({ filename=>$filename });
 }
 
@@ -886,38 +777,38 @@ sub toggleSelection
 	my $item = $this->{found_item};
 	my $fn = $item->{fn};
 
-	my $tree = $item->{tree};
-	my $id = $tree->{id};
+	my $repo = $item->{repo};
+	my $id = $repo->{id};
 	my $selection = $this->{selection};
-	my $tree_sel = $selection->{$id};
-	my $selected = $tree_sel ? $tree_sel->{$fn} : 0;
+	my $repo_sel = $selection->{$id};
+	my $selected = $repo_sel ? $repo_sel->{$fn} : 0;
 	$selected |= 0;
 
 	display($dbg_sel,0,"toggleSelection($id,$fn) selected=$selected");
 
 	if ($selected)	# unselecting
 	{
-		$tree->{num_selected}--;
-		if (!$tree->{num_selected})
+		$repo->{num_selected}--;
+		if (!$repo->{num_selected})
 		{
 			delete $selection->{$id};
 		}
 		else
 		{
-			delete $tree_sel->{$fn};
+			delete $repo_sel->{$fn};
 		}
 		$this->{anchor} = '';
 	}
-	elsif (!$tree_sel)
+	elsif (!$repo_sel)
 	{
-		$tree_sel = { $fn => 1 };
-		$selection->{$id} = $tree_sel;
-		$this->notifyItemSelected($tree,$item);
+		$repo_sel = { $fn => 1 };
+		$selection->{$id} = $repo_sel;
+		$this->notifyItemSelected($repo,$item);
 	}
 	else
 	{
-		$tree_sel->{$fn} = 1;
-		$this->notifyItemSelected($tree,$item);
+		$repo_sel->{$fn} = 1;
+		$this->notifyItemSelected($repo,$item);
 	}
 
 	# optimized refresh if whole screen not already done
@@ -926,16 +817,16 @@ sub toggleSelection
 	if ($refresh_rect->x < 0)
 	{
 		my $width = $this->{win_srect}->width;
-		my ($unused1,$tree_sy) = $this->CalcScrolledPosition(0,$this->{tree_uy});
+		my ($unused1,$repo_sy) = $this->CalcScrolledPosition(0,$this->{repo_uy});
 		my ($unused2,$item_sy) = $this->CalcScrolledPosition(0,$this->{item_uy});
-		my $tree_srect = Wx::Rect->new(0,$tree_sy,$width,$ROW_HEIGHT);
+		my $repo_srect = Wx::Rect->new(0,$repo_sy,$width,$ROW_HEIGHT);
 		my $item_srect = Wx::Rect->new(0,$item_sy,$width,$ROW_HEIGHT);
 
 		display_rect($dbg_sel,0,"refresh_rect",$item_srect);
 
 		$this->{refresh_rect} = $item_srect;		# refresh the item
-		$this->RefreshRect($tree_srect)				# and the tree if it is visible
-			if $this->{win_srect}->Intersects($tree_srect);
+		$this->RefreshRect($repo_srect)				# and the repo if it is visible
+			if $this->{win_srect}->Intersects($repo_srect);
 	}
 }
 
@@ -944,23 +835,23 @@ sub toggleSelection
 #-----------------------------------------
 # doAction
 #-----------------------------------------
-# my $ACTION_DO_ALL = 0;				# do all files in all trees
+# my $ACTION_DO_ALL = 0;				# do all files in all repos
 #	  optimized to call gitIndex() with no paths
 # my $ACTION_DO_REPO = 1;				# do selected files within repo
 # my $ACTION_DO_SELECTED = 2;			# do all selected files
 # my $ACTION_DO_SINGLE_FILE = 3;		# do a single (unselected) file
 
 
-sub doActionTree
-	# in all cases, the tree's selection is going away
+sub doActionRepo
+	# in all cases, the repo's selection is going away
 {
-	my ($this,$how,$tree) = @_;
-	my $id = $tree->{id};
-	display($dbg_actions,0,"doActionTree($this->{name},$how,$id)");
+	my ($this,$how,$repo) = @_;
+	my $id = $repo->{id};
+	display($dbg_actions,0,"doActionRepo($this->{name},$how,$id)");
 
-	my $tree_sel = $this->{selection}->{$id};
+	my $repo_sel = $this->{selection}->{$id};
 	delete $this->{selection}->{$id};
-	$tree->{num_selected} = 0;
+	$repo->{num_selected} = 0;
 
 	my $doit = 1;						# do all by default
 	my $paths = '';
@@ -969,7 +860,7 @@ sub doActionTree
 	{
 		$doit = 0;
 		$paths = [];
-		for my $fn (sort keys %$tree_sel)
+		for my $fn (sort keys %$repo_sel)
 		{
 			$doit = 1;
 			push @$paths,$fn;
@@ -978,12 +869,12 @@ sub doActionTree
 
 	if ($doit)
 	{
-		my $repo = $tree->{repo};
 		display($dbg_actions,1,"calling gitIndex($this->{is_staged},$paths)");
 		return $repo->gitIndex($this->{is_staged},$paths);
 	}
 	return 0;
 }
+
 
 
 sub doAction
@@ -997,32 +888,44 @@ sub doAction
 
 	if ($how == $ACTION_DO_SINGLE_FILE)
 	{
-		my $tree = $this->{found_tree};
+		my $repo = $this->{found_repo};
 		my $item = $this->{found_item};
-		my $repo = $tree->{repo};
 		my $fn = $item->{fn};
+
+		# getAppFrame()->getMonitor()->suppressPath($repo->{path});
+			# possible optimization for single item action
+
 		$repo->gitIndex($this->{is_staged},[$fn]);
 	}
 	elsif ($how == $ACTION_DO_REPO)
 	{
-		$this->doActionTree($how,$this->{found_tree});
+		$this->doActionRepo($how,$this->{found_repo});
 	}
 	else
 	{
-		my $trees = $this->{trees};
+		my $repos = $this->{repos};
 		my $selection = $this->{selection};
-		for my $id (sort keys %$trees)
+		for my $id (sort keys %$repos)
 		{
 			my $doit = $how == $ACTION_DO_ALL;
 			$doit = 1 if $selection->{$id};	# $ACTION_DO_SELECTED
-			return if $doit && !$this->doActionTree($how,$trees->{$id});
+			return if $doit && !$this->doActionRepo($how,$repos->{$id});
 
 			# we currently wait for the callback to delete
-			# unused trees, but we know they went away
+			# unused repos, but we know they went away
 			# if $ACTION_DO_ALL and or we could determine
 			# if all items were selected for $ACTION_DO_SELECTED
 		}
 	}
+
+	my $win = $this->{parent}->{parent};
+	my $other = $this->{is_staged} ?
+		$win->{unstaged}->{list_ctrl} :
+		$win->{staged}->{list_ctrl};
+
+	# will be notified by callback
+	# $this->updateRepos();
+	# $other->updateRepos();
 }
 
 

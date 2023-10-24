@@ -113,6 +113,16 @@ my $push_cb_repo;
 # ctor
 #---------------------------
 
+sub change
+{
+	my ($this,$fn,$type) = @_;
+	my $item = shared_clone({
+		repo => $this,
+		fn	 => $fn,
+		type => $type });
+	return $item;
+}
+
 sub new
 {
 	my ($class, $num, $section, $path, $branch) = @_;
@@ -124,9 +134,13 @@ sub new
 		section => $section,
 		branch	=> $branch || 'master',
 
+		# for listCtrl
+
+		expanded => 1,
+		num_selected => 0,
+
 		private  => 0,						# if PRIVATE in file
 		forked   => 0,						# if FORKED [optional_blah] in file
-		selected => 0,						# if selected for push, tag
 		parent   => '',						# "Forked from ..." or "Copied from ..."
 		descrip  => '',						# description from github
 		uses 	 => shared_clone([]),		# a list of the repositories this repository USES
@@ -521,18 +535,19 @@ sub getLocalChanges
 				next;
 			}
 
-			my $what =
+			my $type =
 				$flag eq 'new' ? "A" :
 				$flag eq 'modified' ? "M" :
 				$flag eq 'deleted' ? "D" :
 				$flag eq 'renamed' ? "R" : "?";
 
-			display($dbg_chgs,2,"$show: $what $fn")
+			display($dbg_chgs,2,"$show: $type $fn")
 				if $num_changes <= $MAX_SHOW_CHANGES;
-			$new_hash->{$fn} = $what;
+
+			$new_hash->{$fn} = $this->change($fn,$type);
 			$$pbool = 1 if
 				!$old_hash->{$fn} ||
-				$old_hash->{$fn} ne $new_hash->{$fn};
+				$type ne $old_hash->{$fn}->{type};
 		}
 	}
 
@@ -627,14 +642,15 @@ sub getRemoteChanges
 	for my $change (sort @changes)
 	{
 		# next if $change =~ /\*$/;
-		my ($what,$fn) = split("\t",$change);
-		display($dbg_chgs,2,"change($change) remote: $what $fn")
+		my ($type,$fn) = split("\t",$change);
+		display($dbg_chgs,2,"change($change) remote: $type $fn")
 			if $num_changes <= $MAX_SHOW_CHANGES;
 
-		$new_remote_changes->{$fn} = $what;
+		$new_remote_changes->{$fn} = $this->change($fn,$type);
+
 		$remote_changed = 1 if
 			!$remote_changes->{$fn} ||
-			$remote_changes->{$fn} ne $new_remote_changes->{$fn};
+			$type ne $remote_changes->{$fn}->{type};
 	}
 
 	my $changes_changed = $this->assignHashIfChanged('remote_changes',$new_remote_changes,$remote_changed);
@@ -673,11 +689,19 @@ sub getRemoteChanges
 sub gitIndex
 	# git add -A
 {
-	my ($this,$is_staged,$paths) = @_;
+	my ($this,$is_staged,$paths,$move_changes) = @_;
+	$move_changes ||= 0;
+		# if 1, the items will be moved between hashes on index changes,
+		# 	thus effectively suprressing the monitor from seing it as a change.
+		# if 0, they will not be moved, so the monitor will see it and
+		# 	notify the listCtrl of the change.
+		# We want the UI to be notified, but when called as 'Add' from
+		#   git changes with a pending Commit or Push we want the changes
+		#   instantly reflected for possible subsequent commit or push
 
 	my $show = $is_staged ? 'staged' : 'unstaged';
 
-	display($dbg_index,0,"gitIndex($show) paths="._def($paths));
+	display($dbg_index,0,"gitIndex($show) move_changes($move_changes) paths="._def($paths));
 
 	# Create the repo and get the index
 
@@ -696,8 +720,10 @@ sub gitIndex
 		my $staged = $this->{staged_changes};
 		for my $path (@$paths)
 		{
-			my $u_type = $unstaged->{$path} || ' ';
-			my $s_type = $staged->{$path} || ' ';
+			my $uchange = $unstaged->{$path};
+			my $schange = $staged->{$path};
+			my $u_type = $uchange ? $uchange->{type} : ' ';
+			my $s_type = $schange ? $schange->{type} : ' ';
 
 			display($dbg_index,1,"---> u($u_type) s($s_type) $path");
 
@@ -707,15 +733,30 @@ sub gitIndex
 					$index->remove($path) :
 					$index->add($path);
 				$index->write;
+				if ($move_changes)
+				{
+					$staged->{$path} = $uchange;
+					delete $unstaged->{$path};
+				}
 			}
 			elsif ($s_type eq 'A')
 			{
 				$index->remove($path);
 				$index->write;
+				if ($move_changes)
+				{
+					$unstaged->{$path} = $schange;
+					delete $staged->{$path};
+				}
 			}
 			else
 			{
 				return if !$this->unstage($git_repo,$path);
+				if ($move_changes)
+				{
+					$unstaged->{$path} = $schange;
+					delete $staged->{$path};
+				}
 			}
 		}
 	}
@@ -723,28 +764,24 @@ sub gitIndex
 	{
 		$index->add_all({ paths => ['*'] });
 		$index->write;
+		if ($move_changes)
+		{
+			mergeHash($this->{staged_changes},$this->{unstaged_changes});
+			$this->{'staged_changes'} = shared_clone({});
+		}
 	}
 	else					# Remove everything from the index by using unstage(*)
 	{
 		return if !$this->unstage($git_repo,'*');
+		if ($move_changes)
+		{
+			mergeHash($this->{unstaged_changes},$this->{staged_changes});
+			$this->{'unstaged_changes'} = shared_clone({});
+		}
 	}
 
 	# DONE !!
 	# debugIndex($index,"AFTER",$this->{path});
-
-	# in git_changes, which only calls "Add" right now,
-	# we want this to move all unstaged items to the staged hash
-	# in the UI, we reset the hashes to trigger a monitor callback
-
-	if (getAppFrame())
-	{
-		$this->{'staged_changes'} = shared_clone({});
-	}
-	else
-	{
-		mergeHash($this->{staged_changes},$this->{unstaged_changes});
-	}
-	$this->{'unstaged_changes'} = shared_clone({});
 
 	display($dbg_index,0,"gitIndex() returning 1");
 	return 1;
@@ -774,6 +811,8 @@ sub unstage
 
 	return 1;
 }
+
+
 
 
 sub debugIndex
@@ -1070,7 +1109,6 @@ sub toText
 	$text .= $this->textLine('path');
 	$text .= $this->textLine('private');
 	$text .= $this->textLine('forked');
-	$text .= $this->textLine('selected');
 	$text .= $this->textLine('parent');
 	$text .= $this->textLine('descrip');
 

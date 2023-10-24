@@ -102,21 +102,7 @@ sub populate
 	my ($this) = @_;
 	my $key = $this->{is_staged} ? 'staged_changes' : 'unstaged_changes';
 	display($dbg_pop,0,"populate($key)");
-
-	my $list_ctrl = $this->{list_ctrl};
-	$list_ctrl->startUpdate();
-
-	# repos are indicated with a terminating slash
-
-	my $row = 0;
-	my $repo_list = getRepoList();
-	for my $repo (@$repo_list)
-	{
-		my $changes = $repo->{$key};
-		$list_ctrl->updateRepo($repo,$changes) if keys %$changes;
-	}
-
-	$list_ctrl->endUpdate();
+	$this->{list_ctrl}->updateRepos();
     $this->Refresh();
 }
 

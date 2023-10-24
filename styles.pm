@@ -38,6 +38,7 @@ BEGIN
 		$bm_right_arrow
 		$bm_up_arrow
 		$bm_plus
+		$bm_minus
 		$bm_folder
 		$bm_folder_lines
 		$bm_folder_x
@@ -166,20 +167,27 @@ my $icon_up_arrow = [
 	0b000000000,
 	0b000000000, ];
 my $icon_plus = [
-	12,12,
+	12,9,
+	0b000011100000,
+	0b000011100000,
+	0b000011100000,
+	0b011111111110,
+	0b011111111110,
+	0b011111111110,
+	0b000011100000,
+	0b000011100000,
+	0b000011100000 ];
+my $icon_minus = [
+	12,9,
 	0b000000000000,
-	0b000011100000,
-	0b000011100000,
-	0b000011100000,
+	0b000000000000,
 	0b011111111110,
 	0b011111111110,
 	0b011111111110,
-	0b000011100000,
-	0b000011100000,
-	0b000011100000,
-	0b000011100000,
+	0b011111111110,
+	0b000000000000,
+	0b000000000000,
 	0b000000000000 ];
-
 
 
 my $icon_folder = [
@@ -276,6 +284,7 @@ my $icon_folder_question = [
 our $bm_right_arrow 	= myBitMapToWxBitmap($icon_right_arrow);
 our $bm_up_arrow 		= myBitMapToWxBitmap($icon_up_arrow);
 our $bm_plus 			= myBitMapToWxBitmap($icon_plus);
+our $bm_minus 			= myBitMapToWxBitmap($icon_minus);
 our $bm_folder 			= myBitMapToWxBitmap($icon_folder);
 our $bm_folder_lines 	= myBitMapToWxBitmap($icon_folder_lines);
 our $bm_folder_x 		= myBitMapToWxBitmap($icon_folder_x);

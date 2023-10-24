@@ -21,6 +21,8 @@ use base qw(Wx::Window);
 
 
 my $dbg_life = 0;
+my $dbg_notify = 1;
+
 
 BEGIN {
     use Exporter qw( import );
@@ -85,7 +87,7 @@ sub onSize
 sub notifyContent
 {
 	my ($this,$data) = @_;
-	display($dbg_life,0,"commitRight::notifyContent() called");
+	display($dbg_notify,0,"commitRight::notifyContent() called");
 
 	my $repo = $data->{repo};
 	my $filename = $data->{filename};

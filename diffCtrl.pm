@@ -17,7 +17,7 @@ use base qw(Wx::ScrolledWindow);	# qw(Wx::Window);
 
 
 my $dbg_ctrl = 0;
-my $dbg_draw = 0;
+my $dbg_draw = 1;
 
 my $LINE_HEIGHT = 16;
 

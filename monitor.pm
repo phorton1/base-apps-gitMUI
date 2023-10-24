@@ -103,6 +103,15 @@ my $the_callback;
 my %monitors;
 	# NOT SHARED BUT ADDED TO BY THE THREAD!
 
+# Currently unused feature to supress the next callback
+
+my $suppress_path:shared = '';
+sub suppressPath
+{
+	my ($this,$path) = @_;
+	$suppress_path = $path;
+	warning(0,0,"suppressPath($path)");
+}
 
 
 #------------------------------------------------------
@@ -316,8 +325,8 @@ sub run
 					my $parent = $m->{parent};
 					my $report_path = $parent ? $parent->{path} : $m->{path};
 					my $repo = $repo_hash->{$report_path};
-
 					display($dbg_win32,0,"win_notify($path,$report_path)");
+
 					if (!$repo)
 					{
 						error("Could not get repo $repo($report_path)");
@@ -326,7 +335,16 @@ sub run
 					}
 					$rslt = $repo->gitChanges();
 					last if !defined($rslt);
-					&$the_callback({ repo=>$repo }) if $rslt;
+
+					if ($report_path eq $suppress_path)
+					{
+						warning(0,0,"suppressing callback($suppress_path)");
+						$suppress_path = '';
+					}
+					else
+					{
+						&$the_callback({ repo=>$repo }) if $rslt;
+					}
 
 					# ok, this is interesting.
 					# first, i totally space on what happens if a mapped subdir is removed.
