@@ -5,7 +5,6 @@
 package apps::gitUI::pathWindow;
 use strict;
 use warnings;
-use Win32::Process;
 use Wx qw(:everything);
 use Wx::Event qw(
 	EVT_SIZE
@@ -16,6 +15,7 @@ use Pub::Utils;
 use Pub::WX::Window;
 use apps::gitUI::repos;
 use apps::gitUI::styles;
+use apps::gitUI::utils;
 use apps::gitUI::hyperlink;
 use base qw(Wx::Window Pub::WX::Window);
 
@@ -99,20 +99,7 @@ sub onLink
 	my $this = $ctrl->GetParent();
 	my $path = repoPathFromId($id);
 	display($dbg_win,0,"onLink($id) = path-$path");
-	chdir($path);
-
-	# This, not system(), is how I figured out how to start
-	# git gui without opening an underlying DOS box.
-
-	my $p;
-	Win32::Process::Create(
-		$p,
-		"C:\\Windows\\System32\\cmd.exe",
-		"/C git gui",
-		0,
-		CREATE_NO_WINDOW |
-		NORMAL_PRIORITY_CLASS,
-		$path );
+	openGitGUI($path);
 }
 
 

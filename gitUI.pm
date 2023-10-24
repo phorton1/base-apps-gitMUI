@@ -17,7 +17,7 @@ use Pub::WX::Dialogs;
 use apps::gitUI::repo;
 use apps::gitUI::repos;
 use apps::gitUI::github;
-use apps::gitUI::styles; 	# for $THREAD_EVENT!!
+use apps::gitUI::utils;
 use apps::gitUI::Resources;
 use apps::gitUI::command;
 use apps::gitUI::monitor;

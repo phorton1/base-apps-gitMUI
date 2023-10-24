@@ -25,15 +25,11 @@
 #           if item is not selected, it acts on the
 #             given item without otherwise changing
 #             the selection set.
-#  short clicking on entry will
+#  left clicking on entry will
 #	 repo: shows repo details
 #    item: toggle toggle selection state
 #          see comments on onLeftDown() for gruesome
 #          details of SHIFT and CTRL handling
-#  TODO: context menu for right clicks
-#    repo: open gitGUI
-#    file: call the shell except for certain overidden types
-#		.pm, .md -> komodo
 
 
 
@@ -47,21 +43,25 @@ use Wx qw(:everything);
 use Wx::Event qw(
 	EVT_PAINT
 	EVT_LEFT_DOWN
-	EVT_LEFT_DCLICK );
+	EVT_LEFT_DCLICK
+	EVT_RIGHT_DOWN
+	EVT_MENU_RANGE );
 use apps::gitUI::repos;
 use apps::gitUI::styles;
+use apps::gitUI::utils;
 use Pub::Utils;
+use Pub::WX::Dialogs;
 use base qw(Wx::ScrolledWindow);	# qw(Wx::Window);
 
 
-my $dbg_ctrl = 1;
-my $dbg_pop = 1;
-my $dbg_draw = 1;
-my $dbg_sel = 1;
+my $dbg_ctrl = 1;		# life cycle
+my $dbg_pop = 1;		# update (populate)
+my $dbg_draw = 1;		# drawing
+my $dbg_sel = 1;		# selection
 	# 0  == everything except
 	# -1 == addShiftSel() adding of individual shift-sel items
-my $dbg_actions = 0;
-
+my $dbg_actions = 0;	# actions on index
+my $dbg_cmd = 0;		# context menu and commands
 
 
 my $ROW_HEIGHT  = 18;
@@ -70,6 +70,20 @@ my $ACTION_DO_ALL = 0;				# do all files in all repos
 my $ACTION_DO_REPO = 1;				# do selected files within repo
 my $ACTION_DO_SELECTED = 2;			# do all selected files
 my $ACTION_DO_SINGLE_FILE = 3;		# do a single (unselected) file
+
+
+my ($ID_OPEN_GITUI,
+	$ID_REVERT_CHANGES,
+	$ID_OPEN_IN_KOMODO,
+	$ID_OPEN_IN_SHELL,
+	$ID_OPEN_IN_NOTEPAD ) = (9000..9999);
+my $menu_desc = {
+	$ID_OPEN_GITUI		=> ['GitGUI',	'Open the repository in origian GitGUI' ],
+	$ID_REVERT_CHANGES  => ['Revert',	'Revert changes to one or more items' ],
+	$ID_OPEN_IN_KOMODO	=> ['Komodo',	'Open one or more items in Komodo Editor' ],
+	$ID_OPEN_IN_SHELL   => ['Shell',	'Open single item in the Windows Shell' ],
+	$ID_OPEN_IN_NOTEPAD => ['Notepad',	'Open single item in the Windows Notepad' ],
+};
 
 
 BEGIN {
@@ -115,6 +129,8 @@ sub new
 	EVT_LEFT_DCLICK($this,\&onLeftDown);
 		# We have to register DCLICK or else we 'lose'
 		# mouse down events.
+	EVT_RIGHT_DOWN($this,\&onRightDown);
+	EVT_MENU_RANGE($this, $ID_OPEN_GITUI, $ID_OPEN_IN_NOTEPAD, \&onCommand);
 
 	return $this;
 }
@@ -136,6 +152,13 @@ sub getDataForIniFile
 }
 
 
+sub isSelected
+{
+	my ($this,$id,$fn) = @_;
+	my $sel_repo = $this->{selection}->{$id};
+	my $selected = $sel_repo && $sel_repo->{$fn} ? 1 : 0;
+	return $selected;
+}
 
 
 #-----------------------------------------------
@@ -311,9 +334,7 @@ sub drawItem
 	my $type = $item->{type};
 	my $repo = $item->{repo};
 	my $id = $repo->{id};
-	my $repo_sel = $this->{selection}->{$id};
-	my $selected = $repo_sel ? $repo_sel->{$fn} : 0;
-	$selected ||= 0;
+	my $selected = $this->isSelected($id,$fn);
 
 	display($dbg_draw,0,"drawChange($ypos) sel($selected) $type $fn");
 
@@ -367,37 +388,10 @@ sub drawItem
 #    during a single item toggle, or we refresh the whole window.
 #    during any complicated actions.
 
-sub notifyRepoSelected
+
+sub findClickItem
 {
-	my ($this,$repo) = @_;
-	$this->{parent}->{parent}->notifyContent({ repo=>$repo });
-}
-
-
-sub onLeftDown
-{
-	my ($this,$event) = @_;
-
-	# return if !(keys %{$this->{repos}});
-		# nothing in the window
-
-	my $cp = $event->GetPosition();
-	my ($sx,$sy) = ($cp->x,$cp->y);
-	my ($ux,$uy) = $this->CalcUnscrolledPosition($sx,$sy);
-
-	my $sz = $this->GetSize();
-	my $win_width = $sz->GetWidth();
-	my $win_height = $sz->GetHeight();
-	$this->{win_srect} = Wx::Rect->new(0,0,$win_width,$win_height);
-
-	my $VK_SHIFT = 0x10;
-	my $VK_CONTROL = 0x11;
-	my $anchor = $this->{anchor};
-	my $selection = $this->{selection};
-	my $shift_key = Win32::GUI::GetAsyncKeyState($VK_SHIFT)?1:0;
-	my $ctrl_key = Win32::GUI::GetAsyncKeyState($VK_CONTROL)?1:0;
-
-	display($dbg_sel,0,"onLeftDown($ux,$uy) ctrl($ctrl_key) shift($shift_key)");
+	my ($this,$ux,$uy) = @_;
 
 	# find the repo and/or item for unscrolled position $x,$y
 
@@ -408,7 +402,6 @@ sub onLeftDown
 	$this->{item_uy} = 0;
 
 	my $repos = $this->{repos};
-
 	for my $id (sort keys %$repos)
 	{
 		my $repo = $repos->{$id};
@@ -443,6 +436,35 @@ sub onLeftDown
 			$ypos += $repo_height;
 		}
 	}
+}
+
+
+
+sub onLeftDown
+{
+	my ($this,$event) = @_;
+
+	my $cp = $event->GetPosition();
+	my ($sx,$sy) = ($cp->x,$cp->y);
+	my ($ux,$uy) = $this->CalcUnscrolledPosition($sx,$sy);
+
+	my $sz = $this->GetSize();
+	my $win_width = $sz->GetWidth();
+	my $win_height = $sz->GetHeight();
+	$this->{win_srect} = Wx::Rect->new(0,0,$win_width,$win_height);
+
+	my $VK_SHIFT = 0x10;
+	my $VK_CONTROL = 0x11;
+	my $anchor = $this->{anchor};
+	my $selection = $this->{selection};
+	my $shift_key = Win32::GUI::GetAsyncKeyState($VK_SHIFT)?1:0;
+	my $ctrl_key = Win32::GUI::GetAsyncKeyState($VK_CONTROL)?1:0;
+
+	display($dbg_sel,0,"onLeftDown($ux,$uy) ctrl($ctrl_key) shift($shift_key)");
+
+	# find the repo and/or item for unscrolled position $x,$y
+
+	$this->findClickItem($ux,$uy);
 
 	# gitGUI always has an item selected and remembers the last item
 	#	actually selected between reboots
@@ -483,8 +505,7 @@ sub onLeftDown
 			{
 				my $fn = $this->{found_item}->{fn};
 				my $id = $this->{found_repo}->{id};
-				my $sel_repo = $this->{selection}->{$id};
-				my $selected = $sel_repo && $sel_repo->{$fn};
+				my $selected = $this->isSelected($id,$fn);
 				my $how = $selected ?
 					$ACTION_DO_SELECTED :
 					$ACTION_DO_SINGLE_FILE;
@@ -539,6 +560,14 @@ sub onLeftDown
 
 	$event->Skip();
 }
+
+
+sub notifyRepoSelected
+{
+	my ($this,$repo) = @_;
+	$this->{parent}->{parent}->notifyContent({ repo=>$repo });
+}
+
 
 
 sub addShiftSelection
@@ -759,7 +788,6 @@ sub deleteSelectionsExcept
 }
 
 
-
 sub notifyItemSelected
 {
 	my ($this,$repo,$item) = @_;
@@ -829,7 +857,6 @@ sub toggleSelection
 			if $this->{win_srect}->Intersects($repo_srect);
 	}
 }
-
 
 
 #-----------------------------------------
@@ -927,6 +954,181 @@ sub doAction
 	# $this->updateRepos();
 	# $other->updateRepos();
 }
+
+
+#---------------------------------------------
+# context menu
+#---------------------------------------------
+# I build a custom menu that only shows the
+# allowed commands depending on the context.
+#
+# We can also open repos in other as yet created windows:
+#
+#		Dependencies,
+#		Doc Analysis,
+#		etc
+#
+# Items can be opened in komodo, the shell, or the notepad.
+# Only the clicked item is opned in the shell or notepad,
+# but if they click on a selection all selected items are opend in komodo,
+# and it is up to the user to not open multiple files of the
+
+
+
+sub onRightDown
+{
+	my ($this,$event) = @_;
+	my $cp = $event->GetPosition();
+	my ($sx,$sy) = ($cp->x,$cp->y);
+	my ($ux,$uy) = $this->CalcUnscrolledPosition($sx,$sy);
+	display($dbg_cmd,0,"onRightDown($ux,$uy)");
+
+	$this->findClickItem($ux,$uy);
+	my $repo = $this->{found_repo};
+	return if !$repo;
+	my $item = $this->{found_item};
+	display($dbg_cmd,1,"buildMenu repo($repo->{id}) fn(".($item?$item->{fn}:'').")");
+
+	my $any = 0;
+	my $menu = Wx::Menu->new();
+	foreach my $id ($ID_OPEN_GITUI..$ID_OPEN_IN_NOTEPAD)
+	{
+		my $deac = $menu_desc->{$id};
+		my ($text,$hint) = @$deac;
+		my $addit = $id == $ID_OPEN_GITUI ? !$item : $item;
+		$addit = 0 if $id == $ID_REVERT_CHANGES && $this->{is_staged};
+		if ($addit)
+		{
+			$any = 1;
+			$menu->Append($id,$text,$hint,wxITEM_NORMAL);
+			$menu->AppendSeparator() if $id == $ID_REVERT_CHANGES;
+		}
+	}
+	$this->PopupMenu($menu,$cp) if $any;
+}
+
+
+
+sub onCommand
+{
+	my ($this,$event) = @_;
+	my $command_id = $event->GetId();
+
+	my $repo = $this->{found_repo};
+	my $id = $repo->{id};
+	my $item = $this->{found_item};
+	my $fn = $item ? $item->{fn} : '';
+	my $selection = $this->{selection};
+	my $repo_sel = $this->{selection}->{$id};
+	my $selected = $repo_sel ? $repo_sel->{$fn} : 0;
+	$selected ||= 0;
+	my $multiple = $selected ? scalar(keys %$repo_sel) > 1 : 0;
+
+	display($dbg_cmd,0,"onCommand($command_id) repo($id) fn($fn) selected($selected) multiple($multiple)");
+
+	if ($command_id == $ID_OPEN_GITUI)
+	{
+		openGitGUI($repo->{path});
+	}
+	elsif ($command_id == $ID_OPEN_IN_SHELL)
+	{
+		chdir $repo->{path};
+		system(1,"\"$repo->{path}/$fn\"");
+	}
+	elsif ($command_id == $ID_OPEN_IN_NOTEPAD)
+	{
+		system(1,"notepad \"$repo->{path}/$fn\"");
+	}
+	elsif ($command_id == $ID_OPEN_IN_KOMODO)
+	{
+		my $filenames = [];
+		if (!$multiple)
+		{
+			my $path = $repo->{path};
+			push @$filenames,"\"$path/$fn\"";;
+		}
+		else
+		{
+			for my $id (sort keys %$selection)
+			{
+				my $repo = $this->{repos}->{$id};
+				my $path = $repo->{path};
+				my $repo_sel = $this->{selection}->{$id};
+				for my $fn (sort keys %$repo_sel)
+				{
+					push @$filenames,"\"$path/$fn\"";;
+				}
+			}
+		}
+		my $komodo = "\"C:\\Program Files (x86)\\ActiveState Komodo Edit 8\\komodo.exe\"";
+		my $command = $komodo." ".join(" ",@$filenames);
+		display($dbg_cmd,1,"calling '$command'");
+		system(1,$command);
+	}
+
+	#-----------------------
+	# revert
+	#-----------------------
+
+	elsif ($command_id == $ID_REVERT_CHANGES)
+	{
+		if (!$multiple)
+		{
+			my $path = $repo->{path};
+			my $filename = "$path/$fn";
+			my $ok = $item->{type} eq 'A' ?
+				yesNoDialog($this,
+					"Do you want to delete the untracked file\n'$filename' ??",
+					"Revert changes to single file") :
+				yesNoDialog($this,
+					"Revert changes to\n'$filename' ?",
+					"Revert changes to single file");
+			$repo->gitRevert([ $fn ]);
+		}
+		else
+		{
+			# first pass to ask questions
+
+			my $count_repos = 0;
+			my $count_files = 0;
+			my $count_deletes = 0;
+			for my $id (sort keys %$selection)
+			{
+				$count_repos++;
+				my $repo = $this->{repos}->{$id};
+				my $repo_sel = $this->{selection}->{$id};
+				for my $fn (keys %$repo_sel)
+				{
+					$count_files++;
+					my $item = $repo->{unstaged_changes}->{$fn};
+					$count_deletes++ if $item->{type} eq 'A';
+				}
+			}
+			my $ok = yesNoDialog($this,
+				"Revert changes to $count_files files in $count_repos repos ?",
+				"Revert multiple changes");
+			$ok &&= yesNoDialog($this,
+				"Do you want to delete $count_deletes untracked files ???",
+				"Delete untracked files?") if $count_deletes;
+			return if !$ok;
+
+			# second pass to actually do it
+
+			for my $id (sort keys %$selection)
+			{
+				my $paths = [];
+				my $repo = $this->{repos}->{$id};
+				my $repo_sel = $this->{selection}->{$id};
+				for my $fn (keys %$repo_sel)
+				{
+					push @$paths,$fn;
+				}
+				last if !$repo->gitRevert($paths);
+
+			}	# for each repo with selections
+		}	# if multiple files
+	}	# $ID_REVERT_CHANGES
+}	# onCommand()
 
 
 

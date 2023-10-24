@@ -12,8 +12,6 @@ BEGIN
  	use Exporter qw( import );
 	our @EXPORT = qw(
 
-		$THREAD_EVENT
-
 		$font_normal
         $font_bold
 
@@ -46,11 +44,6 @@ BEGIN
 		$bm_folder_question
 	);
 }
-
-
-
-our $THREAD_EVENT:shared = Wx::NewEventType;
-	# This is a weird place for this, but it is includable by both gitUI & command
 
 our $font_normal = Wx::Font->new(9,wxFONTFAMILY_DEFAULT,wxFONTSTYLE_NORMAL,wxFONTWEIGHT_NORMAL);
 our $font_bold = Wx::Font->new(9,wxFONTFAMILY_DEFAULT,wxFONTSTYLE_NORMAL,wxFONTWEIGHT_BOLD);
@@ -290,6 +283,7 @@ our $bm_folder_lines 	= myBitMapToWxBitmap($icon_folder_lines);
 our $bm_folder_x 		= myBitMapToWxBitmap($icon_folder_x);
 our $bm_folder_check 	= myBitMapToWxBitmap($icon_folder_check);
 our $bm_folder_question = myBitMapToWxBitmap($icon_folder_question);
+
 
 
 

@@ -29,6 +29,7 @@ my $dbg_config = 1;
 
 my $dbg_chgs = 1;
 my $dbg_index = 1;
+my $dbg_revert = 1;
 my $dbg_commit = 0;
 my $dbg_push = 0;
 my $dbg_tag = 0;
@@ -200,7 +201,6 @@ sub clearErrors
 	$this->{notes} = shared_clone([]);
 }
 
-
 sub repoError
 {
 	my ($this,$msg,$call_level) = @_;
@@ -211,7 +211,6 @@ sub repoError
 	push @{$this->{errors}},$msg;
 	return undef;
 }
-
 sub repoWarning
 {
 	my ($this,$dbg_level,$indent,$msg,$call_level) = @_;
@@ -221,8 +220,6 @@ sub repoWarning
 		if !$repo_quiet;
 	push @{$this->{warnings}},$msg;
 }
-
-
 sub repoNote
 {
 	my ($this,$dbg_level,$indent,$msg,$call_level,$color) = @_;
@@ -233,7 +230,6 @@ sub repoNote
 		if !$repo_quiet;
 	push @{$this->{notes}},$msg;
 }
-
 
 
 sub hasChanges
@@ -262,8 +258,6 @@ sub canPush
 	# return 0 if $TEST_JUNK_ONLY && $this->{path} !~ /junk/;
 	return scalar(keys %{$this->{remote_changes}});
 }
-
-
 
 
 #------------------------------------------
@@ -422,6 +416,45 @@ sub checkGitConfig
 
 
 
+#--------------------------------------------
+# utilities for calling Git::Raw stuff
+#--------------------------------------------
+
+sub getTree
+	# get a 'Tree' from a git_repo
+	# $name may be HEAD or origin/$branch
+{
+	my ($this, $git_repo, $name) = @_;
+
+	my $ref = Git::Raw::Reference->lookup($name, $git_repo);
+	return $this->repoError("Could not get ref($name)")
+		if !$ref;
+
+	my $id = $ref->target();
+	return $this->repoError("Could not get id for ref($name)")
+		if !$id;
+
+	# recurse once on $id for HEAD
+
+	if ($name eq 'HEAD')
+	{
+		$id = $id->target();
+		return $this->repoError("Could not get id2 for ref($name)")
+			if !$id;
+	}
+
+	my $commit = Git::Raw::Commit->lookup($git_repo,$id);
+	return $this->repoError("Could not get commit($name) for id($id)")
+		if !$commit;
+
+	my $tree = $commit->tree();
+	return $this->repoError("Could not get tree($name) from commit($commit)")
+		if !$tree;
+
+	return $tree;
+}
+
+
 
 #--------------------------------------------
 # gitChanges
@@ -468,7 +501,6 @@ sub assignHashIfChanged
 	}
 	return 0;
 }
-
 
 
 sub getLocalChanges
@@ -559,44 +591,6 @@ sub getLocalChanges
 }
 
 
-
-
-sub getTree
-	# get a tree for diff/tag
-	# $name may be HEAD or origin/$branch
-{
-	my ($this, $git_repo, $name) = @_;
-
-	my $ref = Git::Raw::Reference->lookup($name, $git_repo);
-	return $this->repoError("Could not get ref($name)")
-		if !$ref;
-
-	my $id = $ref->target();
-	return $this->repoError("Could not get id for ref($name)")
-		if !$id;
-
-	# recurse once on $id for HEAD
-
-	if ($name eq 'HEAD')
-	{
-		$id = $id->target();
-		return $this->repoError("Could not get id2 for ref($name)")
-			if !$id;
-	}
-
-	my $commit = Git::Raw::Commit->lookup($git_repo,$id);
-	return $this->repoError("Could not get commit($name) for id($id)")
-		if !$commit;
-
-	my $tree = $commit->tree();
-	return $this->repoError("Could not get tree($name) from commit($commit)")
-		if !$tree;
-
-	return $tree;
-}
-
-
-
 sub getRemoteChanges
 	# git diff $branch origin/$branch --name-status
 {
@@ -663,27 +657,6 @@ sub getRemoteChanges
 #--------------------------------------------
 # gitIndex
 #--------------------------------------------
-# A bit complicated to explain.
-# We are moving files between 'unstaged' and 'staged' areas.
-# It is optimized if $paths is not given.
-# Here's what we do:
-#
-# If !$paths
-#	unstaged:
-#		$index->add_all('*')
-#	staged:
-#		unstage('*')
-#
-# If $paths:
-#
-# 	unstaged:
-#		A : $index->add()
-#		M : $index->add()
-#       D : $index->remove()
-#	staged:
-#		A : $index->remove()
-#		M : unstage($path)
-#       D : unstage($path)
 
 
 sub gitIndex
@@ -737,16 +710,6 @@ sub gitIndex
 				{
 					$staged->{$path} = $uchange;
 					delete $unstaged->{$path};
-				}
-			}
-			elsif ($s_type eq 'A')
-			{
-				$index->remove($path);
-				$index->write;
-				if ($move_changes)
-				{
-					$unstaged->{$path} = $schange;
-					delete $staged->{$path};
 				}
 			}
 			else
@@ -813,29 +776,87 @@ sub unstage
 }
 
 
+#	sub debugIndex
+#	{
+#		my ($index,$what,$path) = @_;
+#
+#		my $entry_count = $index->entry_count();
+#		my @entry_list = $index->entries();
+#		print "$what($path) entry_count($entry_count)\n";
+#		my $count = 0;
+#		my $entries = {};
+#		for my $entry (@entry_list)
+#		{
+#			my $mode = $entry->mode();
+#			my $path = $entry->path();
+#			my $size = $entry->size();
+#			my $stage = $entry->stage();
+#			$entries->{$path} = $entry;
+#			print "    entry($count) stage($stage) size($size) mode($mode) path=$path\n";
+#			$count++;
+#		}
+#		return $entries;
+#	}
 
 
-sub debugIndex
+
+#------------------------------------------------
+# gitRevert
+#------------------------------------------------
+
+sub gitRevert
+	# Revert changes to unstaged files.
+	# My version always gets a list of paths.
 {
-	my ($index,$what,$path) = @_;
+	my ($this,$paths) = @_;
+	my $num_paths = @$paths;
+	display($dbg_revert,0,"gitRevert($this->{path},$num_paths)");
 
-	my $entry_count = $index->entry_count();
-	my @entry_list = $index->entries();
-	print "$what($path) entry_count($entry_count)\n";
-	my $count = 0;
-	my $entries = {};
-	for my $entry (@entry_list)
-	{
-		my $mode = $entry->mode();
-		my $path = $entry->path();
-		my $size = $entry->size();
-		my $stage = $entry->stage();
-		$entries->{$path} = $entry;
-		print "    entry($count) stage($stage) size($size) mode($mode) path=$path\n";
-		$count++;
-	}
-	return $entries;
+	# get the tree of the HEAD commit
+
+	my $git_repo = Git::Raw::Repository->open($this->{path});
+	return $this->repoError("Could not create git_repo") if !$git_repo;
+
+	my $ref = Git::Raw::Reference->lookup("HEAD", $git_repo);
+	return $this->repoError("Could not get ref(HEAD)")
+		if !$ref;
+	my $ref2 = $ref->target();
+	my $head_id = $ref2->target();
+
+	# the options
+
+	my $opts = {
+		paths => $paths,
+		checkout_strategy => {
+			# none => 1,					# Dry run only
+			force => 1,						# Take any action to make the working directory match the targe
+			# safe_create => 1,				# Recreate missing files.
+			# safe => 1,					# Make only modifications that will not lose changes (to be used in order to simulate "git checkout").
+			# allow_conflicts => 1,			# Apply safe updates even if there are conflicts
+			remove_untracked => 1,			# Remove untracked files from the working directory.
+			remove_ignored => 0,			# Remove ignored files from the working directory.
+			# update_only => 1,				# Only update files that already exist (files won't be created or deleted).
+			# dont_update_index => 1,		# Do not write the updated files' info to the index
+			# dont_write_index => 1,		# Prevent writing of the index upon completion
+			# no_refresh => 1,				# Do not reload the index and git attrs from disk before operations.
+			# skip_unmerged => 1,			# Skip files with unmerged index entries, instead of treating them as conflicts
+			# notify => {					# Flags for what will be passed to notify
+			#	conflict => 1,				# Notifies about conflicting paths.
+			#	dirty => 1,					# Notifies about files that don't need an update but no longer match the baseline.# },
+			#	updated => 1,				# Notification on any file changed
+			#   untracked => 1,				# Notification about untracked files.
+			#	ignored	 => 1,				# Notifies about ignored files.
+			#	all	=> 1					# All of the above
+		},
+		# notify => 						# This callback is called for each file matching one of the "notify" options selected
+		# progres =>						# The callback receives a string containing the path of the file $path, an integer $completed_steps and an integer $total_steps.
+	};
+
+	my $rslt = $git_repo->checkout( $head_id, $opts );
+	display($dbg_revert,0,"gitRevert($num_paths) returning "._def($rslt));
+	return $rslt;
 }
+
 
 
 #--------------------------------------------
