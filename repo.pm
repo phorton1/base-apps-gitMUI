@@ -161,34 +161,6 @@ sub new
 
 
 
-sub getCredentials
-{
-	return 0 if $credential_error;
-	return 1 if $git_user;
-	my $text = getTextFile($CREDENTIAL_FILENAME);
-	if (!$text)
-	{
-		error("No text in $CREDENTIAL_FILENAME");
-		$credential_error = 1;
-		return 0;
-	}
-	($git_user,$git_api_token) = split(/\n/,$text);
-	$git_user ||= '';
-	$git_user =~ s/^\s+|\s$//g;
-	$git_api_token ||= '';
-	$git_api_token =~ s/^\s+|\s$//g;
-
-	if (!$git_user || !$git_api_token)
-	{
-		error("Could not get git_user("._def($git_user).") or git_token("._def($git_api_token).")");
-		$credential_error = 1;
-		return 0;
-	}
-	display($dbg_creds,0,"got git_user($git_user) git_token($git_api_token)");
-	return 1;
-}
-
-
 #----------------------------
 # accessors
 #----------------------------
@@ -426,22 +398,9 @@ sub getTree
 {
 	my ($this, $git_repo, $name) = @_;
 
-	my $ref = Git::Raw::Reference->lookup($name, $git_repo);
-	return $this->repoError("Could not get ref($name)")
-		if !$ref;
-
-	my $id = $ref->target();
+	my $id = Git::Raw::Reference->lookup($name, $git_repo)->peel('commit');
 	return $this->repoError("Could not get id for ref($name)")
 		if !$id;
-
-	# recurse once on $id for HEAD
-
-	if ($name eq 'HEAD')
-	{
-		$id = $id->target();
-		return $this->repoError("Could not get id2 for ref($name)")
-			if !$id;
-	}
 
 	my $commit = Git::Raw::Commit->lookup($git_repo,$id);
 	return $this->repoError("Could not get commit($name) for id($id)")
@@ -527,7 +486,7 @@ sub getLocalChanges
 	display($dbg_chgs,2,"local:  $num_changes changed files")
 		if $num_changes > $MAX_SHOW_CHANGES;
 
-	# I assume that only one flag is given per file
+	# more than one area may given per file
 
 	# flags
 	#  	index_new
@@ -657,7 +616,7 @@ sub getRemoteChanges
 #--------------------------------------------
 # gitIndex
 #--------------------------------------------
-
+# Move things from staged to unstaged and back
 
 sub gitIndex
 	# git add -A
@@ -684,8 +643,9 @@ sub gitIndex
 	my $index = $git_repo->index();
 	return $this->repoError("Could not get index") if !$index;
 
-	# Loop through @$paths or call add_all() or unstage(*)
-	# my $entries = debugIndex($index,"BEFORE",$this->{path});
+	# Move particular $paths.
+	# Call $index->add() or remove() to move from unstaged to staged,
+	# or call $this->unstage() to move from staged to unstaged ...
 
 	if ($paths)
 	{
@@ -723,7 +683,12 @@ sub gitIndex
 			}
 		}
 	}
-	elsif (!$is_staged)		# Add everything to the index (works)
+
+	# Move all items in the repository.
+	# Call $index->add_all() to move from unstaged to staged
+	# or call $this->unstage() to move from staged to unstaged
+
+	elsif (!$is_staged)
 	{
 		$index->add_all({ paths => ['*'] });
 		$index->write;
@@ -752,51 +717,26 @@ sub gitIndex
 
 
 sub unstage
-	# for unstaging M (modified) and D (delete) items, we need
-	# to reset the index for all paths or a particular particular
-	# path back to the HEAD commit. A 'soft' reset changes the
-	# index without changing the working directory!)
+	# for unstaging tems, we reset the index back to the HEAD commit.
+	# A 'mixed' reset changes the index without changing the working
+	# directory.
 {
 	my ($this, $git_repo, $path) = @_;
 	display($dbg_index,0,"unstage($path");
 
 	# get the ID of the HEAD commit
 
-	my $ref = Git::Raw::Reference->lookup("HEAD", $git_repo);
+	my $head_id = Git::Raw::Reference->lookup("HEAD", $git_repo)->peel('commit');
 	return $this->repoError("Could not get ref(HEAD)")
-		if !$ref;
-	my $ref2 = $ref->target();
-	my $head_id = $ref2->target();
+		if !$head_id;
 
 	$git_repo->reset( $head_id, {
-		type => 'mixed',
+		type => 'mixed',			# forced by git if paths are specified
 		paths => [ $path ] });
 
 	return 1;
 }
 
-
-#	sub debugIndex
-#	{
-#		my ($index,$what,$path) = @_;
-#
-#		my $entry_count = $index->entry_count();
-#		my @entry_list = $index->entries();
-#		print "$what($path) entry_count($entry_count)\n";
-#		my $count = 0;
-#		my $entries = {};
-#		for my $entry (@entry_list)
-#		{
-#			my $mode = $entry->mode();
-#			my $path = $entry->path();
-#			my $size = $entry->size();
-#			my $stage = $entry->stage();
-#			$entries->{$path} = $entry;
-#			print "    entry($count) stage($stage) size($size) mode($mode) path=$path\n";
-#			$count++;
-#		}
-#		return $entries;
-#	}
 
 
 
@@ -807,21 +747,18 @@ sub unstage
 sub gitRevert
 	# Revert changes to unstaged files.
 	# My version always gets a list of paths.
+	# Implemented by doing a checkout from the $index
 {
 	my ($this,$paths) = @_;
 	my $num_paths = @$paths;
 	display($dbg_revert,0,"gitRevert($this->{path},$num_paths)");
 
-	# get the tree of the HEAD commit
+	# get the git_repo and its index
 
 	my $git_repo = Git::Raw::Repository->open($this->{path});
 	return $this->repoError("Could not create git_repo") if !$git_repo;
-
-	my $ref = Git::Raw::Reference->lookup("HEAD", $git_repo);
-	return $this->repoError("Could not get ref(HEAD)")
-		if !$ref;
-	my $ref2 = $ref->target();
-	my $head_id = $ref2->target();
+	my $index = $git_repo->index();
+	return $this->repoError("Could not get index") if !$index;
 
 	# the options
 
@@ -852,7 +789,10 @@ sub gitRevert
 		# progres =>						# The callback receives a string containing the path of the file $path, an integer $completed_steps and an integer $total_steps.
 	};
 
-	my $rslt = $git_repo->checkout( $head_id, $opts );
+	# DO THE REVERT
+
+	my $rslt = $index->checkout( $opts );
+
 	display($dbg_revert,0,"gitRevert($num_paths) returning "._def($rslt));
 	return $rslt;
 }
@@ -916,9 +856,73 @@ sub gitCommit
 
 
 
+#--------------------------------------------
+# gitTag
+#--------------------------------------------
+
+sub gitTag
+{
+	my ($this,$tag) = @_;
+	display($dbg_tag,0,"gitTag($tag,$this->{path})");
+	my $git_repo = Git::Raw::Repository->open($this->{path});
+	return $this->repoError("Could not create git_repo") if !$git_repo;
+
+	my $config = $git_repo->config();
+	my $name   = $config->str('user.name');
+	my $email  = $config->str('user.email');
+	display($dbg_tag+1,1,"name($name) email($email)");
+	my $sig = Git::Raw::Signature->new($name, $email, time(), 0);
+
+	my $ref = Git::Raw::Reference->lookup("HEAD", $git_repo);
+	return $this->repoError("Could not get ref(HEAD)")
+		if !$ref;
+	my $ref2 = $ref->target();
+	my $id = $ref2->target();
+	return $this->repoError("Could not get id_remote(HEAD)")
+		if !$id;
+
+	print "ref=$ref id=$id\n";
+
+	my $msg = '';
+	my $rslt = $git_repo->tag($tag, $msg, $sig, $id );
+	display($dbg_tag,0,"gitTag($tag) returning"._def($rslt));
+
+	return $rslt;
+}
+
+
+
 #-------------------------------------------------------
 # gitPush
 #-------------------------------------------------------
+
+sub getCredentials
+{
+	return 0 if $credential_error;
+	return 1 if $git_user;
+	my $text = getTextFile($CREDENTIAL_FILENAME);
+	if (!$text)
+	{
+		error("No text in $CREDENTIAL_FILENAME");
+		$credential_error = 1;
+		return 0;
+	}
+	($git_user,$git_api_token) = split(/\n/,$text);
+	$git_user ||= '';
+	$git_user =~ s/^\s+|\s$//g;
+	$git_api_token ||= '';
+	$git_api_token =~ s/^\s+|\s$//g;
+
+	if (!$git_user || !$git_api_token)
+	{
+		error("Could not get git_user("._def($git_user).") or git_token("._def($git_api_token).")");
+		$credential_error = 1;
+		return 0;
+	}
+	display($dbg_creds,0,"got git_user($git_user) git_token($git_api_token)");
+	return 1;
+}
+
 
 sub cb_credentials
 {
@@ -1053,42 +1057,6 @@ sub gitPush
 	return $rslt;
 }
 
-
-
-
-#--------------------------------------------
-# gitTag
-#--------------------------------------------
-
-sub gitTag
-{
-	my ($this,$tag) = @_;
-	display($dbg_tag,0,"gitTag($tag,$this->{path})");
-	my $git_repo = Git::Raw::Repository->open($this->{path});
-	return $this->repoError("Could not create git_repo") if !$git_repo;
-
-	my $config = $git_repo->config();
-	my $name   = $config->str('user.name');
-	my $email  = $config->str('user.email');
-	display($dbg_tag+1,1,"name($name) email($email)");
-	my $sig = Git::Raw::Signature->new($name, $email, time(), 0);
-
-	my $ref = Git::Raw::Reference->lookup("HEAD", $git_repo);
-	return $this->repoError("Could not get ref(HEAD)")
-		if !$ref;
-	my $ref2 = $ref->target();
-	my $id = $ref2->target();
-	return $this->repoError("Could not get id_remote(HEAD)")
-		if !$id;
-
-	print "ref=$ref id=$id\n";
-
-	my $msg = '';
-	my $rslt = $git_repo->tag($tag, $msg, $sig, $id );
-	display($dbg_tag,0,"gitTag($tag) returning"._def($rslt));
-
-	return $rslt;
-}
 
 
 
