@@ -17,7 +17,7 @@ use Wx qw(:everything);
 use Wx::Event qw(
 	EVT_SIZE
 	EVT_BUTTON );
-use apps::gitUI::styles;
+use apps::gitUI::utils;
 use apps::gitUI::repo;
 use apps::gitUI::repos;
 use apps::gitUI::listCtrl;

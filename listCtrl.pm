@@ -46,11 +46,11 @@ use Wx::Event qw(
 	EVT_LEFT_DCLICK
 	EVT_RIGHT_DOWN
 	EVT_MENU_RANGE );
-use apps::gitUI::repos;
-use apps::gitUI::styles;
-use apps::gitUI::utils;
-use Pub::Utils;
+	use Pub::Utils;
 use Pub::WX::Dialogs;
+use apps::gitUI::utils;
+use apps::gitUI::repos;
+use apps::gitUI::repoGit;
 use base qw(Wx::ScrolledWindow);	# qw(Wx::Window);
 
 
@@ -897,7 +897,7 @@ sub doActionRepo
 	if ($doit)
 	{
 		display($dbg_actions,1,"calling gitIndex($this->{is_staged},$paths)");
-		return $repo->gitIndex($this->{is_staged},$paths);
+		return gitIndex($repo,$this->{is_staged},$paths);
 	}
 	return 0;
 }
@@ -1123,7 +1123,7 @@ sub onCommand
 				{
 					push @$paths,$fn;
 				}
-				last if !$repo->gitRevert($paths);
+				last if !gitRevert($repo,$paths);
 
 			}	# for each repo with selections
 		}	# if multiple files

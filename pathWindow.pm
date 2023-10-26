@@ -14,7 +14,6 @@ use Wx::Event qw(
 use Pub::Utils;
 use Pub::WX::Window;
 use apps::gitUI::repos;
-use apps::gitUI::styles;
 use apps::gitUI::utils;
 use apps::gitUI::hyperlink;
 use base qw(Wx::Window Pub::WX::Window);

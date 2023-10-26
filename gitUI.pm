@@ -55,7 +55,7 @@ sub new
 	my ($class, $parent) = @_;
 
 	return if !parseRepos();
-	doGitHub(1);
+	doGitHub(1,1);
 
 	Pub::WX::Frame::setHowRestore($RESTORE_ALL);
 		# $RESTORE_MAIN_RECT);
@@ -175,7 +175,7 @@ use threads::shared;
 use Pub::Utils;
 use Pub::WX::Main;
 use Pub::WX::AppConfig;
-use apps::gitUI::git;	# for $temp_dir and $data_dir
+use apps::gitUI::utils;
 use base 'Wx::App';
 
 $ini_file = "$data_dir/gitUI.ini";

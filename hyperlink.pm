@@ -6,7 +6,7 @@ package apps::gitUI::hyperlink;
 use strict;
 use warnings;
 use Wx qw(:everything);
-use apps::gitUI::styles;
+use apps::gitUI::utils;
 use base qw(Wx::StaticText);
 
 

@@ -9,7 +9,8 @@ use threads;
 use threads::shared;
 use Pub::Utils;
 use apps::gitUI::repo;
-use apps::gitUI::utils; 	# for $THREAD_EVENT!!
+use apps::gitUI::utils;
+use apps::gitUI::repoGit;
 use apps::gitUI::Resources;
 use apps::gitUI::progressDialog;
 use base qw(Pub::WX::Frame);
@@ -145,7 +146,7 @@ sub doThreadedCommand
 
 		last if $command_aborted;
 
-		$repo->gitChanges();
+		gitChanges($repo);
 
 		$repo_num++;
 
@@ -215,9 +216,9 @@ sub doThreadedCommand
 					main_name   => $repo->{path},
 					sub_name    => $action_name });
 
-				$rslt = $repo->gitIndex() if $command_id == $COMMAND_ADD;
-				$rslt = $repo->gitCommit($data) if $command_id == $COMMAND_COMMIT;
-				$rslt = $repo->gitPush($this,\&push_callback) if $command_id == $COMMAND_PUSH;
+				$rslt = gitIndex($repo) if $command_id == $COMMAND_ADD;
+				$rslt = gitCommit($repo,$data) if $command_id == $COMMAND_COMMIT;
+				$rslt = gitPush($repo,$this,\&push_callback) if $command_id == $COMMAND_PUSH;
 
 				last if $command_aborted || !$rslt;
 

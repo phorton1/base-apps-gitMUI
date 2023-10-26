@@ -61,6 +61,7 @@ use threads::shared;
 use Win32::ChangeNotify;
 use Time::HiRes qw(sleep);
 use apps::gitUI::repos;
+use apps::gitUI::repoGit;
 use Pub::Utils;
 
 my $dbg_mon = 1;
@@ -302,7 +303,7 @@ sub run
 			{
 				display($dbg_mon,0,"CHECK_CHANGES_ON_INIT($repo->{path})");
 				&$the_callback({ status =>"checking: $repo->{path}" });
-				$rslt = $repo->gitChanges();
+				$rslt = gitChanges($repo);
 				last if !defined($rslt);
 				&$the_callback({ repo=>$repo }) if $rslt;
 			}
@@ -333,7 +334,7 @@ sub run
 						$rslt = undef;
 						last;
 					}
-					$rslt = $repo->gitChanges();
+					$rslt = gitChanges($repo);
 					last if !defined($rslt);
 
 					if ($report_path eq $suppress_path)

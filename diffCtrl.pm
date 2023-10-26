@@ -11,8 +11,8 @@ use Win32::GUI;
 use Wx qw(:everything);
 use Wx::Event qw(
 	EVT_PAINT );
-use apps::gitUI::styles;
 use Pub::Utils;
+use apps::gitUI::utils;
 use base qw(Wx::ScrolledWindow);	# qw(Wx::Window);
 
 

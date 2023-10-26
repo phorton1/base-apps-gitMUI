@@ -14,8 +14,9 @@ use Wx qw(:everything);
 use Wx::Event qw(
 	EVT_SIZE
 	EVT_BUTTON );
-use apps::gitUI::styles;
+use apps::gitUI::utils;
 use apps::gitUI::diffCtrl;
+use apps::gitUI::gitHistory;
 use Pub::Utils;
 use base qw(Wx::Window);
 
@@ -99,8 +100,9 @@ sub notifyContent
 	}
 	elsif ($repo)
 	{
-		$this->{status}->SetLabel("repo: $repo->{id}");
+		$this->{status}->SetLabel("repo: <b>$repo->{id}</b>  branch: <b>".gitCurrentBranch($repo)."</b>");
 		$text = $repo->toText();
+		$text .= "\nHISTORY:\n".gitHistoryText($repo,0);
 	}
 	$this->{diff}->setContent($text);
 }

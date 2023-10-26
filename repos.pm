@@ -18,8 +18,24 @@ use threads::shared;
 use Pub::Utils;
 
 my $dbg_sections = 1;
+
+
+BEGIN
+{
+ 	use Exporter qw( import );
+	our @EXPORT = qw(
+
+	);
+}
+
+
 my $MAX_DISPLAY_NAME = 28;
 	# not including elipses
+
+
+#--------------------------------------------
+# methods
+#--------------------------------------------
 
 
 sub new
@@ -65,9 +81,10 @@ use strict;
 use warnings;
 use threads;
 use threads::shared;
-use apps::gitUI::git;
-use apps::gitUI::repo;
 use Pub::Utils;
+use apps::gitUI::repo;
+use apps::gitUI::utils;
+
 
 
 my $dbg_parse = 0;
@@ -202,6 +219,89 @@ sub parseRepos
         return;
     }
 	return 1;
+}
+
+
+
+#--------------------------------------------------------------------
+# test main - developing 'all tags across repositories' function
+#--------------------------------------------------------------------
+
+use Git::Raw;
+
+
+my $all_tags = {};
+
+
+sub addRepoTags
+{
+	my ($repo) = @_;
+
+	my $git_repo = Git::Raw::Repository->open($repo->{path});
+	return $repo->repoError("Could not create git_repo") if !$git_repo;
+
+	my @tag_refs = $git_repo->tags( 'all' );
+
+	my $started = 0;
+	for my $tag_ref (@tag_refs)
+	{
+		my $commit = $tag_ref->target();
+		my $sig = $commit->author();
+		my $author = $sig->name();
+		next if $author !~ /phorton1|Patrick Horton/;
+
+		my $tag_name = $tag_ref->name();
+		$tag_name =~ s/^.*\///;
+		my $summary = $commit->summary();
+		$summary = substr($summary,0,50) if length($summary)>50;
+		my $time = timeToStr($commit->time());
+
+		$started = tagHeader($repo,$started);
+		print pad('',8)._plim($tag_name,15)." "._plim($time,20)." "._plim($author,20)." ".$summary."\n";
+
+		#my $id = $tag->id() || '';
+		#my $name = $tag->name() || '';
+		#my $msg = $tag->message() || '';
+		# print pad('',8).pad($name,12).pad($id.20).$msg."\n";
+
+		my $tag = $all_tags->{$tag_name};
+		if (!$tag)
+		{
+			$tag = {
+				name => $tag_name,
+				time => $time,
+				paths => {} };
+			$all_tags->{$tag_name} = $tag;
+		}
+
+		$tag->{time} = $time if $time lt $tag->{time};
+		$tag->{paths}->{$repo->{path}} = 1;
+	}
+
+}
+
+
+
+if (0)
+{
+	if (parseRepos())
+	{
+		my $repo_list = getRepoList();
+		for my $repo (@$repo_list)
+		{
+			addRepoTags($repo);
+		}
+
+		print "\nALL TAGS\n";
+		for my $tag (sort {$a->{time} cmp $b->{time}} values %$all_tags)
+		{
+			print _plim($tag->{name},15)." ".$tag->{time}."\n";
+			for my $path (sort keys %{$tag->{paths}})
+			{
+				print pad('',4).$path."\n";
+			}
+		}
+	}
 }
 
 

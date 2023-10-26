@@ -22,7 +22,7 @@ use Time::HiRes qw( sleep );
 use Wx qw(:everything);
 use Wx::Event qw(EVT_BUTTON);
 use Pub::Utils;
-use apps::gitUI::styles;
+use apps::gitUI::utils;
 use apps::gitUI::Resources;
 use base qw(Wx::Dialog);
 

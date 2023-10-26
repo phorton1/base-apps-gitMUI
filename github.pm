@@ -13,9 +13,10 @@ use HTTP::Request;
 use LWP::UserAgent;
 use LWP::Protocol::http;
 use Mozilla::CA;
-use apps::gitUI::git;
+use apps::gitUI::utils;
 use apps::gitUI::repo;
 use apps::gitUI::repos;
+use apps::gitUI::repoGit;
 use Pub::Utils;
 
 $Data::Dumper::Indent = 1;
@@ -172,9 +173,26 @@ sub gitHubRequest
 
 sub doGitHub
 {
-	my ($use_cache) = @_;
+	my ($use_cache,$validate_configs) = @_;
 	$use_cache ||= 0;
+	$validate_configs ||= 0;
+
     display($dbg_github,0,"doGitHub($use_cache)");
+
+	my $repo_list = getRepoList();
+	if (!$repo_list)
+	{
+		error("No repo_list in doGitHub!!");
+		return;
+	}
+
+	for my $repo (@$repo_list)
+	{
+		$repo->{found_on_github} = 0;
+		$repo->clearErrors();
+		$repo->checkGitConfig();
+	}
+
 
     my $data = gitHubRequest("repos",'user/repos?per_page=100',$use_cache);
         # returns an array of hashes (upto 100)
@@ -194,10 +212,11 @@ sub doGitHub
 
 			if (!$repo)
 			{
-				error("doGitHub() cannot find id($id) = path($path)");
+				error("doGitHub() cannot find repo($id) = path($path)");
 			}
 			else
 			{
+				$repo->{found_on_github} = 1;
 				$repo->{descrip} = $entry->{description} || '';
 				my $is_private = $entry->{visibility} eq 'private' ? 1 : 0;
 				my $is_forked = $entry->{fork} ? 1 : 0;
@@ -251,6 +270,13 @@ sub doGitHub
 			} 	# found $repo
         }   # foreach $entry
     }   # got $data
+
+	for my $repo (@$repo_list)
+	{
+		$repo->repoError("repo($repo->{id} not found on github!")
+			if !$repo->{found_on_github};
+	}
+
 }   #   getGitHubRepos()
 
 
@@ -259,52 +285,15 @@ sub doGitHub
 #-----------------------------------------------
 # test main
 #-----------------------------------------------
+# Currently only place checkGitConfig() is called, and
+# only one that would check that
 
 if (0)
 {
 	display($dbg_github,0,"github.pm test_main()");
 	if (parseRepos())
 	{
-		my $sections = getRepoSections();
-		display($dbg_github,1,"github.pm checking git/config files");
-		for my $section  (@$sections)
-		{
-			for my $repo (@{$section->{repos}})
-			{
-				$repo->clearErrors();
-				$repo->checkGitConfig();
-			}
-		}
-
-		if (1)
-		{
-			display($dbg_github,1,"github.pm checking for changes");
-			for my $section  (@$sections)
-			{
-				for my $repo (@{$section->{repos}})
-				{
-					$repo->gitChanges();
-				}
-			}
-		}
-
-		if (1)
-		{
-			doGitHub(1);		# use cache if available
-		}
-
-		if (1)
-		{
-			my $text = '';
-			my @lines = split(/\n/,Dumper(@$sections));
-			for my $line (@lines)
-			{
-				chomp($line);
-				$line =~ s/\s*$//;
-				$text .= $line."\n";
-			}
-			printVarToFile(1,"$temp_dir/github.test.txt",$text);
-		}
+		doGitHub(1,1);
 	}
 }
 
