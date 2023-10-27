@@ -161,6 +161,26 @@ sub isSelected
 }
 
 
+sub clearOtherSelection
+{
+	my ($this) = @_;
+	my $other = $this->{is_staged} ?
+		$this->{parent}->{parent}->{unstaged}->{list_ctrl} :
+		$this->{parent}->{parent}->{staged}->{list_ctrl};
+	return if !(keys %{$other->{selection}});
+	my $repos = $other->{repos};
+	for my $id (sort keys %$repos)
+	{
+		$repos->{$id}->{num_selected} = 0;
+	}
+	$other->{selection} = {};
+	$other->{anchor} = '';
+	$other->{found_repo} = '';
+	$other->{found_item} = '';
+	$other->Refresh();
+}
+
+
 #-----------------------------------------------
 # updateRepos
 #-----------------------------------------------
@@ -444,6 +464,8 @@ sub onLeftDown
 {
 	my ($this,$event) = @_;
 
+	$this->clearOtherSelection();
+
 	my $cp = $event->GetPosition();
 	my ($sx,$sy) = ($cp->x,$cp->y);
 	my ($ux,$uy) = $this->CalcUnscrolledPosition($sx,$sy);
@@ -565,7 +587,10 @@ sub onLeftDown
 sub notifyRepoSelected
 {
 	my ($this,$repo) = @_;
-	$this->{parent}->{parent}->notifyContent({ repo=>$repo });
+	$this->{parent}->{parent}->{right}->notifyContent({
+		is_staged => $this->{is_staged},
+		repo =>$repo,
+		item => '' });
 }
 
 
@@ -793,8 +818,11 @@ sub notifyItemSelected
 	my ($this,$repo,$item) = @_;
 	$repo->{num_selected}++;
 	$this->{anchor} = $item;
-	my $filename = $repo->{path}."/".$item->{fn};
-	$this->{parent}->{parent}->notifyContent({ filename=>$filename });
+
+	$this->{parent}->{parent}->{right}->notifyContent({
+		is_staged => $this->{is_staged},
+		repo =>$repo,
+		item =>$item });
 }
 
 
@@ -922,7 +950,7 @@ sub doAction
 		# getAppFrame()->getMonitor()->suppressPath($repo->{path});
 			# possible optimization for single item action
 
-		$repo->gitIndex($this->{is_staged},[$fn]);
+		gitIndex($repo,$this->{is_staged},[$fn]);
 	}
 	elsif ($how == $ACTION_DO_REPO)
 	{
@@ -1083,7 +1111,7 @@ sub onCommand
 				yesNoDialog($this,
 					"Revert changes to\n'$filename' ?",
 					"Revert changes to single file");
-			$repo->gitRevert([ $fn ]);
+			gitRevert($repo,[ $fn ]);
 		}
 		else
 		{

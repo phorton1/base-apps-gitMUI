@@ -17,6 +17,7 @@ use threads;
 use threads::shared;
 use Git::Raw;
 use Pub::Utils;
+use apps::gitUI::utils;
 
 
 BEGIN
@@ -25,6 +26,7 @@ BEGIN
 	our @EXPORT = qw(
 		gitHistory
 		gitHistoryText
+		gitHistoryContent
 		gitCurrentBranch
 	);
 }
@@ -45,7 +47,7 @@ sub gitCurrentBranch
 }
 
 
-
+my $max_name = 0;
 
 sub gitHistory
 	# can be called with a repo(hash) or scalar(path)
@@ -53,6 +55,7 @@ sub gitHistory
 	# not that useful to me.
 {
 	my ($repo_or_path,$all_branch_history) = @_;
+	$max_name = 0;
 
 	my $path = ref($repo_or_path) ? $repo_or_path->{path} : $repo_or_path;
 	display($dbg_hist,0,"gitHistory($path,$all_branch_history)");
@@ -136,6 +139,9 @@ sub gitHistory
 		my $branches  = $repo_branches->{$id} || {};
 		my @parents = $com->parents();
 
+		$author =~ s/\s+$//;
+		$max_name = length($author) if length($author)>$max_name;
+
 		my $commit = {
 			id			=> $id,
 			time		=> timeToStr($com->time()),
@@ -161,7 +167,7 @@ sub gitHistory
 		$com = $log->next();
 	}
 
-	display($dbg_hist,0,"gitHistory($path) returning ".scalar(@$commit_list)." commits");
+	display($dbg_hist,0,"gitHistory($path) max_name($max_name) returning ".scalar(@$commit_list)." commits");
 	return $commit_list;
 }
 
@@ -172,6 +178,8 @@ sub gitHistoryText
 {
 	my ($repo_or_path,$all_branch_history) = @_;
 	my $commit_list = gitHistory($repo_or_path,1);
+
+	$max_name = 20 if $max_name > 20;
 
 	my $text = '';
 	for my $commit (reverse @$commit_list)
@@ -186,13 +194,48 @@ sub gitHistoryText
 
 		$text .=
 			_plim($commit->{time},20).
-			_plim($commit->{author},20).
+			_plim($commit->{author},$max_name)." ".
 			$summary.
 			"\n";
 	}
 	return $text;
 }
 
+
+
+sub gitHistoryContent
+{
+	my ($repo_or_path,$all_branch_history) = @_;
+	my $commit_list = gitHistory($repo_or_path,1);
+
+	$max_name = 20 if $max_name > 20;
+
+	my $content = [];
+	push @$content,[1,$color_black,'HISTORY'];
+
+	for my $commit (reverse @$commit_list)
+	{
+		my $content_line = [];
+
+		my @branches = sort keys %{$commit->{branches}};
+		my $branch_text = @branches ? "[".join(",",@branches)."]" : '';
+		my @tags     = sort keys %{$commit->{tags}};
+		my $tag_text = @tags ? "<".join(",",@tags).">" : '';
+		my $spacer = $branch_text || $tag_text ? " " : '';
+
+		push @$content_line,(0,$color_black,
+			_plim($commit->{time},20).
+			_plim($commit->{author},$max_name)." ");
+		push @$content_line,(1,$color_orange,$branch_text)
+			if $branch_text;
+		push @$content_line,(1,$color_green,$tag_text)
+			if $tag_text;
+		push @$content_line,(0,$color_blue,$spacer.$commit->{summary});
+
+		push @$content,$content_line;
+	}
+	return $content;
+}
 
 
 

@@ -120,14 +120,6 @@ sub onClose
 }
 
 
-sub notifyContent
-{
-	my ($this,$data) = @_;
-	display($dbg_notify,0,"commitWindow::notifyContent() called");
-	$this->{right}->notifyContent($data);
-}
-
-
 #------------------------------------------
 # spiitter handline
 #------------------------------------------

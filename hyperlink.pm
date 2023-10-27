@@ -13,6 +13,7 @@ use base qw(Wx::StaticText);
 sub new
 {
 	my ($class,$parent,$id,$text,$pos,$size,$color) = @_;
+	$size ||= [-1,-1];
 	$color = $color_blue if !defined($color);
 	my $this = $class->SUPER::new($parent,$id,$text,$pos,$size);
 	$this->SetForegroundColour($color);
