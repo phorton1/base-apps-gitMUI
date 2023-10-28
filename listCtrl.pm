@@ -114,6 +114,8 @@ sub new
 	$this->{name} = $name;
 	$this->{data} = $data;
 	$this->{repos} = {};
+	$this->{expanded} = {};
+		# hash by id of expanded state of repos
 	$this->{selection} = {};
 		# a nested hash of repos by id and 1 by filename
 		# of ALL durrently selected files.
@@ -145,7 +147,7 @@ sub getDataForIniFile
 	for my $id (sort keys %$repos)
 	{
 		$contracted->{$id} = 1
-			if !$repos->{$id}->{expanded};
+			if !$this->{expanded}->{$id};
 	}
 	display_hash($dbg_ctrl,0,"getDataForIniFile(expanded)",$contracted);
 	return $data;
@@ -168,11 +170,7 @@ sub clearOtherSelection
 		$this->{parent}->{parent}->{unstaged}->{list_ctrl} :
 		$this->{parent}->{parent}->{staged}->{list_ctrl};
 	return if !(keys %{$other->{selection}});
-	my $repos = $other->{repos};
-	for my $id (sort keys %$repos)
-	{
-		$repos->{$id}->{num_selected} = 0;
-	}
+
 	$other->{selection} = {};
 	$other->{anchor} = '';
 	$other->{found_repo} = '';
@@ -186,8 +184,8 @@ sub clearOtherSelection
 #-----------------------------------------------
 
 sub updateRepos
-	# called before a bunch or addRepos
-	# to effect updating without losing selected, expanded, etc
+	# essentially populate(), add or update any repos to
+	# the list without losing selected, expanded, etc
 {
 	my ($this) = @_;
 	display($dbg_pop,0,"updateRepos($this->{name})");
@@ -195,6 +193,9 @@ sub updateRepos
 	my $vheight = 0;
 	my $num_repos = 0;
 	$this->{repos} = {};
+	my $save_expanded = $this->{expanded};
+	$this->{expanded} = {};
+
 	my $repo_list = getRepoList();
 	for my $repo (@$repo_list)
 	{
@@ -209,11 +210,16 @@ sub updateRepos
 			if ($this->{data}->{contracted}->{$id})
 			{
 				display($dbg_ctrl,1,"contracting $id");
-				$repo->{expanded} = 0;
+				$this->{expanded}->{$id} = 0;
 				delete $this->{data}->{contracted}->{$id};
 			}
+			else
+			{
+				$this->{expanded}->{$id} = defined($save_expanded->{$id}) ?
+					$save_expanded->{$id} : 1;
+			}
 			$vheight += $num_items * $ROW_HEIGHT
-				if $repo->{expanded};
+				if $this->{expanded}->{$id};
 		}
 	}
 
@@ -243,7 +249,7 @@ sub onPaint
 	my $repos = $this->{repos};
 	my $num_repos = scalar(keys %$repos);
 
-	display($dbg_draw,0,"onPaint($width,$height) num_repos($num_repos)");
+	display($dbg_draw,0,"onPaint($this->{name},$width,$height) num_repos($num_repos)");
 		# above in pixels
 
 	my $dc = Wx::PaintDC->new($this);
@@ -256,7 +262,7 @@ sub onPaint
 	my ($xstart,$ystart) = $this->CalcUnscrolledPosition($box->x,$box->y);
 	my $update_rect = Wx::Rect->new($xstart,$ystart,$box->width,$box->height);
 	my $bottom = $update_rect->GetBottom();
-	display_rect($dbg_draw,1,"onPaint(bottom=$bottom) update_rect=",$update_rect);
+	display_rect($dbg_draw,1,"onPaint($this->{name}) bottom=$bottom update_rect=",$update_rect);
 
 	# clear the update rectangle
 	# not using $dc->Clear();
@@ -285,7 +291,7 @@ sub onPaint
 		$ypos += $ROW_HEIGHT;
 		last if $ypos >= $bottom;
 
-		if ($repo->{expanded})
+		if ($this->{expanded}->{$id})
 		{
 			my $items = $repo->{$this->{key}};
 			for my $fn (sort keys %$items)
@@ -317,16 +323,17 @@ sub drawRepo
 {
 	my ($this,$dc,$rect,$repo) = @_;
 	my $id = $repo->{id};
-	display($dbg_draw,0,"drawRepo($rect,$id)");
+	display_rect($dbg_draw,0,"drawRepo($this->{name},$id)",$rect);
 
 	my $ypos = $rect->y;
 	my $width = $rect->width;
-	my $expanded = $repo->{expanded};
+	my $expanded = $this->{expanded}->{$id};
 	my $num_items = scalar(keys %{$repo->{$this->{key}}});
-	my $num_selected = $repo->{num_selected};
+	my $repo_sel = $this->{selection}->{$id};
+	my $num_selected = $repo_sel ? scalar(keys %$repo_sel) : 0;
 	my $name = "$id (".($num_selected?"$num_selected/":'')."$num_items)";
 
-	display($dbg_draw,0,"drawRepo($ypos) exp($expanded) num($num_items) $id");
+	display($dbg_draw,0,"drawRepo($this->{name},$ypos) exp($expanded) sel($num_selected) num($num_items) $id");
 
 	my $bm = $expanded ? $bm_up_arrow : $bm_right_arrow;
 
@@ -356,7 +363,7 @@ sub drawItem
 	my $id = $repo->{id};
 	my $selected = $this->isSelected($id,$fn);
 
-	display($dbg_draw,0,"drawChange($ypos) sel($selected) $type $fn");
+	display($dbg_draw,0,"drawItem($this->{name},$ypos) sel($selected) $type $fn");
 
 	my $staged = $this->{is_staged};
 	my $bm_color =
@@ -427,14 +434,14 @@ sub findClickItem
 		my $repo = $repos->{$id};
 		my $items = $repo->{$this->{key}};
 		my $num_items = scalar(keys %$items);
-		my $repo_height = $repo->{expanded} ?
+		my $repo_height = $this->{expanded}->{$id} ?
 			($num_items + 1) * $ROW_HEIGHT : $ROW_HEIGHT;
 
 		if ($uy >= $ypos && $uy <= $ypos + $repo_height-1)
 		{
 			$this->{found_repo} = $repo;
 			$this->{repo_uy} = $ypos;
-			display($dbg_sel,1,"foundRepo($id) at ypos($ypos) with height($repo_height)");
+			display($dbg_sel,1,"foundRepo($this->{name},$id) at ypos($ypos) with height($repo_height)");
 			if ($uy >= $ypos + $ROW_HEIGHT)
 			{
 				my $off = $uy - $ypos - $ROW_HEIGHT;		# mouse y offset within repo's items
@@ -446,7 +453,7 @@ sub findClickItem
 					# save off the item position for optimized refresh
 					# it is $idx+1 cuz the 0th item is below the repo header
 
-				display($dbg_sel,1,"foundItem($fn,$this->{found_item}->{type}) at off($off) idx($idx) item_uy($this->{item_uy})");
+				display($dbg_sel,1,"foundItem($this->{name},$fn,$this->{found_item}->{type}) at off($off) idx($idx) item_uy($this->{item_uy})");
 				last;
 			}
 			last;
@@ -482,7 +489,7 @@ sub onLeftDown
 	my $shift_key = Win32::GUI::GetAsyncKeyState($VK_SHIFT)?1:0;
 	my $ctrl_key = Win32::GUI::GetAsyncKeyState($VK_CONTROL)?1:0;
 
-	display($dbg_sel,0,"onLeftDown($ux,$uy) ctrl($ctrl_key) shift($shift_key)");
+	display($dbg_sel,0,"onLeftDown($this->{name},$ux,$uy) ctrl($ctrl_key) shift($shift_key)");
 
 	# find the repo and/or item for unscrolled position $x,$y
 
@@ -551,21 +558,25 @@ sub onLeftDown
 	}
 	elsif ($this->{found_repo})
 	{
+		my $repo = $this->{found_repo};
+		my $id = $repo->{id};
 		if ($ux <= $TOGGLE_RIGHT)
 		{
-			$this->{found_repo}->{expanded} = !$this->{found_repo}->{expanded};
+			$this->{expanded}->{$id} = !$this->{expanded}->{$id};
 			$this->{refresh_rect} = $this->{win_srect}; 	# refresh whole window
 		}
 		elsif ($ux <= $ICON_RIGHT)
 		{
 			if ($ux >= $ICON_LEFT)
 			{
-				my $repo = $this->{found_repo};
-				my $id = $repo->{id};
 				display($dbg_actions,0,"ACTION_DO_REPO");
 				$this->doAction($ACTION_DO_REPO)
 					if $this->{selection}->{$id};
 			}
+		}
+		else	# expand and ICON do not count as selecting the repo
+		{
+			$this->notifyRepoSelected($this->{found_repo});
 		}
 	}
 
@@ -573,12 +584,9 @@ sub onLeftDown
 
 	if ($this->{refresh_rect}->x >= 0)
 	{
-		display_rect($dbg_sel,0,"REFRESH_RECT",$this->{refresh_rect});
+		display_rect($dbg_sel,0,"REFRESH_RECT($this->{name})",$this->{refresh_rect});
 		$this->RefreshRect($this->{refresh_rect})
 	}
-
-	$this->notifyRepoSelected($this->{found_repo})
-		if $this->{found_repo} && !$this->{found_item};
 
 	$event->Skip();
 }
@@ -587,7 +595,7 @@ sub onLeftDown
 sub notifyRepoSelected
 {
 	my ($this,$repo) = @_;
-	$this->{parent}->{parent}->{right}->notifyContent({
+	$this->{parent}->{parent}->{right}->notifyItemSelected({
 		is_staged => $this->{is_staged},
 		repo =>$repo,
 		item => '' });
@@ -606,7 +614,7 @@ sub addShiftSelection
 	my $anchor_repo = $anchor_item->{repo};
 	my $anchor_id   = $anchor_repo->{id};
 
-	display($dbg_sel,0,"addShiftSelection anchor($anchor_id,$anchor_fn) found(".
+	display($dbg_sel,0,"addShiftSelection($this->{name}) anchor($anchor_id,$anchor_fn) found(".
 		($found_repo?$found_repo->{id}:'').",".
 		($found_item?$found_item->{fn}:'').")");
 
@@ -703,7 +711,7 @@ sub addShiftSelection
 			my $first = $id eq $first_id ? 1 : 0;
 			my $between = $id gt $first_id ? 1 : 0;
 
-			display($dbg_sel,1,"REPO($id) first($first) between($between) last($last) stop_on_last($stop_on_last)");
+			display($dbg_sel,1,"REPO($this->{name},$id) first($first) between($between) last($last) stop_on_last($stop_on_last)");
 			last if $stop_on_last && $last;
 
 			for my $fn (sort keys %$items)
@@ -738,7 +746,7 @@ sub addShiftSelection
 		$last = !@ids || $id eq $last_id ? 1 : 0;
 	}
 
-	display($dbg_sel,0,"addShiftSelection() returning $any_changes");
+	display($dbg_sel,0,"addShiftSelection($this->{name},) returning $any_changes");
 	return $any_changes;
 }
 
@@ -748,21 +756,19 @@ sub addShiftSel
 	my ($this,$repo,$fn) = @_;
 	my $selection = $this->{selection};
 	my $id = $repo->{id};
-	display($dbg_sel+1,0,"addShiftSel($id,$fn)");
+	display($dbg_sel+1,0,"addShiftSel($this->{name},$id,$fn)");
 
 	my $repo_sel = $selection->{$id};
 	if (!$repo_sel)
 	{
 		display($dbg_sel+1,1,"creating new repo_sel");
 		$selection->{$id} = { $fn => 1 };
-		$repo->{num_selected}++;	# = 1
 		return 1;
 	}
 	elsif (!$repo_sel->{$fn})
 	{
 		display($dbg_sel+1,1,"adding to existing repo_sel");
 		$repo_sel->{$fn} = 1;
-		$repo->{num_selected}++;	# = 1
 		return 1;
 	}
 	else
@@ -790,24 +796,17 @@ sub deleteSelectionsExcept
 	my $cur_sel = $repo_sel ? $repo_sel->{$fn} : 0;
 	$cur_sel ||= 0;
 
-	display($dbg_sel,0,"deleteSectionsExcept($id,$fn) num_sels() num_repo_sels($num_repo_sels) cur_sel($cur_sel)");
+	display($dbg_sel,0,"deleteSectionsExcept($this->{name},$id,$fn) num_sels($num_sels) num_repo_sels($num_repo_sels) cur_sel($cur_sel)");
 
 	return 0 if !$num_sels;
 	return 0 if $cur_sel && $num_sels == 1 && $num_repo_sels == 1;
 
 	$this->{selection} = {};
 
-	my $repos = $this->{repos};
-	for my $clear_id (keys %$repos)
-	{
-		$repos->{$clear_id}->{num_selected} = 0;
-	}
-
 	if ($cur_sel)
 	{
 		$repo_sel = $this->{selection}->{$id} = {};
 		$repo_sel->{$fn} = 1;
-		$repo->{num_selected} = 1;
 	}
 	return 1;
 }
@@ -816,10 +815,10 @@ sub deleteSelectionsExcept
 sub notifyItemSelected
 {
 	my ($this,$repo,$item) = @_;
-	$repo->{num_selected}++;
-	$this->{anchor} = $item;
-
-	$this->{parent}->{parent}->{right}->notifyContent({
+	my $id = $repo ? $repo->{id} : '';
+	my $fn = $item ? $item->{fn} : '';
+	display($dbg_sel,0,"notifyItemSelected($this->{name},$id,$fn)");
+	$this->{parent}->{parent}->{right}->notifyItemSelected({
 		is_staged => $this->{is_staged},
 		repo =>$repo,
 		item =>$item });
@@ -840,20 +839,13 @@ sub toggleSelection
 	my $selected = $repo_sel ? $repo_sel->{$fn} : 0;
 	$selected |= 0;
 
-	display($dbg_sel,0,"toggleSelection($id,$fn) selected=$selected");
+	display($dbg_sel,0,"toggleSelection($this->{name},$id,$fn) selected=$selected");
+	$this->{anchor} = '';
 
 	if ($selected)	# unselecting
 	{
-		$repo->{num_selected}--;
-		if (!$repo->{num_selected})
-		{
-			delete $selection->{$id};
-		}
-		else
-		{
-			delete $repo_sel->{$fn};
-		}
-		$this->{anchor} = '';
+		delete $repo_sel->{$fn};
+		delete $selection->{$id} if !keys %$repo_sel;
 	}
 	elsif (!$repo_sel)
 	{
@@ -906,7 +898,6 @@ sub doActionRepo
 
 	my $repo_sel = $this->{selection}->{$id};
 	delete $this->{selection}->{$id};
-	$repo->{num_selected} = 0;
 
 	my $doit = 1;						# do all by default
 	my $paths = '';
@@ -973,14 +964,7 @@ sub doAction
 		}
 	}
 
-	my $win = $this->{parent}->{parent};
-	my $other = $this->{is_staged} ?
-		$win->{unstaged}->{list_ctrl} :
-		$win->{staged}->{list_ctrl};
-
-	# will be notified by callback
-	# $this->updateRepos();
-	# $other->updateRepos();
+	$this->notifyItemSelected('','');
 }
 
 
@@ -1002,14 +986,13 @@ sub doAction
 # and it is up to the user to not open multiple files of the
 
 
-
 sub onRightDown
 {
 	my ($this,$event) = @_;
 	my $cp = $event->GetPosition();
 	my ($sx,$sy) = ($cp->x,$cp->y);
 	my ($ux,$uy) = $this->CalcUnscrolledPosition($sx,$sy);
-	display($dbg_cmd,0,"onRightDown($ux,$uy)");
+	display($dbg_cmd,0,"onRightDown($this->{name},$ux,$uy)");
 
 	$this->findClickItem($ux,$uy);
 	my $repo = $this->{found_repo};
@@ -1052,7 +1035,7 @@ sub onCommand
 	$selected ||= 0;
 	my $multiple = $selected ? scalar(keys %$repo_sel) > 1 : 0;
 
-	display($dbg_cmd,0,"onCommand($command_id) repo($id) fn($fn) selected($selected) multiple($multiple)");
+	display($dbg_cmd,0,"onCommand($this->{name},$command_id) repo($id) fn($fn) selected($selected) multiple($multiple)");
 
 	if ($command_id == $ID_OPEN_GITUI)
 	{

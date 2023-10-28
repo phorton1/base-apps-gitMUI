@@ -56,11 +56,6 @@ sub new
 		section => $section,
 		branch	=> $branch || 'master',
 
-		# for listCtrl
-
-		expanded => 1,
-		num_selected => 0,
-
 		# for github.pm
 
 		found_on_github => 0,

@@ -159,7 +159,7 @@ sub determineType
 					my $has_lf = $buffer =~ /[^\r]\n/s ? 1 : 0;
 					my $has_crlf = $buffer =~ /\r\n/s ? 1 : 0;
 
-					display(0,0,"has_cr($has_cr) has_lf($has_lf) has_crlf($has_crlf)");
+					display($dbg_notify,0,"has_cr($has_cr) has_lf($has_lf) has_crlf($has_crlf)");
 
 					if ($has_cr + $has_lf + $has_crlf > 1)
 					{
@@ -277,18 +277,35 @@ sub parseDiffText
 
 
 
-sub notifyContent
+sub notifyItemSelected
 {
 	my ($this,$data) = @_;
 	my $is_staged = $data->{is_staged};
+
 	my $repo = $data->{repo};
 	my $item = $data->{item};
-	my $id = $repo->{id};
+	my $id = $repo ? $repo->{id} : '';
 	my $fn = $item ? $item->{fn} : '';
 	my $type = $item ? $item->{type} : '';
-	display($dbg_notify,0,"commitRight::notifyContent($is_staged,$id,$fn,$type) called");
+	display($dbg_notify,0,"commitRight::notifyItemSelected($is_staged,$id,$fn,$type) called");
 
 	$this->{diff_binary} = 0;
+
+	# '','' means to clear the diff window if it is showing an item.
+	# If it is showing a repo, we leave it.
+
+	if (!$id && !$fn)
+	{
+		if ($this->{diff_item})
+		{
+			$this->{diff_repo} = '';
+			$this->{diff_item} = '';;
+			$this->{what_ctrl}->SetLabel('');
+			$this->{hyperlink}->SetLabel('');
+			$this->{diff_ctrl}->setContent([]);
+		}
+		return;
+	}
 
 	my $file_type = '';
 	$file_type = 'New ' if $item && $type eq 'A';
