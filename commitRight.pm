@@ -13,19 +13,23 @@ use threads::shared;
 use Wx qw(:everything);
 use Wx::Event qw(
 	EVT_SIZE
+	EVT_LEFT_DOWN
 	EVT_BUTTON
-	EVT_LEFT_DOWN );
+	EVT_UPDATE_UI_RANGE );
 use apps::gitUI::utils;
+use apps::gitUI::repos;
 use apps::gitUI::diffCtrl;
 use apps::gitUI::hyperlink;
 use apps::gitUI::repoGit;
 use apps::gitUI::gitHistory;
+use apps::gitUI::Resources;
 use Pub::Utils;
 use base qw(Wx::Window);
 
 
 my $dbg_life = 0;
 my $dbg_notify = 1;
+my $dbg_cmds = 0;
 
 
 BEGIN {
@@ -39,7 +43,9 @@ my $FILENAME_LEFT = 150;
 my $NOTE_LEFT = 400;
 my $COMMAND_AREA_HEIGHT   = 120;
 
-
+my $COMMIT_MSG_TOP = 5;
+my $COMMIT_MSG_LEFT  = 80;
+my $COMMIT_MSG_HEIGHT = $COMMAND_AREA_HEIGHT - 10;
 
 sub new
 {
@@ -47,6 +53,8 @@ sub new
 	display($dbg_life,0,"new commitRight()");
     my $this = $class->SUPER::new($splitter);
     $this->{parent} = $parent;
+	$this->{diff_repo} = '';
+	$this->{diff_item} = '';
 
 	$this->SetBackgroundColour($color_yellow);
 
@@ -58,12 +66,27 @@ sub new
 	my $panel = $this->{panel} = Wx::Panel->new($this);
 	$panel->SetBackgroundColour($color_light_grey);
 
-	$this->{diff_repo} = '';
-	$this->{diff_item} = '';
+	Wx::Button->new($panel,$ID_COMMAND_RESCAN,'Rescan',		[5,5],	[65,20]);
+	Wx::Button->new($panel,$COMMAND_COMMIT,'Commit',		[5,30],	[65,20]);
+	Wx::Button->new($panel,$ID_COMMAND_PUSH_ALL,'PushAll',	[5,55],	[65,20]);
+	Wx::Button->new($panel,$ID_PUSH_WINDOW,'PushSel',		[5,80],	[65,20]);
+
+	$this->{commit_msg} = Wx::TextCtrl->new($panel, -1, '', [$COMMIT_MSG_LEFT,$COMMIT_MSG_TOP],[-1,-1],
+		wxTE_MULTILINE | wxHSCROLL );
 
 	$this->doLayout();
 	EVT_SIZE($this, \&onSize);
 	EVT_LEFT_DOWN($hyperlink, \&onLink);
+	EVT_BUTTON($this, $ID_COMMAND_RESCAN, \&onButton);
+	EVT_BUTTON($this, $COMMAND_COMMIT, \&onButton);
+	EVT_BUTTON($this, $ID_COMMAND_PUSH_ALL, \&onButton);
+	EVT_BUTTON($this, $ID_PUSH_WINDOW, \&onButton);
+
+	EVT_UPDATE_UI_RANGE($this, $ID_PUSH_WINDOW, $COMMAND_COMMIT, \&onUpdateUI);
+		# note range from Resources.pm
+
+
+
     return $this;
 
 }
@@ -76,12 +99,19 @@ sub doLayout
     my $width = $sz->GetWidth();
     my $height = $sz->GetHeight();
 	my $panel_start = $height-$COMMAND_AREA_HEIGHT;
+
     $this->{diff_ctrl}->SetSize([$width,$panel_start-$PANE_TOP]);
 	$this->{diff_ctrl}->Move(0,$PANE_TOP);
 	$this->{panel}->SetSize([$width,$COMMAND_AREA_HEIGHT]);
 	$this->{panel}->Move(0,$panel_start);
-	# $this->Refresh();
+
+	my $msg_width = $width-$COMMIT_MSG_LEFT;
+	$msg_width = 30 if $msg_width < 30;
+	$this->{commit_msg}->SetSize([$msg_width,$COMMIT_MSG_HEIGHT]);
+
+	$this->Refresh();
 }
+
 
 sub onSize
 {
@@ -90,6 +120,46 @@ sub onSize
     $event->Skip();
 }
 
+
+
+sub onUpdateUI
+{
+	my ($this,$event) = @_;
+	my $id = $event->GetId();
+	my $enable = 1;
+	$enable = 0 if $id == $ID_PUSH_WINDOW && !canPushRepos();
+	$enable = 0 if $id == $ID_COMMAND_PUSH_ALL && !canPushRepos();
+	$enable = 0 if $id == $COMMAND_COMMIT && (
+		!$this->{parent}->canCommit() ||
+		!$this->{commit_msg}->GetValue());
+	$event->Enable($enable);
+}
+
+
+sub onButton
+{
+	my ($this,$event) = @_;
+	my $id = $event->GetId();
+	display($dbg_cmds,0,"commitRight::onButton($id)");
+
+	my $app_frame = $this->{parent}->{frame};	# getAppFrame();
+		# ?!?!? Wx::Frame::DESTROY() gets called ?!?!?
+
+	if ($id == $ID_PUSH_WINDOW)
+	{
+		$app_frame->createPane($ID_PUSH_WINDOW,$this->{book});
+	}
+	if ($id == $ID_COMMAND_RESCAN ||
+		$id == $ID_COMMAND_PUSH_ALL )
+	{
+		$app_frame->onCommand($event);
+	}
+	if ($id == $COMMAND_COMMIT)
+	{
+		$app_frame->doGitCommand($COMMAND_COMMIT,$this->{commit_msg}->GetValue());
+		$this->{commit_msg}->SetValue('');
+	}
+}
 
 
 

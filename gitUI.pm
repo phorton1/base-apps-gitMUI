@@ -10,6 +10,7 @@ use threads::shared;
 use Wx qw(:everything);
 use Wx::Event qw(
 	EVT_MENU_RANGE
+	EVT_UPDATE_UI
 	EVT_COMMAND );
 use Pub::Utils;
 use Pub::WX::Frame;
@@ -30,7 +31,7 @@ $TEST_JUNK_ONLY = 1;
 
 my $dbg_frame = 0;
 	# lifecycle, major commands
-my $dbg_mon = 1;
+my $dbg_mon = 0;
 
 
 my $USE_MONITOR = 1;
@@ -63,17 +64,12 @@ sub new
 	my $this = $class->SUPER::new($parent);	# ,-1,'gitUI',[50,50],[600,680]);
 
     $this->CreateStatusBar();
-	#$this->createPane($ID_PATH_WINDOW);
-	# $this->createPane($ID_COMMIT_WINDOW);
-
-	# The minimum size of the window is from commitWidow.pm
-	# plus fudge factors for the height due to menu, tab bar
-	# and status window, and a bit for the frame outline
-
 	$this->SetMinSize([100,100]);
 
-	EVT_MENU_RANGE($this, $ID_PATH_WINDOW, $ID_REPO_DETAILS, \&onOpenWindowById);
-	EVT_MENU_RANGE($this, $COMMAND_CHANGES, $COMMAND_TAG, \&onGitCommand);
+	EVT_MENU_RANGE($this, $ID_PATH_WINDOW, $ID_TAG_WINDOW, \&onOpenWindowById);
+	EVT_MENU_RANGE($this, $ID_COMMAND_RESCAN, $ID_COMMAND_PUSH_ALL, \&onCommand);
+	EVT_UPDATE_UI($this, $ID_COMMAND_PUSH_ALL, \&onUpdateUI);
+
 	EVT_COMMAND($this, -1, $THREAD_EVENT, \&onThreadEvent );
 	EVT_COMMAND($this, -1, $MONITOR_EVENT, \&onMonitorEvent );
 
@@ -117,6 +113,30 @@ sub onOpenWindowById
 	display($dbg_frame,0,"gitUI::Frame::onOpenWindowById($window_id)");
 	$this->createPane($window_id);
 }
+
+sub onCommand
+{
+	my ($this,$event) = @_;
+	my $id = $event->GetId();
+	display($dbg_frame,0,"gitUI::Frame::onCommand($id)");
+	if ($id == $ID_COMMAND_PUSH_ALL)
+	{
+		$this->doGitCommand($id);
+	}
+	elsif ($id == $ID_COMMAND_RESCAN)
+	{
+	}
+}
+
+sub onUpdateUI
+{
+	my ($this,$event) = @_;
+	my $id = $event->GetId();
+	my $enable = 0;
+	$enable = 1 if $id == $ID_COMMAND_PUSH_ALL && canPushRepos();
+	$event->Enable($enable);
+}
+
 
 
 #------------------------------

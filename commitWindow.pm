@@ -110,13 +110,19 @@ sub new
 }
 
 
-
 sub onClose
 {
 	my ($this,$event) = @_;
 	display($dbg_life,0,"commitWindow::onClose() called");
 	$this->SUPER::onClose($event);
 	$event->Skip();
+}
+
+
+sub canCommit
+{
+	my ($this) = @_;
+	return (keys %{$this->{staged}->{list_ctrl}->{repos}}) ? 1 : 0;
 }
 
 

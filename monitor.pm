@@ -64,9 +64,9 @@ use apps::gitUI::repos;
 use apps::gitUI::repoGit;
 use Pub::Utils;
 
-my $dbg_mon = 1;
+my $dbg_mon = 0;
 	# monitor life cycle, incl creation of monitors
-my $dbg_win32 = 1;
+my $dbg_win32 = 0;
 	# debug events, callbacks, etc
 
 our $MON_CB_TYPE_STATUS = 0;
@@ -210,7 +210,7 @@ sub createSubMonitors
     {
         next if $entry =~ /^(\.|\.\.)$/;
 		next if $entry =~/^\.git$/;
-			# don't include .git itself
+			# do include .git itself
 		my $sub_path = "$path/$entry";
 		my $is_dir = -d $sub_path ? 1 : 0;
 		if ($is_dir)
@@ -305,6 +305,7 @@ sub run
 				&$the_callback({ status =>"checking: $repo->{path}" });
 				$rslt = gitChanges($repo);
 				last if !defined($rslt);
+				setCanPush($repo);
 				&$the_callback({ repo=>$repo }) if $rslt;
 			}
 			$this->{started} = 1;
@@ -342,9 +343,11 @@ sub run
 						warning(0,0,"suppressing callback($suppress_path)");
 						$suppress_path = '';
 					}
-					else
+					elsif ($rslt)
 					{
-						&$the_callback({ repo=>$repo }) if $rslt;
+						# clear/set the UI notion of 'any repos to push'
+						setCanPush($repo);
+						&$the_callback({ repo=>$repo }) ;
 					}
 
 					# ok, this is interesting.

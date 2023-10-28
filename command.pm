@@ -67,25 +67,79 @@ sub abortCommand
 # main entry point
 #------------------------------------------
 
-sub onGitCommand
+
+sub doGitCommand
 {
-	my ($this,$event) = @_;
-	my $command_id = $event->GetId();
+	my ($this,$command_id,$data) = @_;
+
 	$this->{command_id} = $command_id;
-	$this->{command_name} = $resources->{command_data}->{$command_id}->[0];
-	display($dbg_cmds,0,"onGitCommand($command_id)=$this->{command_name}");
+
+	$this->{command_name} =
+		$command_id == $ID_COMMAND_PUSH_ALL ? "PushAll" :
+		$command_id == $COMMAND_PUSH ? "PushSelected" :
+		$command_id == $COMMAND_COMMIT ? "Commit" :
+		$command_id == $COMMAND_TAG ? "TagSelected" :
+			return error("Unknown commandID($command_id");
+	$this->{command_verb} =
+		$command_id == $ID_COMMAND_PUSH_ALL ||
+		$command_id == $COMMAND_PUSH ? "Pushing" :
+		$command_id == $COMMAND_COMMIT ? "Commit" :
+		"Tagging";
+	$this->{command_completed} =
+		$command_id == $ID_COMMAND_PUSH_ALL ||
+		$command_id == $COMMAND_PUSH ? "Pushed" :
+		$command_id == $COMMAND_COMMIT ? "Committed" :
+		"Tagged";
+
+	display($dbg_cmds,0,"doGitCommand($command_id)=$this->{command_name}");
+
+	$this->{num_actions} = 0;
+	my $repo_list = getRepoList();
+	for my $repo (@$repo_list)
+	{
+		my $can_commit 	= $repo->canCommit();
+		my $can_push 	= $repo->canPush();
+		my $selected 	= $repo->{selected};
+
+		$repo->{selected} = 0;
+			# switch 'selected' to invariant for 'doit'
+
+		my $doit = 0;
+		$doit = 1 if
+			$command_id == $COMMAND_COMMIT && $repo->canCommit() ||
+			$command_id == $COMMAND_TAG && $selected ||
+			$command_id == $ID_COMMAND_PUSH_ALL && $can_push ||
+			$command_id == $COMMAND_PUSH && $can_push && $selected;
+
+		if ($doit)
+		{
+			$repo->{selected} = 1;
+			$this->{num_actions}++;
+		}
+	}
+
+	display($dbg_cmds,1,"$this->{command_verb} $this->{num_actions} repos");
+
+	# if (!$this->{num_actions})
+	# {
+	# 	warning($dbg_cmds,0,"NOTHING TO DO!!");
+	# 	return;
+	# }
 
 	$this->initCommand();
 	$command_thread = undef;
-
-	my $repo_list = getRepoList();
-	my $data = 'test commit '.localtime();
-		# Commit needs to get the description
 
 	my $progress = $this->{progress} = apps::gitUI::progressDialog->new(
 		$this,
 		$this->{command_name},
 		\&abortCommand);
+
+	$progress->setParams({
+		main_msg    => $this->{command_name},
+		main_name   => '',
+		main_status => "$this->{num_actions} repos",
+		main_range  => $this->{num_actions},
+		main_done   => 0 });
 
 	if ($USE_THREADED_COMMANDS)
 	{
@@ -116,121 +170,35 @@ sub doThreadedCommand
 	my ($this,$repo_list,$data) = @_;
 	my $command_id = $this->{command_id};
 	display($dbg_cmds,0,"doThreadedCommand($command_id)=$this->{command_name}");
-	display($dbg_cmds+1,1,"data='$data'");
-
-	my $num_repos = @$repo_list;
-	my $action_name =
-		$command_id == $COMMAND_PUSH ? "Pushing" :
-		$command_id == $COMMAND_COMMIT ? "Commit" : '';
-
-
-	# DO THE CHANGES FIRST AS A FULL GAUGE
-	# obtaining $num_actions for other $command-ids
-
-	my $repo_num = 0;
-	my $num_actions = 0;
-	my $num_changed_repos = 0;
-	my $num_unstaged_files = 0;
-	my $num_staged_files = 0;
-	my $num_remote_files = 0;
-	my $num_unstaged_repos = 0;
-	my $num_staged_repos = 0;
-	my $num_remote_repos = 0;
-
-	for my $repo (@$repo_list)
-	{
-		# Commands disaabled except for /junk if $TEST_JUNK_ONLY
-		# see $TEST_JUNK_ONLY in repo.pm
-
-		next if $TEST_JUNK_ONLY && $repo->{path} !~ /junk/;
-
-		last if $command_aborted;
-
-		gitChanges($repo);
-
-		$repo_num++;
-
-		my $num_unstaged = keys %{$repo->{unstaged_changes}};
-		my $num_staged =   keys %{$repo->{staged_changes}};
-		my $num_remote =   keys %{$repo->{remote_changes}};
-
-		$num_unstaged_files += $num_unstaged;
-		$num_staged_files   += $num_staged;
-		$num_remote_files   += $num_remote;
-		$num_unstaged_repos ++ if $num_unstaged;
-		$num_staged_repos   ++ if $num_staged;
-		$num_remote_repos   ++ if $num_remote;
-
-		$num_changed_repos  ++ if $num_unstaged || $num_staged || $num_remote;
-
-		$num_actions++ if
-			($command_id == $COMMAND_ADD && $repo->canAdd()) ||
-			($command_id == $COMMAND_COMMIT && $repo->canCommit()) ||
-			($command_id == $COMMAND_PUSH && $repo->canPush());
-
-		my $status_msg =
-			$command_id == $COMMAND_ADD ? "$num_actions/$num_repos canAdd" :
-			$command_id == $COMMAND_COMMIT ? "$num_actions/$num_repos canCommit" :
-			$command_id == $COMMAND_PUSH ? "$num_actions/$num_repos canPush" :
-			"$num_changed_repos/$num_repos changed";
-
-		$this->sendThreadEvent({
-			main_msg    => 'Checking',
-			main_name   => $repo->{path},
-			main_status => $status_msg,
-			main_range  => $num_repos,
-			main_done   => $repo_num });
-
-		last if $command_aborted;
-	}
-
-	# DO THE COMMAND if $num_actions
+	display($dbg_cmds+1,1,"data("._def($data).")");
 
 	my $rslt = 1;
-	if ($num_actions)
+	my $act_num = 0;
+	for my $repo (@$repo_list)
 	{
-		$this->sendThreadEvent({
-			main_msg    => $this->{command_name},
-			main_name   => '',
-			main_status => "$num_actions repos",
-			main_range  => $num_actions,
-			main_done   => 0 });
-
-		my $num_actions_done = 0;
-		for my $repo (@$repo_list)
+		if ($repo->{selected})
 		{
-			# canXXX() disaabled except for /junk if $TEST_JUNK_ONLY
+			$this->sendThreadEvent({
+				main_name   => $repo->{path},
+				sub_name    => $this->{command_verb} });
 
-			my $doit = 0;
-			$doit = 1 if $command_id == $COMMAND_ADD && $repo->canAdd();
-			$doit = 1 if $command_id == $COMMAND_COMMIT && $repo->canCommit();
-			$doit = 1 if $command_id == $COMMAND_PUSH && $repo->canPush();
+			$rslt = gitCommit($repo,$data)
+				if $command_id == $COMMAND_COMMIT;
+			$rslt = gitTag($repo,$data)
+				if $command_id == $COMMAND_TAG;
+			$rslt = gitPush($repo,$this,\&push_callback)
+				if $command_id == $COMMAND_PUSH ||
+				    $command_id == $ID_COMMAND_PUSH_ALL;
 
-			if ($doit)
-			{
-				display($dbg_cmds+1,2,"doThreadedCommand($this->{command_name}) doing($repo->{path})");
+			last if $command_aborted || !$rslt;
 
-				last if $command_aborted;
+			$act_num++;
+			$this->sendThreadEvent({
+				main_status => "$act_num/$this->{num_actions} repos",
+				main_done   => $act_num });
 
-				$this->sendThreadEvent({
-					main_name   => $repo->{path},
-					sub_name    => $action_name });
-
-				$rslt = gitIndex($repo) if $command_id == $COMMAND_ADD;
-				$rslt = gitCommit($repo,$data) if $command_id == $COMMAND_COMMIT;
-				$rslt = gitPush($repo,$this,\&push_callback) if $command_id == $COMMAND_PUSH;
-
-				last if $command_aborted || !$rslt;
-
-				$num_actions_done++;
-				$this->sendThreadEvent({
-					main_status => "$num_actions_done/$num_actions repos",
-					main_done   => $num_actions_done });
-
-			}	# doit
-		}	# for each repo
-	}	# $num_actions
-
+		}	# selected
+	}	# for each repo
 
 	# The abort sequence from aborting Transfer is strange.
 	# The progressDialog calls abortCommand() which sets
@@ -244,16 +212,9 @@ sub doThreadedCommand
 
 	if ($rslt)
 	{
-		my $params = $command_aborted ? { aborted => 1} : {
-			done => 1,
-			num_actions => $num_actions,
-			num_changed_repos	=> $num_changed_repos,
-			num_unstaged_files 	=> $num_unstaged_files,
-			num_staged_files 	=> $num_staged_files,
-			num_remote_files 	=> $num_remote_files,
-			num_unstaged_repos 	=> $num_unstaged_repos,
-			num_staged_repos 	=> $num_staged_repos,
-			num_remote_repos 	=> $num_remote_repos };
+		my $params = $command_aborted ?
+			{ aborted => 1} :
+			{ done => 1 };
 		$this->sendThreadEvent( $params );
 	}
 
@@ -355,49 +316,18 @@ sub updateProgress
 	}
 	elsif ($params->{done})
 	{
-		if ($command_id == $COMMAND_CHANGES)
-		{
-			$progress->setDone('Done');
+		my $num_actions = $this->{num_actions};
 
-			my $use_name = '';
-			$use_name .= "unstaged($params->{num_unstaged_repos},$params->{num_unstaged_files}) "
-				if $params->{num_unstaged_repos};
-			$use_name .= "staged($params->{num_staged_repos},$params->{num_staged_files}) "
-				if $params->{num_staged_repos};
-			$use_name .= "remote($params->{num_remote_repos},$params->{num_remote_files}) "
-				if $params->{num_remote_repos};
-
-			my $final = { main_name => $use_name };
-			$final->{main_msg} = $params->{num_changed_repos} ?
-				"CHANGES" :"NO CHANGES!!";
-			$progress->setParams($final);
-		}
-		else
-		{
-			my $num_actions = $params->{num_actions};
-
-			my $what =
-				$command_id == $COMMAND_PUSH ? "pushed" :
-				$command_id == $COMMAND_COMMIT ? "committed" :
-				$command_id == $COMMAND_ADD ? "added" : '';
-			my $use_name = $num_actions ?
-				"$num_actions repos $what" :
-				"NOTHING TO DO!!";
-			my $main_msg = $num_actions ?
-				"Done!!" :
-				"Done";
-			$progress->setParams({
-				main_msg => $main_msg,
-				main_name => $use_name });
-
+		my $use_name = $num_actions ?
+			"$this->{command_completed} $num_actions repos" :
+			"NOTHING TO DO!!";
+		my $main_msg = $num_actions ?
+			"Done!!" :
+			"Done";
+		$progress->setParams({
+			main_msg => $main_msg,
+			main_name => $use_name });
 			$progress->setDone('Close');
-		}
-
-		for my $pane (@{$this->{panes}})
-		{
-			my $id = $pane->GetId();
-			$pane->updateLinks() if $id == $ID_PATH_WINDOW;
-		}
 	}
 	else
 	{

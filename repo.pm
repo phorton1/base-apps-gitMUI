@@ -56,6 +56,10 @@ sub new
 		section => $section,
 		branch	=> $branch || 'master',
 
+		# for tagSelected and pushSelected
+
+		selected => 0,
+
 		# for github.pm
 
 		found_on_github => 0,

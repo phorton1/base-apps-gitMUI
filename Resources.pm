@@ -22,54 +22,43 @@ BEGIN
 
 		$ID_PATH_WINDOW
 		$ID_COMMIT_WINDOW
-		$ID_REPO_DETAILS
+		$ID_PUSH_WINDOW
+		$ID_TAG_WINDOW
 
-		$COMMAND_CHANGES
-		$COMMAND_REPOS
+		$ID_COMMAND_RESCAN
+		$ID_COMMAND_PUSH_ALL
 
 		$COMMAND_ADD
 		$COMMAND_COMMIT
 		$COMMAND_PUSH
 		$COMMAND_TAG
-
-		$COMMAND_PATH_WIN
-		$COMMAND_SHOW_CHANGES
-		$COMMAND_INFO
-		$COMMAND_DEPENDS
 	),
 
 	@Pub::WX::Resources::EXPORT );
 }
 
 
-# derived class decides if wants viewNotebook
-# commands added to the view menu, by setting
-# the 'command_id' member on the notebook info.
 
 our (
 
+	# Windows handled by appFrame::createPane
+
 	$ID_PATH_WINDOW,
 	$ID_COMMIT_WINDOW,
-	$ID_REPO_DETAILS,
+	$ID_PUSH_WINDOW,
+	$ID_TAG_WINDOW,
 
-	# Refresh
+	# UI Commands handled by appFrame::onCommand
 
-	$COMMAND_CHANGES,
-	$COMMAND_REPOS,
+	$ID_COMMAND_RESCAN,
+	$ID_COMMAND_PUSH_ALL,
 
-	# Actions
+	# specific commands handled by appFrame::doGitCommand()
 
-	$COMMAND_ADD,
-	$COMMAND_COMMIT,
-	$COMMAND_PUSH,		# only one actually implemented
-	$COMMAND_TAG,
+	$COMMAND_PUSH,			# push selected
+	$COMMAND_COMMIT,		# commit all
+	$COMMAND_TAG,			# tag selected
 
-	# idas for windows
-
-	$COMMAND_PATH_WIN,
-	$COMMAND_SHOW_CHANGES,
-	$COMMAND_INFO,
-	$COMMAND_DEPENDS,
 )= (10000..11000);
 
 
@@ -78,28 +67,17 @@ our (
 # Notice the merging that takes place
 
 mergeHash($resources->{command_data},{
-	$ID_PATH_WINDOW			=> ['Paths',		'View all repositories by path grouped by sections'],
-	$ID_COMMIT_WINDOW       => ['Commit',		'A gitUI like window that allows staging, commit, and push' ],
-	$ID_REPO_DETAILS		=> ['Repo Details',	'List of Repos that allows viewing all details for a given repo'],
+	$ID_PATH_WINDOW			=> ['Paths',	'View all repositories by path grouped by sections'],
+	$ID_COMMIT_WINDOW       => ['Commit',	'A gitUI like window that allows staging, commit, and push' ],
+	$ID_PUSH_WINDOW			=> ['Push',		'Push selected repositories' ],
+	$ID_TAG_WINDOW 			=> ['Tag',		'Apply Tags to selected repositories' ],
 
-	$COMMAND_CHANGES		=> ['Changes',	'Update local and remote changes for repositories'],
-    $COMMAND_REPOS      	=> ['Repos',	'Update local repository info cache from github'],
+	$ID_COMMAND_RESCAN			=> ['Rescan',	'Re-initialize repository information'],
+	$ID_COMMAND_PUSH_ALL		=> ['PushAll',	'Push All commited changes'],
 
-	$COMMAND_ADD			=> ['Add',		'Add unstaged changes to staged'],
-	$COMMAND_COMMIT			=> ['Commit',	'Commit staged changes with a comment'],
-	$COMMAND_PUSH			=> ['Push',		'Push commited changes'],
-	$COMMAND_TAG			=> ['Tags',		'Add Tag to selected repositories'],
-
-	$COMMAND_PATH_WIN		=> ['Paths',	'Show repos organized by Sections'],
-    $COMMAND_SHOW_CHANGES   => ['Deltas',	'Show the current changes. Could also be dialog with context menu item'],
-    $COMMAND_INFO    		=> ['Info',		'Maybe a tree? table? Showing info for each repository. Could also be dialog with context menu item'],
-    $COMMAND_DEPENDS    	=> ['Depends',	'Show Dependency tree, etc'],
 });
 
 
-my %pane_data = (
-	# $ID_CLIENT_WINDOW	=> ['client_window',	'content'	],
-);
 
 
 #-------------------------------------
@@ -108,33 +86,22 @@ my %pane_data = (
 
 my @main_menu = (
 	'view_menu,&View',
-	'update_menu,&Update',
 	'actions_menu,&Actions',
 );
 
 unshift @{$resources->{view_menu}},(
 	$ID_PATH_WINDOW,
 	$ID_COMMIT_WINDOW,
-	$ID_REPO_DETAILS,
 	$ID_SEPARATOR,
 );
 
 
-my @update_menu = (
-	$COMMAND_CHANGES,
-	$COMMAND_REPOS,
-);
-
 my @actions_menu = (
-	$COMMAND_ADD,
-	$COMMAND_COMMIT,
-	$COMMAND_PUSH,		# only one actually implemented
-	$COMMAND_TAG,
-);
-
-
-my @win_context_menu = (
+	$ID_COMMAND_RESCAN,
     $ID_SEPARATOR,
+	$ID_TAG_WINDOW,
+	$ID_PUSH_WINDOW,
+	$ID_COMMAND_PUSH_ALL,		# only one actually implemented
 );
 
 
@@ -145,9 +112,7 @@ my @win_context_menu = (
 $resources = { %$resources,
     app_title => 'gitUI',
     main_menu => \@main_menu,
-	update_menu => \@update_menu,
 	actions_menu => \@actions_menu,
-    win_context_menu => \@win_context_menu,
 };
 
 

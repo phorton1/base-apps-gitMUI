@@ -1,8 +1,10 @@
 #----------------------------------------------------
 # base::apps::gitUI::repoGit
 #----------------------------------------------------
-# Contains gitXXX methods that change repositories
-# using Git::Raw
+# Contains gitXXX methods that change repositories using Git::Raw
+# Some changes (i.e. real 'gitChanges') will generate monitor events,
+# but many others will not, and so we generate them manually here.
+
 package apps::gitUI::repoGit;
 use strict;
 use warnings;
@@ -11,6 +13,7 @@ use threads::shared;
 use Time::HiRes qw(sleep);
 use Git::Raw;
 use Pub::Utils;
+use apps::gitUI::repos;
 use apps::gitUI::utils;
 
 
@@ -18,12 +21,13 @@ my $MAX_SHOW_CHANGES = 30;
 
 
 my $dbg_chgs = 1;
-my $dbg_index = 1;
-my $dbg_revert = 1;
+my $dbg_index = 0;
+my $dbg_revert = 0;
 my $dbg_commit = 0;
 my $dbg_push = 0;
 my $dbg_tag = 0;
-my $dbg_diff = 0;
+my $dbg_diff = 1;
+	# -1 to show diff details
 
 my $dbg_creds = 0;
 	# push credentials callback
@@ -106,7 +110,6 @@ sub gitChanges
 	# returns undef if any problems
 	# returns 1 if the any of the hashes of changes has changed
 	# returns 0 otherwise
-	## places advisory lock on $repo_list during atomic change assignment
 {
 	my ($repo) = @_;
 	display($dbg_chgs,0,"getChanges($repo->{path})");
@@ -303,20 +306,13 @@ sub getRemoteChanges
 
 sub gitIndex
 	# git add -A
+	# Note that we manually generate a monitor_callback
+	# after adjusting repo hashes
 {
-	my ($repo,$is_staged,$paths,$move_changes) = @_;
-	$move_changes ||= 0;
-		# if 1, the items will be moved between hashes on index changes,
-		# 	thus effectively suprressing the monitor from seing it as a change.
-		# if 0, they will not be moved, so the monitor will see it and
-		# 	notify the listCtrl of the change.
-		# We want the UI to be notified, but when called as 'Add' from
-		#   git changes with a pending Commit or Push we want the changes
-		#   instantly reflected for possible subsequent commit or push
-
+	my ($repo,$is_staged,$paths) = @_;
 	my $show = $is_staged ? 'staged' : 'unstaged';
 
-	display($dbg_index,0,"gitIndex($show) move_changes($move_changes) paths="._def($paths));
+	display($dbg_index,0,"gitIndex($show) paths="._def($paths));
 
 	# Create the repo and get the index
 
@@ -349,20 +345,14 @@ sub gitIndex
 					$index->remove($path) :
 					$index->add($path);
 				$index->write;
-				if ($move_changes)
-				{
-					$staged->{$path} = $uchange;
-					delete $unstaged->{$path};
-				}
+				$staged->{$path} = $uchange;
+				delete $unstaged->{$path};
 			}
 			else
 			{
 				return if !unstage($repo,$git_repo,$path);
-				if ($move_changes)
-				{
-					$unstaged->{$path} = $schange;
-					delete $staged->{$path};
-				}
+				$unstaged->{$path} = $schange;
+				delete $staged->{$path};
 			}
 		}
 	}
@@ -375,24 +365,18 @@ sub gitIndex
 	{
 		$index->add_all({ paths => ['*'] });
 		$index->write;
-		if ($move_changes)
-		{
-			mergeHash($repo->{staged_changes},$repo->{unstaged_changes});
-			$repo->{'staged_changes'} = shared_clone({});
-		}
+		mergeHash($repo->{staged_changes},$repo->{unstaged_changes});
+		$repo->{'staged_changes'} = shared_clone({});
 	}
 	else					# Remove everything from the index by using unstage(*)
 	{
-		return if !$repo->unstage($git_repo,'*');
-		if ($move_changes)
-		{
-			mergeHash($repo->{unstaged_changes},$repo->{staged_changes});
-			$repo->{'unstaged_changes'} = shared_clone({});
-		}
+		return if !unstage($repo,$git_repo,'*');
+		mergeHash($repo->{unstaged_changes},$repo->{staged_changes});
+		$repo->{'unstaged_changes'} = shared_clone({});
 	}
 
-	# DONE !!
-	# debugIndex($index,"AFTER",$repo->{path});
+	apps::gitUI::Frame::monitor_callback({ repo=>$repo })
+		if getAppFrame();
 
 	display($dbg_index,0,"gitIndex() returning 1");
 	return 1;
@@ -430,6 +414,7 @@ sub gitRevert
 	# Revert changes to unstaged files.
 	# My version always gets a list of paths.
 	# Implemented by doing a checkout from the $index
+	# WILL generate a monitor callback!
 {
 	my ($repo,$paths) = @_;
 	my $num_paths = @$paths;
@@ -471,7 +456,7 @@ sub gitRevert
 		# progres =>						# The callback receives a string containing the path of the file $path, an integer $completed_steps and an integer $total_steps.
 	};
 
-	# DO THE REVERT
+	# DO THE REVERT - WILL GENERATE A MONITOR EVENT
 
 	my $rslt = $index->checkout( $opts );
 
@@ -487,6 +472,8 @@ sub gitRevert
 
 sub gitCommit
 	# git commit  -m \"$msg\"
+	# Note that we manually generate a monitor_callback
+	# after adjusting repo hashes
 {
 	my ($repo,$msg) = @_;
 	my $num = scalar(keys %{$repo->{staged_changes}});
@@ -527,10 +514,14 @@ sub gitCommit
 		if !$commit;
 
 	# move the changes from 'staged' to 'remote'
+	# and generate a callback if in the appFrame
 
 	display($dbg_commit+1,1,"moving $num staged_changes to remote_changes");
 	mergeHash($repo->{remote_changes},$repo->{staged_changes});
 	$repo->{staged_changes} = shared_clone({});
+	setCanPush($repo);
+	apps::gitUI::Frame::monitor_callback({ repo=>$repo })
+		if getAppFrame();
 
 	display($dbg_commit,0,"gitCommit() returning 1");
 	return 1;
@@ -544,6 +535,7 @@ sub gitCommit
 
 
 sub gitTag
+	# Note that we manually generate a monitor_callback
 {
 	my ($repo,$tag) = @_;
 	display($dbg_tag,0,"gitTag($tag,$repo->{path})");
@@ -564,12 +556,18 @@ sub gitTag
 	return $repo->repoError("Could not get id_remote(HEAD)")
 		if !$id;
 
-	print "ref=$ref id=$id\n";
+	display($dbg_tag+1,1,"ref=$ref id=$id");
 
 	my $msg = '';
 	my $rslt = $git_repo->tag($tag, $msg, $sig, $id );
 	display($dbg_tag,0,"gitTag($tag) returning"._def($rslt));
 
+	# monitor_callback() for good measure
+
+	apps::gitUI::Frame::monitor_callback({ repo=>$repo })
+		if getAppFrame();
+
+	display($dbg_tag,0,"gitTag($tag) returning "._def($rslt));
 	return $rslt;
 }
 
@@ -666,6 +664,8 @@ sub cb_reference
 
 
 sub gitPush
+	# Note that we manually generate a monitor_callback
+	# after adjusting repo hashes
 {
 	my ($repo,$user_obj,$user_cb) = @_;
 
@@ -728,14 +728,20 @@ sub gitPush
 		$msg =~ s/at \/base.*$//;
 
 		user_callback($PUSH_CB_ERROR,$msg);
-
 	};
+
+	# Note that we manually generate a monitor_callback
+	# after adjusting repo hashes
 
 	if ($rslt)
 	{
 		display($dbg_commit+1,1,"clearing $num remote_changes");
 		$repo->{remote_changes} = shared_clone({});
+		setCanPush($repo);
+		apps::gitUI::Frame::monitor_callback({ repo=>$repo })
+			if getAppFrame();
 	}
+
 	display($dbg_push,1,"gitPush() returning rslt="._def($rslt));
 	return $rslt;
 }
@@ -761,9 +767,6 @@ sub showDiffFile
 
 
 sub gitDiff
-	# Revert changes to unstaged files.
-	# My version always gets a list of paths.
-	# Implemented by doing a checkout from the $index
 {
 	my ($repo,$is_staged,$fn) = @_;
 	display($dbg_diff,0,"gitDiff($is_staged,$fn)");
@@ -795,38 +798,41 @@ sub gitDiff
 	my $diff = $git_repo->diff($opts);
 	return $repo->repoError("Could not do diff()") if !$diff;
 
-	my @deltas = $diff->deltas();
-	my $delta_count = @deltas;	# $diff->delta_count();
-	display($dbg_diff,1,"DELTAS($delta_count)");
-	for my $delta (@deltas)
+	if ($dbg_diff < 0)
 	{
-		my $status = $delta->status();
-		my $flags = $delta->flags();
-		my $flag_text = join(',',@$flags);
-		display($dbg_diff,2,"status($status) flags("._def($flags).") flag_text("._def($flag_text).")");
-		showDiffFile("old",$delta->old_file());
-		showDiffFile("new",$delta->new_file());
-	}
-	my @patches = $diff->patches();
-	my $patch_count = @patches;
-	display($dbg_diff,1,"PATCHES($patch_count)");
-	for my $patch (@patches)
-	{
-		my $stats = $patch->line_stats();
-		my $context = $stats->{context};
-		my $additions = $stats->{additions};
-		my $deletions = $stats->{deletions};
-		my @hunks = $patch->hunks();
-		my $hunk_count = @hunks;
-		display($dbg_diff,2,"PATCH context($context) additions($additions) deletions($deletions) hunks($hunk_count)");
-		for my $hunk (@hunks)
+		my @deltas = $diff->deltas();
+		my $delta_count = @deltas;	# $diff->delta_count();
+		display($dbg_diff,1,"DELTAS($delta_count)");
+		for my $delta (@deltas)
 		{
-			my $old_start = $hunk->old_start();
-			my $old_lines = $hunk->old_lines();
-			my $new_start = $hunk->old_start();
-			my $new_lines = $hunk->old_lines();
-			display($dbg_diff,3,"hunk old($old_start,$old_lines) new($new_start,$new_lines)");
-			print $hunk->header();
+			my $status = $delta->status();
+			my $flags = $delta->flags();
+			my $flag_text = join(',',@$flags);
+			display($dbg_diff,2,"status($status) flags("._def($flags).") flag_text("._def($flag_text).")");
+			showDiffFile("old",$delta->old_file());
+			showDiffFile("new",$delta->new_file());
+		}
+		my @patches = $diff->patches();
+		my $patch_count = @patches;
+		display($dbg_diff,1,"PATCHES($patch_count)");
+		for my $patch (@patches)
+		{
+			my $stats = $patch->line_stats();
+			my $context = $stats->{context};
+			my $additions = $stats->{additions};
+			my $deletions = $stats->{deletions};
+			my @hunks = $patch->hunks();
+			my $hunk_count = @hunks;
+			display($dbg_diff,2,"PATCH context($context) additions($additions) deletions($deletions) hunks($hunk_count)");
+			for my $hunk (@hunks)
+			{
+				my $old_start = $hunk->old_start();
+				my $old_lines = $hunk->old_lines();
+				my $new_start = $hunk->old_start();
+				my $new_lines = $hunk->old_lines();
+				display($dbg_diff,3,"hunk old($old_start,$old_lines) new($new_start,$new_lines)");
+				print $hunk->header();
+			}
 		}
 	}
 

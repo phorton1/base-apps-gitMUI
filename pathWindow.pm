@@ -31,13 +31,19 @@ my $ROW_HEIGHT   = 18;
 my $COLUMN_START = 10;
 my $COLUMN_WIDTH = 180;
 
+my $win_instance = 0;
 
 sub new
 {
 	my ($class,$frame,$id,$book,$data) = @_;
+
+	my $instance = $win_instance++;
+	my $name = 'Paths';
+	$name .= "($instance)" if $instance;
+
 	display($dbg_win,0,"pathWindow::new($frame,$id,"._def($book).","._def($data).")");
 	my $this = $class->SUPER::new($book,$id);
-	$this->MyWindow($frame,$book,$id,'Paths',$data);	## ,$instance);
+	$this->MyWindow($frame,$book,$id,$name,$data,$instance);
 
 	$this->SetBackgroundColour($color_white);
 	$this->{ctrl_sections} = [];
@@ -159,36 +165,9 @@ sub doLayout
 }
 
 
-sub updateLinks
-{
-	my ($this) = @_;
-	for my $ctrl_section (@{$this->{ctrl_sections}})
-	{
-		for my $ctrl (@{$ctrl_section->{ctrls}})
-		{
-			my $id = $ctrl->GetId();
-			if ($id > 0)
-			{
-				my $repo = repoFromId($id);
-				my $color =
-					keys %{$repo->{unstaged_changes}} ? $color_orange :
-					keys %{$repo->{staged_changes}} ? $color_red :
-					keys %{$repo->{remote_changes}} ? $color_magenta :
-					$repo->{private} ? $color_blue :
-					$color_green;
-				$ctrl->SetForegroundColour($color);
-				$ctrl->Refresh();
-			}
-		}
-	}
-}
-
-
-
 #----------------------------------------
 # populate
 #----------------------------------------
-
 
 sub newCtrlSection
 {

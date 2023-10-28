@@ -100,19 +100,53 @@ BEGIN
 		getRepoHash
 		getRepoList
 		getRepoSections
+
+		canPushRepos
+		setCanPush
+		clearSelected
 	);
 }
 
 my $repo_filename = '/base/bat/git_repositories.txt';
 
-
 my $repo_hash:shared = shared_clone({});
 my $repo_list:shared = shared_clone([]);
 my $repo_sections:shared = shared_clone([]);
+my $repos_can_push = shared_clone({});
+
 
 sub getRepoHash		{ return $repo_hash; }
 sub getRepoList		{ return $repo_list; }
 sub getRepoSections	{ return $repo_sections; }
+
+
+sub canPushRepos
+{
+	return scalar(keys %$repos_can_push);
+}
+
+sub setCanPush
+{
+	my ($repo) = @_;
+	my $num = keys %{$repo->{remote_changes}};
+	if ($num)
+	{
+		$repos_can_push->{$repo->{path}} = $num;
+	}
+	else
+	{
+		delete $repos_can_push->{$repo->{path}};
+	}
+}
+
+sub clearSelected
+{
+	for my $repo (@$repo_list)
+	{
+		$repo->{selected} = 0;
+	}
+}
+
 
 
 sub parseRepos
