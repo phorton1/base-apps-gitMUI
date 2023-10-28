@@ -398,9 +398,8 @@ sub toContent
 	# display_hash(0,0,"toContent($this->{path}",$this);
 
 	push @$content,[0,$color_black,''];
-	$this->contentLine($content,1,'path');
-	push @$content,[0,$color_black,''];
 
+	$this->contentLine($content,1,'path');
 	$this->contentLine($content,0,'num');
 	$this->contentLine($content,0,'branch');
 	$this->contentLine($content,0,'section');

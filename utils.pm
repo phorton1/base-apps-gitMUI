@@ -37,6 +37,7 @@
 package apps::gitUI::utils;
 use strict;
 use warnings;
+use Cwd;
 use Win32::Process;
 use Wx qw(:everything);
 use Pub::Utils;
@@ -48,6 +49,7 @@ $data_dir = "/base_data/data/gitUI";
 
 
 my $dbg_ids = 1;
+my $dbg_exec = 0;
 
 
 our $TEST_JUNK_ONLY = 0;
@@ -72,6 +74,7 @@ BEGIN
 
 		repoPathToId
 		repoIdToPath
+		execNoShell
 		openGitGUI
 
 		$font_normal
@@ -192,24 +195,38 @@ sub repoIdToPath
 }
 
 
-sub openGitGUI
-{
-	my ($path) = @_;
-	chdir($path);
 
-	# This, not system(), is how I figured out how to start
-	# git gui without opening an underlying DOS box.
+
+sub execNoShell
+	# This, not system(), is how I figured out how to
+	# run an external program without opening a DOS box.
+{
+	my ($cmd,$path) = @_;
+	$path ||= getcwd();
+	# chdir($path) ;
+	display($dbg_exec,0,"execNoShell(>$cmd<) path($path)");
+
+	# in the case of quoted commands and parameters,
+	# we need to surround the whole command with quotes
 
 	my $p;
 	Win32::Process::Create(
 		$p,
 		"C:\\Windows\\System32\\cmd.exe",
-		"/C git gui",
+		"/C \"$cmd\"",
 		0,
 		CREATE_NO_WINDOW |
 		NORMAL_PRIORITY_CLASS,
 		$path );
 }
+
+
+sub openGitGUI
+{
+	my ($path) = @_;
+	execNoShell('git gui',$path);
+}
+
 
 
 #-----------------------------------------------------

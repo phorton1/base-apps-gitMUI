@@ -57,7 +57,7 @@ use base qw(Wx::ScrolledWindow);	# qw(Wx::Window);
 my $dbg_ctrl = 1;		# life cycle
 my $dbg_pop = 1;		# update (populate)
 my $dbg_draw = 1;		# drawing
-my $dbg_sel = 1;		# selection
+my $dbg_sel = 0;		# selection
 	# 0  == everything except
 	# -1 == addShiftSel() adding of individual shift-sel items
 my $dbg_actions = 0;	# actions on index
@@ -840,22 +840,24 @@ sub toggleSelection
 	$selected |= 0;
 
 	display($dbg_sel,0,"toggleSelection($this->{name},$id,$fn) selected=$selected");
-	$this->{anchor} = '';
 
 	if ($selected)	# unselecting
 	{
 		delete $repo_sel->{$fn};
 		delete $selection->{$id} if !keys %$repo_sel;
+		$this->{anchor} = '';
 	}
 	elsif (!$repo_sel)
 	{
 		$repo_sel = { $fn => 1 };
 		$selection->{$id} = $repo_sel;
+		$this->{anchor} = $item;
 		$this->notifyItemSelected($repo,$item);
 	}
 	else
 	{
 		$repo_sel->{$fn} = 1;
+		$this->{anchor} = $item;
 		$this->notifyItemSelected($repo,$item);
 	}
 
@@ -1048,7 +1050,8 @@ sub onCommand
 	}
 	elsif ($command_id == $ID_OPEN_IN_NOTEPAD)
 	{
-		system(1,"notepad \"$repo->{path}/$fn\"");
+		execNoShell("notepad \"$repo->{path}/$fn\"");
+		# system(1,"notepad \"$repo->{path}/$fn\"");
 	}
 	elsif ($command_id == $ID_OPEN_IN_KOMODO)
 	{
@@ -1074,7 +1077,8 @@ sub onCommand
 		my $komodo = "\"C:\\Program Files (x86)\\ActiveState Komodo Edit 8\\komodo.exe\"";
 		my $command = $komodo." ".join(" ",@$filenames);
 		display($dbg_cmd,1,"calling '$command'");
-		system(1,$command);
+		execNoShell($command);
+		# system(1,$command);
 	}
 
 	#-----------------------
