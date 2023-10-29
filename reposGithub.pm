@@ -2,7 +2,7 @@
 # call github APIs to flesh out repos
 #----------------------------------------------------
 
-package apps::gitUI::github;
+package apps::gitUI::reposGithub;
 use strict;
 use warnings;
 use threads;

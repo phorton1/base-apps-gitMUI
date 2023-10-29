@@ -1,5 +1,5 @@
 #-------------------------------------------
-# apps::gitUI::diffCtrl
+# apps::gitUI::myTextCtrl
 #-------------------------------------------
 # The content is a reference to an array of 'lines'
 # where each 'line' is itself an array ref, and consists
@@ -13,7 +13,7 @@
 #	];
 
 
-package apps::gitUI::diffCtrl;
+package apps::gitUI::myTextCtrl;
 use strict;
 use warnings;
 use threads;

@@ -16,7 +16,7 @@ use Pub::Utils;
 use Pub::WX::Window;
 use apps::gitUI::repos;
 use apps::gitUI::utils;
-use apps::gitUI::hyperlink;
+use apps::gitUI::myHyperlink;
 use apps::gitUI::repoMenu;
 use base qw(Wx::Window Pub::WX::Window apps::gitUI::repoMenu);
 
@@ -241,7 +241,7 @@ sub populate
 				$repo->{private} ? $color_blue :
 				$color_green;
 
-			my $ctrl = apps::gitUI::hyperlink->new(
+			my $ctrl = apps::gitUI::myHyperlink->new(
 				$this,
 				$id,
 				$display_name,

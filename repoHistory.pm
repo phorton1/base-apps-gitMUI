@@ -10,7 +10,7 @@
 # add members from local git/config files.
 
 
-package apps::gitUI::gitHistory;
+package apps::gitUI::repoHistory;
 use strict;
 use warnings;
 use threads;

@@ -43,7 +43,7 @@ use Pub::Utils;
 $temp_dir = "/base_data/temp/gitUI";
 $data_dir = "/base_data/data/gitUI";
 	# we set these here, even though they aren't used
-	# until gitUI::github.pm, cuz it's easy to find.
+	# until gitUI::reposGithub.pm, cuz it's easy to find.
 
 
 my $dbg_ids = 1;

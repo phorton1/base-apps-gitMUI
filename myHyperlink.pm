@@ -2,7 +2,7 @@
 # Window to invoke gitUI from my /bat/git_repositories.txt
 #-------------------------------------------------------------------------
 
-package apps::gitUI::hyperlink;
+package apps::gitUI::myHyperlink;
 use strict;
 use warnings;
 use Wx qw(:everything);

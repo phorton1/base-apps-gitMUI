@@ -20,7 +20,7 @@ use Wx::Event qw(
 use apps::gitUI::utils;
 use apps::gitUI::repo;
 use apps::gitUI::repos;
-use apps::gitUI::listCtrl;
+use apps::gitUI::commitListCtrl;
 use Pub::Utils;
 use base qw(Wx::Window);
 
@@ -61,7 +61,7 @@ sub new
 		'Staged Changed (Will Commit)' : 'Unstaged Changes',
 		[86,5]);
 
-	$this->{list_ctrl} = apps::gitUI::listCtrl->new($this,$is_staged,$PANE_TOP,$data->{list_ctrl});
+	$this->{list_ctrl} = apps::gitUI::commitListCtrl->new($this,$is_staged,$PANE_TOP,$data->{list_ctrl});
 
 	$this->populate();
 

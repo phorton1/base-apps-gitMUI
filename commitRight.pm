@@ -18,10 +18,10 @@ use Wx::Event qw(
 	EVT_UPDATE_UI_RANGE );
 use apps::gitUI::utils;
 use apps::gitUI::repos;
-use apps::gitUI::diffCtrl;
-use apps::gitUI::hyperlink;
+use apps::gitUI::myTextCtrl;
+use apps::gitUI::myHyperlink;
 use apps::gitUI::repoGit;
-use apps::gitUI::gitHistory;
+use apps::gitUI::repoHistory;
 use apps::gitUI::Resources;
 use Pub::Utils;
 use base qw(Wx::Window);
@@ -59,9 +59,9 @@ sub new
 	$this->SetBackgroundColour($color_yellow);
 
 	$this->{what_ctrl} = Wx::StaticText->new($this,-1,'',[5,5],[$FILENAME_LEFT-10,20]);
-	my $hyperlink = $this->{hyperlink} = apps::gitUI::hyperlink->new($this,-1,'',[$FILENAME_LEFT,5]);
+	my $hyperlink = $this->{hyperlink} = apps::gitUI::myHyperlink->new($this,-1,'',[$FILENAME_LEFT,5]);
 	$this->{note_ctrl} = Wx::StaticText->new($this,-1,'',[$NOTE_LEFT,5]);
-	$this->{diff_ctrl} = apps::gitUI::diffCtrl->new($this);
+	$this->{diff_ctrl} = apps::gitUI::myTextCtrl->new($this);
 
 	my $panel = $this->{panel} = Wx::Panel->new($this);
 	$panel->SetBackgroundColour($color_light_grey);
