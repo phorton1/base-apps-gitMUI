@@ -782,7 +782,7 @@ sub gitDiff
 			show_untracked_content => 1, # !$is_staged,
 		# show_binary => 1,
 			# skip_binary_check => 1,
-		context_lines => 3,
+		context_lines => 5,
 		prefix => {
 			a => $is_staged ? 'index' : 'work' ,
 			b => $is_staged ? 'HEAD'  : 'index' }};
