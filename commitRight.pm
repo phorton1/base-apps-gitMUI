@@ -149,15 +149,28 @@ sub onButton
 	{
 		$app_frame->createPane($ID_PUSH_WINDOW,$this->{book});
 	}
-	if ($id == $ID_COMMAND_RESCAN ||
-		$id == $ID_COMMAND_PUSH_ALL )
+	if ($id == $ID_COMMAND_RESCAN)
 	{
 		$app_frame->onCommand($event);
 	}
+	if ($id == $ID_COMMAND_PUSH_ALL)
+	{
+		$app_frame->doPushCommand($id);
+	}
 	if ($id == $COMMAND_COMMIT)
 	{
-		$app_frame->doGitCommand($COMMAND_COMMIT,$this->{commit_msg}->GetValue());
+		# $app_frame->doGitCommand($COMMAND_COMMIT,$this->{commit_msg}->GetValue());
+		my $commit_msg = $this->{commit_msg}->GetValue();
 		$this->{commit_msg}->SetValue('');
+
+		display($dbg_cmds,0,"COMMIT_BUTTON doing commit on repos");
+		my $repo_list = getRepoList();
+		for my $repo (@$repo_list)
+		{
+			my $rslt = $repo->canCommit() ?
+				gitCommit($repo,$commit_msg) : 1;
+			last if !$rslt;
+		}
 	}
 }
 

@@ -57,11 +57,11 @@ use base qw(Wx::ScrolledWindow);	# qw(Wx::Window);
 my $dbg_ctrl = 1;		# life cycle
 my $dbg_pop = 1;		# update (populate)
 my $dbg_draw = 1;		# drawing
-my $dbg_sel = 0;		# selection
+my $dbg_sel = 1;		# selection
 	# 0  == everything except
 	# -1 == addShiftSel() adding of individual shift-sel items
 my $dbg_actions = 0;	# actions on index
-my $dbg_cmd = 0;		# context menu and commands
+my $dbg_cmd = 1;		# context menu and commands
 
 
 my $ROW_HEIGHT  = 18;
@@ -1035,7 +1035,11 @@ sub onCommand
 	my $repo_sel = $this->{selection}->{$id};
 	my $selected = $repo_sel ? $repo_sel->{$fn} : 0;
 	$selected ||= 0;
-	my $multiple = $selected ? scalar(keys %$repo_sel) > 1 : 0;
+	my $multiple = 0;
+
+	$multiple = 1 if $selected &&
+		scalar(keys %$repo_sel) > 1 ||
+		scalar(keys %$selection) > 1;
 
 	display($dbg_cmd,0,"onCommand($this->{name},$command_id) repo($id) fn($fn) selected($selected) multiple($multiple)");
 
@@ -1098,7 +1102,7 @@ sub onCommand
 				yesNoDialog($this,
 					"Revert changes to\n'$filename' ?",
 					"Revert changes to single file");
-			gitRevert($repo,[ $fn ]);
+			gitRevert($repo,[ $fn ]) if $ok;
 		}
 		else
 		{

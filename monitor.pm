@@ -1,6 +1,12 @@
 #-----------------------------------------------
 # Monitor all repo paths for changes
 #-----------------------------------------------
+#
+#	I'M ON THE LOOKOUT FOR TWO BUGS:
+#
+#		1. after various actions I start getting spurious win_notify() messages
+#		2. after various actions I stop getting simple test1.tet file change notifications
+#
 # Uses a thread to watch for changes to repos.
 # Notifies via a callback with the $repo that has changed.
 # In general, the thread can be started (if not already running),
@@ -30,7 +36,7 @@
 # It gets this info by reading the .gitignore files that it (may) find in
 # a repo's (main) path.  If the file contains an ignore of the form
 #
-#                     blah**
+#                     blah/**
 #
 # this object assumes that means that the repo contains sub repos, and
 # instead of registering on the folder tree for the outer path, we
@@ -66,7 +72,7 @@ use Pub::Utils;
 
 my $dbg_mon = 0;
 	# monitor life cycle, incl creation of monitors
-my $dbg_win32 = 0;
+my $dbg_win32 = 1;
 	# debug events, callbacks, etc
 
 our $MON_CB_TYPE_STATUS = 0;
@@ -120,6 +126,8 @@ sub suppressPath
 #------------------------------------------------------
 
 sub parseGitIgnore
+	# find patterns like blah** and turn the
+	# blah portion into an re and push it on a list
 {
 	my ($path) = @_;
 	my $retval = '';
@@ -134,7 +142,8 @@ sub parseGitIgnore
 			$re =~ s/\(/\\\(/g;		# change parents to RE
 			$re =~ s/\)/\\\)/g;
 			$retval ||= [];
-			push @$retval,$re
+			push @$retval,$re;
+			display($dbg_mon,0,"exclude='$re'");
 		}
 	}
 	return $retval;
@@ -152,12 +161,13 @@ sub createMonitor
 		my $include_subfolders = 1;
 		if ($parent)
 		{
-			display($dbg_mon,0,"CREATING SUB_MONITOR($path,$parent->{path})");
+			display($dbg_mon,0,"CREATE SUB_MONITOR($path,$parent->{path})");
 		}
 		else
 		{
 			$excludes =  parseGitIgnore($path);
 			$include_subfolders = 0 if $excludes;
+			display($dbg_mon,0,"CREATE MONITOR($path) excludes("._def($excludes).")");
 		}
 
 		my $mon = Win32::ChangeNotify->new($path,$include_subfolders,$WIN32_FILTER);

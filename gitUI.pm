@@ -31,7 +31,7 @@ $TEST_JUNK_ONLY = 1;
 
 my $dbg_frame = 0;
 	# lifecycle, major commands
-my $dbg_mon = 0;
+my $dbg_mon = 1;
 
 
 my $USE_MONITOR = 1;
@@ -121,7 +121,7 @@ sub onCommand
 	display($dbg_frame,0,"gitUI::Frame::onCommand($id)");
 	if ($id == $ID_COMMAND_PUSH_ALL)
 	{
-		$this->doGitCommand($id);
+		$this->doPushCommand($id);
 	}
 	elsif ($id == $ID_COMMAND_RESCAN)
 	{

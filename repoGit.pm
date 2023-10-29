@@ -21,10 +21,10 @@ my $MAX_SHOW_CHANGES = 30;
 
 
 my $dbg_chgs = 1;
-my $dbg_index = 0;
-my $dbg_revert = 0;
-my $dbg_commit = 0;
-my $dbg_push = 0;
+my $dbg_index = 1;
+my $dbg_revert = 1;
+my $dbg_commit = 1;
+my $dbg_push = 1;
 my $dbg_tag = 0;
 my $dbg_diff = 1;
 	# -1 to show diff details
@@ -457,11 +457,12 @@ sub gitRevert
 	};
 
 	# DO THE REVERT - WILL GENERATE A MONITOR EVENT
+	# returns undef
 
-	my $rslt = $index->checkout( $opts );
+	my $undef = $index->checkout( $opts );
 
-	display($dbg_revert,0,"gitRevert($num_paths) returning "._def($rslt));
-	return $rslt;
+	display($dbg_revert,0,"gitRevert($num_paths) returning 1");
+	return 1;
 }
 
 
@@ -559,16 +560,16 @@ sub gitTag
 	display($dbg_tag+1,1,"ref=$ref id=$id");
 
 	my $msg = '';
-	my $rslt = $git_repo->tag($tag, $msg, $sig, $id );
-	display($dbg_tag,0,"gitTag($tag) returning"._def($rslt));
+	my $undef = $git_repo->tag($tag, $msg, $sig, $id );
+	display($dbg_tag,0,"git_repo->tag() returned"._def($undef));
 
 	# monitor_callback() for good measure
 
 	apps::gitUI::Frame::monitor_callback({ repo=>$repo })
 		if getAppFrame();
 
-	display($dbg_tag,0,"gitTag($tag) returning "._def($rslt));
-	return $rslt;
+	display($dbg_tag,0,"gitTag($tag) returning 1");
+	return 1;
 }
 
 
@@ -748,13 +749,9 @@ sub gitPush
 
 
 
-
-
-
 #------------------------------------------------
 # gitDiff
 #------------------------------------------------
-
 
 sub showDiffFile
 {
@@ -763,8 +760,6 @@ sub showDiffFile
 	my $mode = $git_file ? $git_file->mode() : '' ;
 	display($dbg_diff,1,"$old_new git_file("._def($git_file).") size($size) mode($mode)");
 }
-
-
 
 sub gitDiff
 {

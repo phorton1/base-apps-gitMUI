@@ -1,6 +1,9 @@
 #--------------------------------------------------------
-# gitUI Frame
+# gitUI Frame  command.pm
 #--------------------------------------------------------
+# doPushCommand() - implements a gitCommand with a progress Dialog.
+#   currently only used for gitPush as gitTag and gitCommit are
+# 	known to be quick (or at least workabele without threads/dialogs)
 
 package apps::gitUI::Frame;		# continued
 use strict;
@@ -18,11 +21,15 @@ use base qw(Pub::WX::Frame);
 my $dbg_cmds = 0;
 	# 0 = main command functions
 	# -1 = details
-my $dbg_thread = -1;
+my $dbg_thread = 0;
 	# 0 = msin thread calls
 	# -1 = details
 
-our $USE_THREADED_COMMANDS = 1;
+our $USE_THREADED_COMMANDS = 0;
+	# THERE ARE DEFINITELY PROBLEMS USING THREADS VIS-A-VIS THE MONITOR
+	# the thread dying seems to call Wx::Frame::DESTROY(), for example,
+	# and somthing when the thread stops causes the moniotr to stop working
+	# correctly.  For now I am proceeding with non-threaded commands.
 
 
 BEGIN
@@ -68,28 +75,15 @@ sub abortCommand
 #------------------------------------------
 
 
-sub doGitCommand
+sub doPushCommand
+	# is actually nearly generic for calling gitCommands with Dialog
 {
-	my ($this,$command_id,$data) = @_;
+	my ($this,$command_id) = @_;
 
 	$this->{command_id} = $command_id;
-
+	$this->{command_verb} = "Pushing";
 	$this->{command_name} =
-		$command_id == $ID_COMMAND_PUSH_ALL ? "PushAll" :
-		$command_id == $COMMAND_PUSH ? "PushSelected" :
-		$command_id == $COMMAND_COMMIT ? "Commit" :
-		$command_id == $COMMAND_TAG ? "TagSelected" :
-			return error("Unknown commandID($command_id");
-	$this->{command_verb} =
-		$command_id == $ID_COMMAND_PUSH_ALL ||
-		$command_id == $COMMAND_PUSH ? "Pushing" :
-		$command_id == $COMMAND_COMMIT ? "Commit" :
-		"Tagging";
-	$this->{command_completed} =
-		$command_id == $ID_COMMAND_PUSH_ALL ||
-		$command_id == $COMMAND_PUSH ? "Pushed" :
-		$command_id == $COMMAND_COMMIT ? "Committed" :
-		"Tagged";
+		$command_id == $ID_COMMAND_PUSH_ALL ? "PushAll" :  "PushSelected";
 
 	display($dbg_cmds,0,"doGitCommand($command_id)=$this->{command_name}");
 
@@ -97,19 +91,15 @@ sub doGitCommand
 	my $repo_list = getRepoList();
 	for my $repo (@$repo_list)
 	{
-		my $can_commit 	= $repo->canCommit();
 		my $can_push 	= $repo->canPush();
 		my $selected 	= $repo->{selected};
-
 		$repo->{selected} = 0;
 			# switch 'selected' to invariant for 'doit'
 
 		my $doit = 0;
-		$doit = 1 if
-			$command_id == $COMMAND_COMMIT && $repo->canCommit() ||
-			$command_id == $COMMAND_TAG && $selected ||
-			$command_id == $ID_COMMAND_PUSH_ALL && $can_push ||
-			$command_id == $COMMAND_PUSH && $can_push && $selected;
+		$doit = 1 if $can_push && (
+			$command_id == $ID_COMMAND_PUSH_ALL || (
+			$command_id == $COMMAND_PUSH && $selected ));
 
 		if ($doit)
 		{
@@ -120,14 +110,7 @@ sub doGitCommand
 
 	display($dbg_cmds,1,"$this->{command_verb} $this->{num_actions} repos");
 
-	# if (!$this->{num_actions})
-	# {
-	# 	warning($dbg_cmds,0,"NOTHING TO DO!!");
-	# 	return;
-	# }
-
 	$this->initCommand();
-	$command_thread = undef;
 
 	my $progress = $this->{progress} = apps::gitUI::progressDialog->new(
 		$this,
@@ -146,13 +129,14 @@ sub doGitCommand
 		display($dbg_thread,1,"starting THREAD");
 		@_ = ();
 		$command_thread = threads->create(	# barfs: my $thread = threads->create(
-			\&doThreadedCommand,$this,$repo_list,$data);
+			\&doThreadedPush,$this,$repo_list);
 		$command_thread->detach(); 			# barfs;
 		display($dbg_thread,1,"THREAD_STARTED");
+		$command_thread = undef;
 	}
 	else
 	{
-		$this->doThreadedCommand($repo_list,$data);
+		$this->doThreadedPush($repo_list);
 	}
 
 	# $this->{progress}->Destroy();
@@ -162,14 +146,14 @@ sub doGitCommand
 
 
 #-------------------------------------------------
-# doThreadedCommand (or maybe on main thread)
+# doThreadedPush (or maybe on main thread)
 #-------------------------------------------------
 
-sub doThreadedCommand
+sub doThreadedPush
 {
 	my ($this,$repo_list,$data) = @_;
 	my $command_id = $this->{command_id};
-	display($dbg_cmds,0,"doThreadedCommand($command_id)=$this->{command_name}");
+	display($dbg_cmds,0,"doThreadedPush($command_id)=$this->{command_name}");
 	display($dbg_cmds+1,1,"data("._def($data).")");
 
 	my $rslt = 1;
@@ -182,10 +166,12 @@ sub doThreadedCommand
 				main_name   => $repo->{path},
 				sub_name    => $this->{command_verb} });
 
-			$rslt = gitCommit($repo,$data)
-				if $command_id == $COMMAND_COMMIT;
-			$rslt = gitTag($repo,$data)
-				if $command_id == $COMMAND_TAG;
+			# other commands possible:
+			# 	$rslt = gitCommit($repo,$data)
+			# 		if $command_id == $COMMAND_COMMIT;
+			# 	$rslt = gitTag($repo,$data)
+			# 		if $command_id == $COMMAND_TAG;
+
 			$rslt = gitPush($repo,$this,\&push_callback)
 				if $command_id == $COMMAND_PUSH ||
 				    $command_id == $ID_COMMAND_PUSH_ALL;
