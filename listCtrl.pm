@@ -1,9 +1,6 @@
 #!/usr/bin/perl
 #
-# PRH TODO: StageAll and UnstageAll buttons in headers
 # PRH TODO: NEED ARROW KEYS
-# PRH TODO: need implement stub for diff window
-# PRH TODO: then can work on stage, unstage, and revert
 #
 #-------------------------------------------
 # apps::gitUI::listCtrl
@@ -31,8 +28,6 @@
 #          see comments on onLeftDown() for gruesome
 #          details of SHIFT and CTRL handling
 
-
-
 package apps::gitUI::listCtrl;
 use strict;
 use warnings;
@@ -51,7 +46,8 @@ use Pub::WX::Dialogs;
 use apps::gitUI::utils;
 use apps::gitUI::repos;
 use apps::gitUI::repoGit;
-use base qw(Wx::ScrolledWindow);	# qw(Wx::Window);
+use apps::gitUI::repoMenu;
+use base qw(Wx::ScrolledWindow apps::gitUI::repoMenu);
 
 
 my $dbg_ctrl = 1;		# life cycle
@@ -72,17 +68,17 @@ my $ACTION_DO_SELECTED = 2;			# do all selected files
 my $ACTION_DO_SINGLE_FILE = 3;		# do a single (unselected) file
 
 
-my ($ID_OPEN_GITUI,
-	$ID_REVERT_CHANGES,
+# watch out for conflicts with repoMenu.pm IDs
+
+my ($ID_REVERT_CHANGES,
 	$ID_OPEN_IN_KOMODO,
 	$ID_OPEN_IN_SHELL,
 	$ID_OPEN_IN_NOTEPAD ) = (9000..9999);
 my $menu_desc = {
-	$ID_OPEN_GITUI		=> ['GitGUI',	'Open the repository in origian GitGUI' ],
-	$ID_REVERT_CHANGES  => ['Revert',	'Revert changes to one or more items' ],
-	$ID_OPEN_IN_KOMODO	=> ['Komodo',	'Open one or more items in Komodo Editor' ],
-	$ID_OPEN_IN_SHELL   => ['Shell',	'Open single item in the Windows Shell' ],
-	$ID_OPEN_IN_NOTEPAD => ['Notepad',	'Open single item in the Windows Notepad' ],
+	$ID_REVERT_CHANGES  => ['Revert',			'Revert changes to one or more items' ],
+	$ID_OPEN_IN_KOMODO	=> ['Komodo',			'Open one or more items in Komodo Editor' ],
+	$ID_OPEN_IN_SHELL   => ['Shell',			'Open single item in the Windows Shell' ],
+	$ID_OPEN_IN_NOTEPAD => ['Notepad',			'Open single item in the Windows Notepad' ],
 };
 
 
@@ -132,7 +128,9 @@ sub new
 		# We have to register DCLICK or else we 'lose'
 		# mouse down events.
 	EVT_RIGHT_DOWN($this,\&onRightDown);
-	EVT_MENU_RANGE($this, $ID_OPEN_GITUI, $ID_OPEN_IN_NOTEPAD, \&onCommand);
+	EVT_MENU_RANGE($this, $ID_REVERT_CHANGES, $ID_OPEN_IN_NOTEPAD, \&onItemMenu);
+
+	$this->addRepoMenu();
 
 	return $this;
 }
@@ -1000,37 +998,40 @@ sub onRightDown
 	my $repo = $this->{found_repo};
 	return if !$repo;
 	my $item = $this->{found_item};
+
+	if (!$item)
+	{
+		$this->popupRepoMenu($repo);
+		return;
+	}
+
 	display($dbg_cmd,1,"buildMenu repo($repo->{id}) fn(".($item?$item->{fn}:'').")");
 
-	my $any = 0;
 	my $menu = Wx::Menu->new();
-	foreach my $id ($ID_OPEN_GITUI..$ID_OPEN_IN_NOTEPAD)
+	foreach my $id ($ID_REVERT_CHANGES..$ID_OPEN_IN_NOTEPAD)
 	{
-		my $deac = $menu_desc->{$id};
-		my ($text,$hint) = @$deac;
-		my $addit = $id == $ID_OPEN_GITUI ? !$item : $item;
-		$addit = 0 if $id == $ID_REVERT_CHANGES && $this->{is_staged};
-		if ($addit)
+		my $desc = $menu_desc->{$id};
+		my ($text,$hint) = @$desc;
+		if ($id != $ID_REVERT_CHANGES || !$this->{is_staged})
 		{
-			$any = 1;
 			$menu->Append($id,$text,$hint,wxITEM_NORMAL);
 			$menu->AppendSeparator() if $id == $ID_REVERT_CHANGES;
 		}
 	}
-	$this->PopupMenu($menu,$cp) if $any;
+	$this->PopupMenu($menu,[-1,-1]);
 }
 
 
 
-sub onCommand
+sub onItemMenu
 {
 	my ($this,$event) = @_;
 	my $command_id = $event->GetId();
 
 	my $repo = $this->{found_repo};
-	my $id = $repo->{id};
 	my $item = $this->{found_item};
-	my $fn = $item ? $item->{fn} : '';
+	my $id = $repo->{id};
+	my $fn = $item->{fn};
 	my $selection = $this->{selection};
 	my $repo_sel = $this->{selection}->{$id};
 	my $selected = $repo_sel ? $repo_sel->{$fn} : 0;
@@ -1041,13 +1042,9 @@ sub onCommand
 		scalar(keys %$repo_sel) > 1 ||
 		scalar(keys %$selection) > 1;
 
-	display($dbg_cmd,0,"onCommand($this->{name},$command_id) repo($id) fn($fn) selected($selected) multiple($multiple)");
+	display($dbg_cmd,0,"onItemMenu($this->{name},$command_id) repo($id) fn($fn) selected($selected) multiple($multiple)");
 
-	if ($command_id == $ID_OPEN_GITUI)
-	{
-		openGitGUI($repo->{path});
-	}
-	elsif ($command_id == $ID_OPEN_IN_SHELL)
+	if ($command_id == $ID_OPEN_IN_SHELL)
 	{
 		chdir $repo->{path};
 		system(1,"\"$repo->{path}/$fn\"");

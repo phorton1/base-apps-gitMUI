@@ -9,6 +9,7 @@ use Wx qw(:everything);
 use Wx::Event qw(
 	EVT_SIZE
 	EVT_LEFT_DOWN
+	EVT_RIGHT_DOWN
 	EVT_ENTER_WINDOW
 	EVT_LEAVE_WINDOW);
 use Pub::Utils;
@@ -16,7 +17,8 @@ use Pub::WX::Window;
 use apps::gitUI::repos;
 use apps::gitUI::utils;
 use apps::gitUI::hyperlink;
-use base qw(Wx::Window Pub::WX::Window);
+use apps::gitUI::repoMenu;
+use base qw(Wx::Window Pub::WX::Window apps::gitUI::repoMenu);
 
 my $dbg_win = 0;
 my $dbg_pop = 1;
@@ -50,6 +52,7 @@ sub new
 
 	$this->populate();
 
+	$this->addRepoMenu();
 	EVT_SIZE($this, \&onSize);
 	return $this;
 }
@@ -69,6 +72,7 @@ sub repoPathFromId
 {
 	my ($id) = @_;
 	my $repo_list = getRepoList();
+	display(0,0,"repoPathFromId($id) num=".scalar(@$repo_list));
 	return $repo_list->[$id  - $BASE_ID]->{path};
 }
 
@@ -97,15 +101,28 @@ sub onLeaveLink
 }
 
 
-sub onLink
+sub onLeftDown
 {
 	my ($ctrl,$event) = @_;
 	my $id = $event->GetId();
 	my $this = $ctrl->GetParent();
 	my $path = repoPathFromId($id);
-	display($dbg_win,0,"onLink($id) = path-$path");
-	openGitGUI($path);
+	display($dbg_win,0,"onLeftDown($id,$path)");
+	execNoShell('git gui',$path);
 }
+
+
+sub onRightDown
+{
+	my ($ctrl,$event) = @_;
+	my $id = $event->GetId();
+	my $this = $ctrl->GetParent();
+	my $repo = repoFromId($id);
+	display($dbg_win,0,"onRightDown($id,$repo->{path}");
+	$this->popupRepoMenu($repo);
+
+}
+
 
 
 
@@ -234,7 +251,8 @@ sub populate
 			addSectionCtrl($ctrl_section,$ctrl,$display_name);
 			$started = 1;
 
-			EVT_LEFT_DOWN($ctrl, \&onLink);
+			EVT_LEFT_DOWN($ctrl, \&onLeftDown);
+			EVT_RIGHT_DOWN($ctrl, \&onRightDown);
 			EVT_ENTER_WINDOW($ctrl, \&onEnterLink);
 			EVT_LEAVE_WINDOW($ctrl, \&onLeaveLink);
 		}

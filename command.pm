@@ -82,6 +82,7 @@ sub doPushCommand
 
 	$this->{command_id} = $command_id;
 	$this->{command_verb} = "Pushing";
+	$this->{command_completed} = "Pushed";
 	$this->{command_name} =
 		$command_id == $ID_COMMAND_PUSH_ALL ? "PushAll" :  "PushSelected";
 

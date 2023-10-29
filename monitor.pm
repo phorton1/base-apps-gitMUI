@@ -70,7 +70,7 @@ use apps::gitUI::repos;
 use apps::gitUI::repoGit;
 use Pub::Utils;
 
-my $dbg_mon = 0;
+my $dbg_mon = 1;
 	# monitor life cycle, incl creation of monitors
 my $dbg_win32 = 1;
 	# debug events, callbacks, etc

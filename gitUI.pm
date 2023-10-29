@@ -10,7 +10,7 @@ use threads::shared;
 use Wx qw(:everything);
 use Wx::Event qw(
 	EVT_MENU_RANGE
-	EVT_UPDATE_UI
+	EVT_UPDATE_UI_RANGE
 	EVT_COMMAND );
 use Pub::Utils;
 use Pub::WX::Frame;
@@ -27,7 +27,7 @@ use apps::gitUI::commitWindow;
 use apps::gitUI::progressDialog;
 use base qw(Pub::WX::Frame);
 
-$TEST_JUNK_ONLY = 1;
+$TEST_JUNK_ONLY = 0;
 
 my $dbg_frame = 0;
 	# lifecycle, major commands
@@ -68,7 +68,7 @@ sub new
 
 	EVT_MENU_RANGE($this, $ID_PATH_WINDOW, $ID_TAG_WINDOW, \&onOpenWindowById);
 	EVT_MENU_RANGE($this, $ID_COMMAND_RESCAN, $ID_COMMAND_PUSH_ALL, \&onCommand);
-	EVT_UPDATE_UI($this, $ID_COMMAND_PUSH_ALL, \&onUpdateUI);
+	EVT_UPDATE_UI_RANGE($this, $ID_PUSH_WINDOW, $ID_COMMAND_PUSH_ALL, \&onUpdateUI);
 
 	EVT_COMMAND($this, -1, $THREAD_EVENT, \&onThreadEvent );
 	EVT_COMMAND($this, -1, $MONITOR_EVENT, \&onMonitorEvent );
@@ -132,8 +132,12 @@ sub onUpdateUI
 {
 	my ($this,$event) = @_;
 	my $id = $event->GetId();
-	my $enable = 0;
-	$enable = 1 if $id == $ID_COMMAND_PUSH_ALL && canPushRepos();
+	my $enable = 1;
+	if ($id == $ID_PUSH_WINDOW ||
+		$id == $ID_COMMAND_PUSH_ALL)
+	{
+		$enable = 0 if !canPushRepos();
+	}
 	$event->Enable($enable);
 }
 
