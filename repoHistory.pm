@@ -26,13 +26,13 @@ BEGIN
 	our @EXPORT = qw(
 		gitHistory
 		gitHistoryText
-		gitHistoryContent
+		historyToTextCtrl
 		gitCurrentBranch
 	);
 }
 
 
-my $dbg_hist = 0;
+my $dbg_hist = 1;
 
 
 sub gitCurrentBranch
@@ -203,15 +203,14 @@ sub gitHistoryText
 
 
 
-sub gitHistoryContent
+sub historyToTextCtrl
 {
-	my ($repo_or_path,$all_branch_history) = @_;
+	my ($text_ctrl,$repo_or_path,$all_branch_history) = @_;
 	my $commit_list = gitHistory($repo_or_path,1);
 
 	$max_name = 20 if $max_name > 20;
 
-	my $content = [];
-	push @$content,[1,$color_black,'HISTORY'];
+	$text_ctrl->addSingleLine(1,$color_black,'HISTORY');
 
 	for my $commit (reverse @$commit_list)
 	{
@@ -223,18 +222,16 @@ sub gitHistoryContent
 		my $tag_text = @tags ? "<".join(",",@tags).">" : '';
 		my $spacer = $branch_text || $tag_text ? " " : '';
 
-		push @$content_line,(0,$color_black,
+		my $line = $text_ctrl->addLine();
+		$text_ctrl->addPart($line,0,$color_black,
 			_plim($commit->{time},20).
 			_plim($commit->{author},$max_name)." ");
-		push @$content_line,(1,$color_orange,$branch_text)
+		$text_ctrl->addPart($line,1,$color_orange,$branch_text)
 			if $branch_text;
-		push @$content_line,(1,$color_green,$tag_text)
+		$text_ctrl->addPart($line,1,$color_green,$tag_text)
 			if $tag_text;
-		push @$content_line,(0,$color_blue,$spacer.$commit->{summary});
-
-		push @$content,$content_line;
+		$text_ctrl->addPart($line,0,$color_blue,$spacer.$commit->{summary});
 	}
-	return $content;
 }
 
 

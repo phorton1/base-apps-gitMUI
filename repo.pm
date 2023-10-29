@@ -311,7 +311,7 @@ sub checkGitConfig
 
 
 #---------------------------------------
-# toText
+# toText()
 #---------------------------------------
 
 sub textLine
@@ -361,76 +361,61 @@ sub toText
 }
 
 
+#---------------------------------------
+# toTextCtrl()
+#---------------------------------------
 
 sub contentLine
 {
-	my ($this,$content,$bold,$key) = @_;
+	my ($this,$text_ctrl,$bold,$key) = @_;
 	my $value = $this->{$key} || '';
 	return if !defined($value) || $value eq '';
 
-	# display(0,0,"contentLine($key,$value)");
-
-	my $content_line = [
-		0, $color_black, pad($key,10)." = ",
-		$bold, $color_blue, $value ];
-	push @$content,$content_line;
+	my $line = $text_ctrl->addLine();
+	$text_ctrl->addPart($line, 0, $color_black, pad($key,10)." = " );
+	$text_ctrl->addPart($line, $bold, $color_blue, $value );
 }
 
 sub contentArray
 {
-	my ($this,$content,$bold,$key,$color) = @_;
+	my ($this,$text_ctrl,$bold,$key,$color) = @_;
 	$color ||= $color_blue;
 	my $array = $this->{$key};
 	return '' if !@$array;
 
-	# display(0,0,"contentArray($key)");
-
-	push @$content,[$bold, $color_black,$key];
+	$text_ctrl->addSingleLine($bold, $color_black, $key);
 	for my $item (@$array)
 	{
-		# display(0,1,"item($item)");
-		push @$content,[$bold, $color,pad('',10).$item];
+		$text_ctrl->addSingleLine($bold, $color, pad('',10).$item);
 	}
 }
 
-
-sub toContent
+sub toTextCtrl
 {
-	my ($this) = @_;
+	my ($this,$text_ctrl) = @_;
 	my $content = [];
 
-	# display_hash(0,0,"toContent($this->{path}",$this);
+	$text_ctrl->addLine();
 
-	push @$content,[0,$color_black,''];
+	$this->contentLine($text_ctrl,1,'path');
+	$this->contentLine($text_ctrl,0,'num');
+	$this->contentLine($text_ctrl,0,'branch');
+	$this->contentLine($text_ctrl,0,'section');
+	$this->contentLine($text_ctrl,1,'private');
+	$this->contentLine($text_ctrl,0,'forked');
+	$this->contentLine($text_ctrl,0,'parent');
+	$this->contentLine($text_ctrl,0,'descrip');
 
-	$this->contentLine($content,1,'path');
-	$this->contentLine($content,0,'num');
-	$this->contentLine($content,0,'branch');
-	$this->contentLine($content,0,'section');
-	$this->contentLine($content,1,'private');
-	$this->contentLine($content,0,'forked');
-	$this->contentLine($content,0,'parent');
-	$this->contentLine($content,0,'descrip');
+	$this->contentArray($text_ctrl,0,'uses');
+	$this->contentArray($text_ctrl,0,'needs');
+	$this->contentArray($text_ctrl,0,'friend');
+	$this->contentArray($text_ctrl,0,'group');
+	$this->contentArray($text_ctrl,1,'errors',$color_red);
+	$this->contentArray($text_ctrl,1,'warnings',$color_yellow);
+	$this->contentArray($text_ctrl,0,'notes');
 
-	$this->contentArray($content,0,'uses');
-	$this->contentArray($content,0,'needs');
-	$this->contentArray($content,0,'friend');
-	$this->contentArray($content,0,'group');
-	$this->contentArray($content,1,'errors',$color_red);
-	$this->contentArray($content,1,'warnings',$color_yellow);
-	$this->contentArray($content,0,'notes');
-
-	push @$content,[0,$color_black,''];	# blank line at end
-
-	display(0,0,"toContent returning ".scalar(@$content)." lines");
-	return $content;
+	$text_ctrl->addLine();
 }
-
-
-
-
-
-
 
 
 1;
