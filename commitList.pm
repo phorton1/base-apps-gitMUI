@@ -25,7 +25,7 @@ use Pub::Utils;
 use base qw(Wx::Window);
 
 my $dbg_life = 0;
-my $dbg_pop = 0;
+my $dbg_pop = 1;
 
 
 BEGIN {
