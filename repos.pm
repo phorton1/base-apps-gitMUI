@@ -193,51 +193,58 @@ sub parseRepos
 				my ($path,$branch) = @parts;
 				$branch ||= 'master';
 
-				display($dbg_parse+1,1,"repo($repo_num,$section_name,$path,$branch)");
-
-				$repo = apps::gitUI::repo->new($repo_num++,$section_name,$path,$branch);
-
 				if (!$TEST_JUNK_ONLY || $path =~ /junk/)
 				{
+					display($dbg_parse+1,1,"repo($repo_num,$section_name,$path,$branch)");
+					$repo = apps::gitUI::repo->new($repo_num++,$section_name,$path,$branch);
+
 					push @$repo_list,$repo;
 					$repo_hash->{$path} = $repo;
-				}
 
-				if (!$section_started)
+					if (!$section_started)
+					{
+						$section = apps::gitUI::section->new($section_num++,$section_path,$section_name);
+						push @$repo_sections,$section;
+						$section_started = 1;
+					}
+
+					$section->addRepo($repo);
+				}
+				else
 				{
-					$section = apps::gitUI::section->new($section_num++,$section_path,$section_name);
-					push @$repo_sections,$section
-						if (!$TEST_JUNK_ONLY || $path =~ /junk/);
-					$section_started = 1;
+					# support for TEST_JUNK_ONLY, set repo to ''
+					# so that the rest of the stuff won't be added
+					# as it goes through the file.
+					$repo = '';
+				}
+			}
+			elsif ($repo)
+			{
+				# set PRIVATE bit
+
+				if ($line =~ /^PRIVATE$/i)
+				{
+					display($dbg_parse+2,2,"PRIVATE");
+					$repo->{private} = 1;
 				}
 
-				$section->addRepo($repo);
-			}
+				# set FORKED = 1 or whatever follows
 
-			# set PRIVATE bit
+				elsif ($line =~ s/^FORKED\s*//)
+				{
+					$line ||= 1;
+					display($dbg_parse+2,2,"FORKED $line");
+					$repo->{forked} = $line;
+				}
 
-			elsif ($line =~ /^PRIVATE$/i)
-			{
-				display($dbg_parse+2,2,"PRIVATE");
-				$repo->{private} = 1;
-			}
+				# add USES, NEEDS, GROUP, FRIEND
 
-			# set FORKED = 1 or whatever follows
-
-			elsif ($line =~ s/^FORKED\s*//)
-			{
-				$line ||= 1;
-				display($dbg_parse+2,2,"FORKED $line");
-				$repo->{forked} = $line;
-			}
-
-			# add USES, NEEDS, GROUP, FRIEND
-
-			elsif ($line =~ s/^(USES|NEEDS|GROUP|FRIEND)\s+//)
-			{
-				my $what = $1;
-				display($dbg_parse+2,2,"$what $line");
-				push @{$repo->{lc($what)}},$line;
+				elsif ($line =~ s/^(USES|NEEDS|GROUP|FRIEND)\s+//)
+				{
+					my $what = $1;
+					display($dbg_parse+2,2,"$what $line");
+					push @{$repo->{lc($what)}},$line;
+				}
 			}
 		}
     }
