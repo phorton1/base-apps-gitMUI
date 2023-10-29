@@ -47,6 +47,7 @@ use apps::gitUI::utils;
 use apps::gitUI::repos;
 use apps::gitUI::repoGit;
 use apps::gitUI::repoMenu;
+use apps::gitUI::monitor;	# for $MONITOR_NOTIFY_EVERY_CHANGE
 use base qw(Wx::ScrolledWindow apps::gitUI::repoMenu);
 
 
@@ -173,6 +174,8 @@ sub clearOtherSelection
 	$other->{anchor} = '';
 	$other->{found_repo} = '';
 	$other->{found_item} = '';
+	$other->{notify_repo} = '';
+	$other->{notify_item} = '';
 	$other->Refresh();
 }
 
@@ -182,11 +185,23 @@ sub clearOtherSelection
 #-----------------------------------------------
 
 sub updateRepos
-	# essentially populate(), add or update any repos to
-	# the list without losing selected, expanded, etc
+	# Essentially populate(), add or update any repos to
+	# the list without losing selected, expanded, etc,
+	# Re-display (or clear) currently 'notified'
+	# repo and item that are showing in the diff_ctrl
+	# the Anchor is lost on any update!!
 {
 	my ($this) = @_;
-	display($dbg_pop,0,"updateRepos($this->{name})");
+
+	$this->{anchor} = @_;
+
+	# vars only set/used if $MONITOR_NOTIFY_EVERY_CHANGE
+	my $notify_id = $this->{notify_repo} ? $this->{notify_repo}->{id} : '';
+	my $notify_fn = $this->{notify_item} ? $this->{notify_item}->{fn} : '';
+	$this->{notify_repo} = '';
+	$this->{notify_item} = '';
+
+	display($dbg_pop,0,"updateRepos($this->{name}) notify_id($notify_id) notify_fn($notify_fn}");
 
 	my $vheight = 0;
 	my $num_repos = 0;
@@ -226,6 +241,41 @@ sub updateRepos
     my $height = $sz->GetHeight();
 	$this->SetVirtualSize([$width,$vheight]);
 	$this->Refresh();
+
+	if ($MONITOR_NOTIFY_EVERY_CHANGE)
+	{
+		# re-notify if the item and/or repo still exist
+
+		my $notify_repo = '';
+		my $notify_item = '';
+		if ($notify_id)
+		{
+			$notify_repo = $this->{repos}->{$notify_id} || '';
+			if ($notify_repo)
+			{
+				display($dbg_pop,1,"found notify_id($notify_id}");
+				if ($notify_fn)
+				{
+					$notify_item = $notify_repo->{$this->{key}}->{$notify_fn} || '';
+					if ($notify_item)
+					{
+						display($dbg_pop,1,"found notify_fn($notify_fn}")
+					}
+					else
+					{
+						$notify_repo = '';
+					}
+				}
+			}
+			$this->{notify_repo} = $notify_repo;
+			$this->{notify_item} = $notify_item;
+			display($dbg_pop,1,"calling right($notify_repo,$notify_item)");
+			$this->{parent}->{parent}->{right}->notifyItemSelected({
+				is_staged => $this->{is_staged},
+				repo => $notify_repo,
+				item => $notify_item });
+		}
+	}
 
 	display($dbg_pop,0,"endUpdate($this->{name}) finished with num_repos($num_repos) vheight($vheight)");
 }
@@ -593,6 +643,11 @@ sub onLeftDown
 sub notifyRepoSelected
 {
 	my ($this,$repo) = @_;
+	if ($MONITOR_NOTIFY_EVERY_CHANGE)
+	{
+		$this->{notify_repo} = $repo;
+		$this->{notify_item} = '';
+	}
 	$this->{parent}->{parent}->{right}->notifyItemSelected({
 		is_staged => $this->{is_staged},
 		repo =>$repo,
@@ -815,6 +870,11 @@ sub notifyItemSelected
 	my ($this,$repo,$item) = @_;
 	my $id = $repo ? $repo->{id} : '';
 	my $fn = $item ? $item->{fn} : '';
+	if ($MONITOR_NOTIFY_EVERY_CHANGE)
+	{
+		$this->{notify_repo} = $repo;
+		$this->{notify_item} = $item;
+	}
 	display($dbg_sel,0,"notifyItemSelected($this->{name},$id,$fn)");
 	$this->{parent}->{parent}->{right}->notifyItemSelected({
 		is_staged => $this->{is_staged},
@@ -964,6 +1024,11 @@ sub doAction
 		}
 	}
 
+	if ($MONITOR_NOTIFY_EVERY_CHANGE)
+	{
+		$this->{notify_repo} = '';
+		$this->{notify_item} = '';
+	}
 	$this->notifyItemSelected('','');
 }
 

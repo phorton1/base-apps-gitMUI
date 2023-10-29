@@ -196,7 +196,8 @@ sub addContentLine
 sub determineType
 {
 	my ($this,$repo,$item,$file_type) = @_;
-	my $content = [];
+	my $diff_ctrl = $this->{diff_ctrl};
+
 	$this->{diff_binary} = 0;
 
 	my $filename = $repo->{path}."/".$item->{fn};
@@ -205,7 +206,7 @@ sub determineType
 	my @stat = stat($filename);
 	if (!@stat)
 	{
-		addContentLine($content,1,$color_red,error("Could not stat($filename)"));
+		$diff_ctrl->addSingleLine(1,$color_red,error("Could not stat($filename)"));
 	}
 	else
 	{
@@ -215,7 +216,7 @@ sub determineType
 		my $fh;
 		if (!open($fh,"<$filename"))
 		{
-			addContentLine($content,1,$color_red,error("Could not open($filename)"));
+			$diff_ctrl->addSingleLine(1,$color_red,error("Could not open($filename)"));
 		}
 		else
 		{
@@ -225,14 +226,14 @@ sub determineType
 			my $got = sysread($fh,$buffer,$bytes);
 			if ($bytes != $got)
 			{
-				addContentLine($content,1,$color_red,error("Could not read($filename) got($got) expected($bytes)"));
+				$diff_ctrl->addSingleLine(1,$color_red,error("Could not read($filename) got($got) expected($bytes)"));
 			}
 			else
 			{
 				if ($buffer =~ /[\x00-\x08|\x0B-\x0C|\x0E-\x1F]/)
 				{
 					$this->{diff_binary} = 1;
-					addContentLine($content,1,$color_blue,$file_type."Binary File $size bytes");
+					$diff_ctrl->addSingleLine(1,$color_blue,$file_type."Binary File $size bytes");
 				}
 				else
 				{
@@ -272,16 +273,16 @@ sub determineType
 						$got = sysread($fh,$buffer2,2);
 						if ($got != 2)
 						{
-							addContentLine($content,0,$color_red,error("Could not read last two bytes)$filename) got($got)"));
+							$diff_ctrl->addSingleLine(0,$color_red,error("Could not read last two bytes)$filename) got($got)"));
 						}
 					}
 					$has_eof = $buffer2 =~ /(\r|\n)$/ ? 1 : 0;
-					addContentLine($content,1,$color_blue,$file_type."Text File $size bytes EOL($eol_text) EOF($has_eof)");
+					$diff_ctrl->addSingleLine(1,$color_blue,$file_type."Text File $size bytes EOL($eol_text) EOF($has_eof)");
 
 					my @lines = split(/\r\n|\r|\n/,$buffer);
 					for my $line (@lines)
 					{
-						addContentLine($content,0,$color_green,"+$line");
+						$diff_ctrl->addSingleLine(0,$color_green,"+$line");
 					}
 
 
@@ -292,17 +293,15 @@ sub determineType
 
 		}	# file opened
 	}	# got @stat
-
-	return $content;
 }
 
 
 
 sub startDiffContent
 {
-	my ($this,$started,$content,$file_type) = @_;
+	my ($this,$started,$file_type) = @_;
 	my $binary = $this->{diff_binary} ? "Binary " : '';
-	addContentLine($content,1,$color_blue,$file_type.$binary."File")
+	$this->{diff_ctrl}->addSingleLine(1,$color_blue,$file_type.$binary."File")
 		if !$started;
 	return 1;
 }
@@ -311,9 +310,8 @@ sub startDiffContent
 sub parseDiffText
 {
 	my ($this,$text,$file_type) = @_;
+	my $diff_ctrl = $this->{diff_ctrl};
 
-
-	my $content = [];
 	my $started = 0;
 
 	while ($text)
@@ -339,9 +337,9 @@ sub parseDiffText
 			$old_lines ||= 0;
 			my ($new_start,$new_lines) = split(',',$minus);
 			$new_lines ||= 0;
-			$started = $this->startDiffContent($started,$content,$file_type);
-			addContentLine($content,0,$color_black,'');
-			addContentLine($content,1,$color_blue,"CHANGE old($old_start,$old_lines) to new($new_start,$new_lines)");
+			$started = $this->startDiffContent($started,$file_type);
+			$diff_ctrl->addSingleLine(0,$color_black,'');
+			$diff_ctrl->addSingleLine(1,$color_blue,"CHANGE old($old_start,$old_lines) to new($new_start,$new_lines)");
 		}
 		else
 		{
@@ -350,12 +348,11 @@ sub parseDiffText
 				$line =~ /^-/ ? $color_red :
 				$color_black;
 
-			push @$content,[
-				1, $color_blue,"| ",
-				0, $color, $line ];
+			my $text_line = $diff_ctrl->addLine();
+			$diff_ctrl->addPart($text_line, 1, $color_blue,"| ");
+			$diff_ctrl->addPart($text_line, 0, $color, $line );
 		}
 	}
-	return $content;
 }
 
 
@@ -363,16 +360,18 @@ sub parseDiffText
 sub notifyItemSelected
 {
 	my ($this,$data) = @_;
-	my $is_staged = $data->{is_staged};
 
 	my $repo = $data->{repo};
 	my $item = $data->{item};
+	my $is_staged = $data->{is_staged};
 	my $id = $repo ? $repo->{id} : '';
 	my $fn = $item ? $item->{fn} : '';
 	my $type = $item ? $item->{type} : '';
 	display($dbg_notify,0,"commitRight::notifyItemSelected($is_staged,$id,$fn,$type) called");
 
 	$this->{diff_binary} = 0;
+	my $diff_ctrl = $this->{diff_ctrl};
+	$diff_ctrl->clearContent();
 
 	# '','' means to clear the diff window if it is showing an item.
 	# If it is showing a repo, we leave it.
@@ -385,7 +384,7 @@ sub notifyItemSelected
 			$this->{diff_item} = '';;
 			$this->{what_ctrl}->SetLabel('');
 			$this->{hyperlink}->SetLabel('');
-			$this->{diff_ctrl}->setContent([]);
+			$diff_ctrl->Refresh();
 		}
 		return;
 	}
@@ -399,26 +398,25 @@ sub notifyItemSelected
 	# for Adds in Unstaged, determine the file type
 	# otherwise do the diff and parse it
 
-	my $content = '';
 	if ($item)
 	{
 		if (!$this->{is_staged} && $type eq 'A')
 		{
-			$content = $this->determineType($repo,$item,$file_type);
+			$this->determineType($diff_ctrl,$repo,$item,$file_type);
 		}
 		else
 		{
 			my $text = gitDiff($repo,$is_staged,$fn);
-			$content = $this->parseDiffText($text,$file_type);
+			$this->parseDiffText($text,$file_type);
 		}
 	}
 	else
 	{
-		$content = $repo->toContent();
-		push @$content,@{gitHistoryContent($repo,0)};
+		$repo->toTextCtrl($diff_ctrl);
+		historyToTextCtrl($diff_ctrl,$repo,0);
 	}
 
-	$this->{diff_ctrl}->setContent($content);
+	$diff_ctrl->Refresh();
 
 	my $where = $is_staged ? "Staged " : "Unstaged ";
 	my $kind = $item && $this->{diff_binary} ? "Binary " : '';

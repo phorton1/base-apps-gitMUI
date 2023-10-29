@@ -70,10 +70,15 @@ use apps::gitUI::repos;
 use apps::gitUI::repoGit;
 use Pub::Utils;
 
+our $MONITOR_NOTIFY_EVERY_CHANGE = 1;
+	# whether to call back on every change for
+	# showing instantaneous diff updates in commitListCtrl
+
 my $dbg_mon = 1;
 	# monitor life cycle, incl creation of monitors
 my $dbg_win32 = 1;
 	# debug events, callbacks, etc
+
 
 our $MON_CB_TYPE_STATUS = 0;
 our $MON_CB_TYPE_REPO = 1;
@@ -84,6 +89,8 @@ BEGIN {
 	our @EXPORT = qw (
 		$MON_CB_TYPE_STATUS
 		$MON_CB_TYPE_REPO
+
+		$MONITOR_NOTIFY_EVERY_CHANGE
 	);
 }
 
@@ -353,11 +360,23 @@ sub run
 						warning(0,0,"suppressing callback($suppress_path)");
 						$suppress_path = '';
 					}
-					elsif ($rslt)
+					else	# if ($rslt)
 					{
 						# clear/set the UI notion of 'any repos to push'
-						setCanPush($repo);
-						&$the_callback({ repo=>$repo }) ;
+						setCanPush($repo) if $rslt;
+
+						# choice: call many times when the repo hasn't changed
+						#	in order to support instantly seeing diffs?
+						#
+						# if so, we will the UI will typically be called
+						#	at least twice as git updates it's stuff, and
+						#   the real changes also happen.
+						# if not, you have to leave an item to see its changes
+						#   and my work for notify updates in commitListCtrl
+						#   is not called
+
+						&$the_callback({ repo=>$repo })
+							if $MONITOR_NOTIFY_EVERY_CHANGE || $rslt;
 					}
 
 					# ok, this is interesting.
