@@ -46,11 +46,11 @@ sub setRepoQuiet { $repo_quiet = shift; }
 
 sub new
 {
-	my ($class, $num, $path, $branch, $section_name, $section_path) = @_;
+	my ($class, $num, $path, $branch, $section_path, $section_name) = @_;
 	$branch ||= 'master';
-	$section_name ||= '';
+	$section_name ||= $section_path;
 
-	display($dbg_new,0,"repo->new($num, $path, $branch, $section_name, $section_path)");
+	display($dbg_new,0,"repo->new($num, $path, $branch, $section_path, $section_name,)");
 
 	my $this = shared_clone({
 
@@ -61,8 +61,8 @@ sub new
 		id      => repoPathToId($path),
 		branch	=> $branch,
 
-		section_name => $section_name,
 		section_path => $section_path,
+		section_name => $section_name,
 
 		# parsed fields
 
@@ -177,7 +177,7 @@ sub pathWithinSection
 		# not including elipses
 
 	my $path = $this->{path};
-	my $re = $this->{section_path} || $this->{section_name};
+	my $re = $this->{section_path};
 	$re =~ s/\//\\\//g;
 	$path =~ s/^$re//;
 	$path ||= $this->{path};

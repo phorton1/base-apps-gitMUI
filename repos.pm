@@ -94,8 +94,8 @@ sub parseRepos
 		my $repo_num = 0;
 
 		my $repo;
-		my $section_name = '';
 		my $section_path = '';
+		my $section_name = '';
 
         for my $line (split(/\n/,$text))
         {
@@ -108,9 +108,9 @@ sub parseRepos
 			if ($line =~ /^SECTION\t/i)
 			{
 				my @parts = split(/\t/,$line);
-				$section_name = $parts[1];
-				$section_name =~ s/^\s+|\s+$//g;
-				$section_path = $parts[2] || '';
+				$section_path = $parts[1];
+				$section_path =~ s/^\s+|\s+$//g;
+				$section_name = $parts[2] || '';
 			}
 
 			# Repos start with a forward slash
@@ -123,8 +123,8 @@ sub parseRepos
 
 				if (!$TEST_JUNK_ONLY || $path =~ /junk/)
 				{
-					display($dbg_parse+1,1,"repo($repo_num,$section_name,$path,$branch)");
-					$repo = apps::gitUI::repo->new($repo_num++,$path,$branch,$section_name,$section_path);
+					display($dbg_parse+1,1,"repo($repo_num,$path,$branch,$section_path,$section_name)");
+					$repo = apps::gitUI::repo->new($repo_num++,$path,$branch,$section_path,,$section_name);
 
 					push @$repo_list,$repo;
 					$repo_hash->{$path} = $repo;
