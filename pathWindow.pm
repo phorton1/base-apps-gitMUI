@@ -26,6 +26,10 @@ my $dbg_layout = 1;
 my $dbg_notify = 1;
 
 
+my $HOW_SHOW_SECTION_PATHS = 1;
+my $HOW_SHOW = $HOW_SHOW_SECTION_PATHS;
+
+
 my $BASE_ID = 1000;
 
 my $ROW_START 	 = 10;
@@ -213,7 +217,7 @@ sub populate
 
 	display($dbg_pop,0,"populate()");
 
-	my $sections = getRepoSections();
+	my $sections = groupReposBySection();
 	$this->{ctrl_sections} = [];
 	$this->DestroyChildren();
 
@@ -231,7 +235,7 @@ sub populate
 			}
 
 			my $id = $repo->{num} + $BASE_ID;
-			my $display_name = $section->displayName($repo);
+			my $display_name = $repo->pathWithinSection();
 			display($dbg_pop,1,"hyperLink($id,$display_name)");
 
 			my $color =

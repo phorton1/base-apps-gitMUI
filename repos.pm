@@ -10,72 +10,6 @@
 # add members from local git/config files.
 
 
-package apps::gitUI::section;
-use strict;
-use warnings;
-use threads;
-use threads::shared;
-use Pub::Utils;
-
-my $dbg_sections = 1;
-
-
-BEGIN
-{
- 	use Exporter qw( import );
-	our @EXPORT = qw(
-
-	);
-}
-
-
-my $MAX_DISPLAY_NAME = 28;
-	# not including elipses
-
-
-#--------------------------------------------
-# methods
-#--------------------------------------------
-
-
-sub new
-{
-	my ($class, $num, $path, $name) = @_;
-	my $re = $path;
-	$re =~ s/\//\\\//g;
-	display($dbg_sections,1,"SECTION($path,$name) re=$re");
-	my $this = shared_clone({
-		num => $num,
-		count => 0,
-		path => $path,
-		name => $name,
-		re   => $re,
-		repos => shared_clone([]), });
-	bless $this,$class;
-	return $this;
-}
-
-sub addRepo
-{
-	my ($this,$repo) = @_;
-	$this->{count}++;
-	push @{$this->{repos}},$repo;
-}
-
-sub displayName
-{
-	my ($this,$repo) = @_;
-	my $name = $repo->{path};
-	$name =~ s/^$this->{re}//;
-	$name ||= $repo->{path};
-	$name = '...'.substr($name,-$MAX_DISPLAY_NAME)
-		if length($name) >= $MAX_DISPLAY_NAME;
-	display($dbg_sections,1,"displayName($repo->{path}) = $name");
-	return $name;
-}
-
-
-
 package apps::gitUI::repos;
 use strict;
 use warnings;
@@ -99,11 +33,12 @@ BEGIN
 		parseRepos
 		getRepoHash
 		getRepoList
-		getRepoSections
 
 		canPushRepos
 		setCanPush
 		clearSelected
+
+		groupReposBySection
 	);
 }
 
@@ -111,13 +46,11 @@ my $repo_filename = '/base/bat/git_repositories.txt';
 
 my $repo_hash:shared = shared_clone({});
 my $repo_list:shared = shared_clone([]);
-my $repo_sections:shared = shared_clone([]);
 my $repos_can_push = shared_clone({});
-
 
 sub getRepoHash		{ return $repo_hash; }
 sub getRepoList		{ return $repo_list; }
-sub getRepoSections	{ return $repo_sections; }
+
 
 
 sub canPushRepos
@@ -154,7 +87,6 @@ sub parseRepos
     display($dbg_parse,0,"parseRepos($repo_filename)");
 	$repo_hash = shared_clone({});
 	$repo_list = shared_clone([]);
-	$repo_sections = shared_clone([]);
 
 	my $text = getTextFile($repo_filename);
     if ($text)
@@ -162,11 +94,8 @@ sub parseRepos
 		my $repo_num = 0;
 
 		my $repo;
-		my $section;
-		my $section_num = 0;
-		my $section_path = '';
 		my $section_name = '';
-		my $section_started = 0;
+		my $section_path = '';
 
         for my $line (split(/\n/,$text))
         {
@@ -176,13 +105,12 @@ sub parseRepos
 
 			# get section path RE and optional name if different
 
-			if ($line =~ /^SECTION\t/)
+			if ($line =~ /^SECTION\t/i)
 			{
 				my @parts = split(/\t/,$line);
-				$section_path = $parts[1];
-				$section_path =~ s/^\s+|\s+$//g;
-				$section_name = $parts[2] || $section_path;
-				$section_started = 0;
+				$section_name = $parts[1];
+				$section_name =~ s/^\s+|\s+$//g;
+				$section_path = $parts[2] || '';
 			}
 
 			# Repos start with a forward slash
@@ -196,25 +124,17 @@ sub parseRepos
 				if (!$TEST_JUNK_ONLY || $path =~ /junk/)
 				{
 					display($dbg_parse+1,1,"repo($repo_num,$section_name,$path,$branch)");
-					$repo = apps::gitUI::repo->new($repo_num++,$section_name,$path,$branch);
+					$repo = apps::gitUI::repo->new($repo_num++,$path,$branch,$section_name,$section_path);
 
 					push @$repo_list,$repo;
 					$repo_hash->{$path} = $repo;
-
-					if (!$section_started)
-					{
-						$section = apps::gitUI::section->new($section_num++,$section_path,$section_name);
-						push @$repo_sections,$section;
-						$section_started = 1;
-					}
-
-					$section->addRepo($repo);
 				}
 				else
 				{
 					# support for TEST_JUNK_ONLY, set repo to ''
 					# so that the rest of the stuff won't be added
 					# as it goes through the file.
+
 					$repo = '';
 				}
 			}
@@ -230,7 +150,7 @@ sub parseRepos
 
 				# set FORKED = 1 or whatever follows
 
-				elsif ($line =~ s/^FORKED\s*//)
+				elsif ($line =~ s/^FORKED\s*//i)
 				{
 					$line ||= 1;
 					display($dbg_parse+2,2,"FORKED $line");
@@ -239,7 +159,7 @@ sub parseRepos
 
 				# add USES, NEEDS, GROUP, FRIEND
 
-				elsif ($line =~ s/^(USES|NEEDS|GROUP|FRIEND)\s+//)
+				elsif ($line =~ s/^(USES|NEEDS|GROUP|FRIEND|NOTES|WARNINGS|ERRORS)\s+//i)
 				{
 					my $what = $1;
 					display($dbg_parse+2,2,"$what $line");
@@ -260,6 +180,41 @@ sub parseRepos
         return;
     }
 	return 1;
+}
+
+
+
+#--------------------------------------------------------------------
+# repo grouping utilities
+#--------------------------------------------------------------------
+
+
+sub section
+{
+	my ($name) = @_;
+	return shared_clone({
+		name  => $name,
+		repos => shared_clone([]),
+	});
+}
+
+
+sub groupReposBySection
+{
+	my $sections = shared_clone([]);
+	my $section = '';
+	my $section_name = 'invalid_initial_value';
+	for my $repo (@$repo_list)
+	{
+		if ($section_name ne $repo->{section_name})
+		{
+			$section_name = $repo->{section_name};
+			$section = section($section_name);
+			push @$sections,$section;
+		}
+		push @{$section->{repos}},$repo;
+	}
+	return $sections;
 }
 
 
@@ -320,6 +275,12 @@ sub addRepoTags
 	}
 
 }
+
+
+
+
+
+
 
 
 

@@ -46,23 +46,25 @@ sub setRepoQuiet { $repo_quiet = shift; }
 
 sub new
 {
-	my ($class, $num, $section, $path, $branch) = @_;
+	my ($class, $num, $path, $branch, $section_name, $section_path) = @_;
 	$branch ||= 'master';
+	$section_name ||= '';
+
+	display($dbg_new,0,"repo->new($num, $path, $branch, $section_name, $section_path)");
 
 	my $this = shared_clone({
+
+		# main fields
+
 		num 	=> $num,
 		path 	=> $path,
 		id      => repoPathToId($path),
-		section => $section,
-		branch	=> $branch || 'master',
+		branch	=> $branch,
 
-		# for tagSelected and pushSelected
+		section_name => $section_name,
+		section_path => $section_path,
 
-		selected => 0,
-
-		# for github.pm
-
-		found_on_github => 0,
+		# parsed fields
 
 		private  => 0,						# if PRIVATE in file
 		forked   => 0,						# if FORKED [optional_blah] in file
@@ -72,14 +74,27 @@ sub new
 		needs	 => shared_clone([]),       # a list of the abitrary dependencies this repository has
 		friend   => shared_clone([]),       # a hash of repositories this repository relates to or can use
 		group    => shared_clone([]),       # a list of arbitrary groups that this repository belongs to
+		errors   => shared_clone([]),
+		warnings => shared_clone([]),
+		notes 	 => shared_clone([]),
+
+		# entries
+
 		unstaged_changes => shared_clone({}),	# changes pending Add
 		staged_changes   => shared_clone({}),	# changes pending Commit
 		remote_changes   => shared_clone({}),	# changes pending Push
-		errors   => shared_clone([]),
-		warnings => shared_clone([]),
-		notes 	 => shared_clone([]), });
 
-	display($dbg_new,0,"repo->new($num,$section,$path,$branch)");
+		# for tagSelected and pushSelected
+
+		selected => 0,
+
+		# for github.pm
+
+		found_on_github => 0,
+
+	});
+
+
 	bless $this,$class;
 	return $this;
 }
@@ -152,6 +167,26 @@ sub canPush
 	my ($this) = @_;
 	return scalar(keys %{$this->{remote_changes}});
 }
+
+
+
+sub pathWithinSection
+{
+	my ($this) = @_;
+	my $MAX_DISPLAY_PATH = 28;
+		# not including elipses
+
+	my $path = $this->{path};
+	my $re = $this->{section_path} || $this->{section_name};
+	$re =~ s/\//\\\//g;
+	$path =~ s/^$re//;
+	$path ||= $this->{path};
+
+	$path = '...'.substr($path,-$MAX_DISPLAY_PATH)
+		if length($path) >= $MAX_DISPLAY_PATH;
+	return $path;
+}
+
 
 
 #------------------------------------------
@@ -311,57 +346,6 @@ sub checkGitConfig
 
 
 #---------------------------------------
-# toText()
-#---------------------------------------
-
-sub textLine
-{
-	my ($this,$key) = @_;
-	my $line = pad($key,10)." = ".$this->{$key}."\n";
-	return $line;
-}
-
-sub arrayText
-{
-	my ($this,$key) = @_;
-	my $array = $this->{$key};
-	return '' if !@$array;
-
-	my $text = "$key\n";
-	for my $item (@$array)
-	{
-		$text .= pad('',10).$item."\n";
-	}
-	return $text;
-}
-
-sub toText
-{
-	my ($this) = @_;
-	my $text = '';
-
-	$text .= $this->textLine('num');
-	$text .= $this->textLine('branch');
-	$text .= $this->textLine('section');
-	$text .= $this->textLine('path');
-	$text .= $this->textLine('private');
-	$text .= $this->textLine('forked');
-	$text .= $this->textLine('parent');
-	$text .= $this->textLine('descrip');
-
-	$text .= $this->arrayText('uses');
-	$text .= $this->arrayText('needs');
-	$text .= $this->arrayText('friend');
-	$text .= $this->arrayText('group');
-	$text .= $this->arrayText('errors');
-	$text .= $this->arrayText('warnings');
-	$text .= $this->arrayText('notes');
-
-	return $text;
-}
-
-
-#---------------------------------------
 # toTextCtrl()
 #---------------------------------------
 
@@ -372,7 +356,7 @@ sub contentLine
 	return if !defined($value) || $value eq '';
 
 	my $line = $text_ctrl->addLine();
-	$text_ctrl->addPart($line, 0, $color_black, pad($key,10)." = " );
+	$text_ctrl->addPart($line, 0, $color_black, pad($key,12)." = " );
 	$text_ctrl->addPart($line, $bold, $color_blue, $value );
 }
 
@@ -400,7 +384,8 @@ sub toTextCtrl
 	$this->contentLine($text_ctrl,1,'path');
 	$this->contentLine($text_ctrl,0,'num');
 	$this->contentLine($text_ctrl,0,'branch');
-	$this->contentLine($text_ctrl,0,'section');
+	$this->contentLine($text_ctrl,0,'section_name');
+	$this->contentLine($text_ctrl,0,'section_path');
 	$this->contentLine($text_ctrl,1,'private');
 	$this->contentLine($text_ctrl,0,'forked');
 	$this->contentLine($text_ctrl,0,'parent');
