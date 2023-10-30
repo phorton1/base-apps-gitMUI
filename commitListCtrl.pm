@@ -998,9 +998,6 @@ sub doAction
 		my $item = $this->{found_item};
 		my $fn = $item->{fn};
 
-		# getAppFrame()->getMonitor()->suppressPath($repo->{path});
-			# possible optimization for single item action
-
 		gitIndex($repo,$this->{is_staged},[$fn]);
 	}
 	elsif ($how == $ACTION_DO_REPO)

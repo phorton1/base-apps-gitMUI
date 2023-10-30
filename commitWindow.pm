@@ -182,15 +182,22 @@ sub onSashPosChanged
 
 
 
+sub populate
+{
+	my ($this) = @_;
+	display($dbg_pop,0,"commitWindow::populate()");
+	$this->{unstaged}->populate();
+	$this->{staged}->populate();
+}
+
+
 
 
 sub notifyRepoChanged
 {
 	my ($this,$repo) = @_;
-
 	display($dbg_pop,0,"notifyRepoChanged($repo->{path})");
-	$this->{unstaged}->populate();
-	$this->{staged}->populate();
+	$this->populate();
 }
 
 

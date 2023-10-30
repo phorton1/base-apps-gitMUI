@@ -30,21 +30,17 @@ use base qw(Pub::WX::Frame);
 $TEST_JUNK_ONLY = 0;
 
 my $dbg_frame = 0;
-	# lifecycle, major commands
+	# lifecycle
+my $dbg_cmd = 0;
+	# onCommand
 my $dbg_mon = 1;
-
-
-my $USE_MONITOR = 1;
+	# monitor callback
 
 
 my $monitor;
-
 my $MONITOR_EVENT:shared = Wx::NewEventType;
 
-sub getMonitor
-{
-	return $monitor;
-}
+
 
 #--------------------------------------
 # methods
@@ -73,12 +69,9 @@ sub new
 	EVT_COMMAND($this, -1, $THREAD_EVENT, \&onThreadEvent );
 	EVT_COMMAND($this, -1, $MONITOR_EVENT, \&onMonitorEvent );
 
-	if ($USE_MONITOR)
-	{
-		$monitor = apps::gitUI::monitor->new(\&monitor_callback);
-		return if !$monitor;
-		return if !$monitor->start();
-	}
+	$monitor = apps::gitUI::monitor->new(\&monitor_callback);
+	return if !$monitor;
+	return if !$monitor->start();
 
 	return $this;
 }
@@ -118,13 +111,21 @@ sub onCommand
 {
 	my ($this,$event) = @_;
 	my $id = $event->GetId();
-	display($dbg_frame,0,"gitUI::Frame::onCommand($id)");
+	my $name = $resources->{command_data}->{$id}->[0];
+	display($dbg_cmd,0,"gitUI::Frame::onCommand($id,$name)");
 	if ($id == $ID_COMMAND_PUSH_ALL)
 	{
 		$this->doPushCommand($id);
 	}
 	elsif ($id == $ID_COMMAND_RESCAN)
 	{
+		$monitor->stop();
+		parseRepos();
+		for my $pane (@{$this->{panes}})
+		{
+			$pane->populate() if $pane->can('populate');
+		}
+		$monitor->start();
 	}
 }
 

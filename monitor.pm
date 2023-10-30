@@ -74,10 +74,12 @@ our $MONITOR_NOTIFY_EVERY_CHANGE = 1;
 	# whether to call back on every change for
 	# showing instantaneous diff updates in commitListCtrl
 
+my $dbg_thread = 0;
+	# monitor thread lifecycle
 my $dbg_mon = 1;
-	# monitor life cycle, incl creation of monitors
-my $dbg_win32 = 1;
-	# debug events, callbacks, etc
+	# monitor creation of monitors
+my $dbg_cb = 1;
+	# debug callbacks and events
 
 
 our $MON_CB_TYPE_STATUS = 0;
@@ -98,9 +100,6 @@ BEGIN {
 
 # constants
 
-my $CHECK_CHANGES_ON_INIT = 1;
-	# will call gitChanges() on each repo during initCache()
-
 my $WIN32_FILTER =
 	# FILE_NOTIFY_CHANGE_ATTRIBUTES |  # Any attribute change
 	FILE_NOTIFY_CHANGE_DIR_NAME   	|  # Any directory name change
@@ -115,17 +114,7 @@ my $WIN32_FILTER =
 my $thread;
 my $the_callback;
 my %monitors;
-	# NOT SHARED BUT ADDED TO BY THE THREAD!
-
-# Currently unused feature to supress the next callback
-
-my $suppress_path:shared = '';
-sub suppressPath
-{
-	my ($this,$path) = @_;
-	$suppress_path = $path;
-	warning(0,0,"suppressPath($path)");
-}
+	# NOT SHARED BUT BUILT BY THE THREAD!
 
 
 #------------------------------------------------------
@@ -276,150 +265,117 @@ sub createSubMonitors
 
 
 
-sub startWin32
-{
-	display($dbg_mon,0,"startWin32()");
- 	my $repo_list = getRepoList();
-	return if !$repo_list;
-	for my $repo (@$repo_list)
-	{
-		return if !createMonitor($repo->{path});
-	}
-	return 1;
-}
-
-
-sub endWin32
-{
-	display($dbg_mon,0,"endWin32()");
-	# for my $path (sort keys %monitors)
-	# {
-	# 	$monitors{$path}->{mon}->close();
-	# }
-	%monitors = {};
-}
-
-
-
 sub run
+	# we never actually stop the monitor due to problems with threads.
+	# rather we tell it to stop and it clears the monitor list, and
+	# rebuilds it on started
 {
 	my ($this) = @_;
-	$this->{running} = 1;
-	display($dbg_mon,0,"thread running");
+	display($dbg_thread,0,"monitor::run()");
 
 	my $rslt = 1;
-	while ($this->{running} && !$this->{stopping})
+	while (1)
 	{
-		display($dbg_mon+2,0,"thread top");
+		display($dbg_thread+1,0,"thread top");
 
-		if (!$this->{started})		# ==> $CHECK_CHANGES_ON_INIT
+		if ($this->{stopping})
 		{
-			&$the_callback({ status =>"starting" }) if $rslt;
-			my $repo_list = getRepoList();
-			for my $repo (@$repo_list)
-			{
-				display($dbg_mon,0,"CHECK_CHANGES_ON_INIT($repo->{path})");
-				&$the_callback({ status =>"checking: $repo->{path}" });
-				$rslt = gitChanges($repo);
-				last if !defined($rslt);
-				setCanPush($repo);
-				&$the_callback({ repo=>$repo }) if $rslt;
-			}
-			$this->{started} = 1;
-			&$the_callback({ status =>"started" }) if defined($rslt);
+			display($dbg_thread,0,"thread {stopping}");
+			%monitors = ();
+			$this->{stopping} = 0;
+			$this->{running} = 0;
 		}
-		elsif (!$this->{paused})
+		elsif ($this->{running})
 		{
-			my $repo_hash = getRepoHash();
-			for my $path (sort keys %monitors)
+			if (!$this->{started})		# ==> $CHECK_CHANGES_ON_INIT
 			{
-				my $m = $monitors{$path};
-				next if !$m;	# could be deleted during loop
 
-				my $rslt = $m->{mon}->wait(0);
-				if (defined($rslt) && $rslt>0)
+				display($dbg_thread,0,"thread {starting}");
+				&$the_callback({ status =>"starting" });
+				my $repo_list = getRepoList();
+
+				for my $repo (@$repo_list)
 				{
-					$m->{mon}->reset();
+					&$the_callback({ status =>"monitor: $repo->{path}" });
+					$rslt = undef if !createMonitor($repo->{path});
+				}
 
-					my $parent = $m->{parent};
-					my $report_path = $parent ? $parent->{path} : $m->{path};
-					my $repo = $repo_hash->{$report_path};
-					display($dbg_win32,0,"win_notify($path,$report_path)");
-
-					if (!$repo)
-					{
-						error("Could not get repo $repo($report_path)");
-						$rslt = undef;
-						last;
-					}
+				for my $repo (@$repo_list)
+				{
+					last if !defined($rslt);
+					display($dbg_mon,0,"initial call to gitChanges($repo->{path})");
+					&$the_callback({ status =>"checking: $repo->{path}" });
 					$rslt = gitChanges($repo);
 					last if !defined($rslt);
+					setCanPush($repo);
+					&$the_callback({ repo=>$repo }) if $rslt;
+				}
 
-					if ($report_path eq $suppress_path)
+				if (defined($rslt))
+				{
+					$this->{started} = 1;
+					display($dbg_thread,0,"thread {started}");
+					&$the_callback({ status =>"started" }) ;
+				}
+			}
+			elsif (!$this->{paused})
+			{
+				my $repo_hash = getRepoHash();
+				for my $path (sort keys %monitors)
+				{
+					my $m = $monitors{$path};
+					next if !$m;	# could be deleted during loop
+
+					my $rslt = $m->{mon}->wait(0);
+					if (defined($rslt) && $rslt>0)
 					{
-						warning(0,0,"suppressing callback($suppress_path)");
-						$suppress_path = '';
-					}
-					else	# if ($rslt)
-					{
-						# clear/set the UI notion of 'any repos to push'
+						$m->{mon}->reset();
+
+						my $parent = $m->{parent};
+						my $report_path = $parent ? $parent->{path} : $m->{path};
+						my $repo = $repo_hash->{$report_path};
+						display($dbg_cb,0,"win_notify($path,$report_path)");
+
+						if (!$repo)
+						{
+							error("Could not get repo $repo($report_path)");
+							$rslt = undef;
+							last;
+						}
+						$rslt = gitChanges($repo);
+						last if !defined($rslt);
 						setCanPush($repo) if $rslt;
-
-						# choice: call many times when the repo hasn't changed
-						#	in order to support instantly seeing diffs?
-						#
-						# if so, we will the UI will typically be called
-						#	at least twice as git updates it's stuff, and
-						#   the real changes also happen.
-						# if not, you have to leave an item to see its changes
-						#   and my work for notify updates in commitListCtrl
-						#   is not called
 
 						&$the_callback({ repo=>$repo })
 							if $MONITOR_NOTIFY_EVERY_CHANGE || $rslt;
-					}
 
-					# ok, this is interesting.
-					# first, i totally space on what happens if a mapped subdir is removed.
-					# 	 presumably I just wont receive any events for it
-					# but more importantly, it appears as if we added a new subdirectory
-					#    to a repo with submonitors, that we likely need to add a new
-					#    submonitor to the repo.
-					# This notion came from adding Perl/site to /junk/test_repo. Although
-					# 	 I would then claim to not undertand why I got the first 500 notifications,
-					#    after the first 500 or so files, it stopped sending notifications.
-					# I get a;; the notifications if adding to a monitored subfolder, or to
-					#    a subproject, but not on the main project.
-					# It's not particularly easy to identify this situation. I would need
-					# 	a function like addNewSubmonitors() (or another way to call
-					#   createMonitors/createSubMonitors).  Unfortunately, they're all
-					#   array at this point, and we lost the $exclude information.
-					# The ones added here, in a thread, are not available to the desctructor
-					#   and *presumably* go away when the thread exits.
+						# create/remove monitors based on file system changes
 
-					# if this is a main repo as indicated by {excludes}
-					# do another pass through its dir tree to see if
-					# any new monitors need to be added ...
+						if ($m->{excludes})
+						{
+							$rslt = undef if !createSubMonitors($m);
+							last if !$rslt;
+						}
 
-					if ($m->{excludes})
-					{
-						createSubMonitors($m);
-					}
-				}
+					}	# got result from monitor
+				}	# for each monitor
+			}	# ! paused
+
+			if (!defined($rslt))
+			{
+				$this->{running} = 0;
+				warning($dbg_thread,0,"STOPPING MONITOR DUE TO ERROR!!");
+				&$the_callback({ status =>"STOPPING MONITOR DUE TO ERROR!!" });
+				sleep(10)
 			}
-		}
 
-		last if !defined($rslt);
-		sleep(0.2);
+		}	# running
+
+		sleep(defined($rslt)?0.2:10);
 	}
 
-	warning($dbg_mon,0,"Existing thread due to error")
-		if !defined($rslt);
-	$this->{running} = 0;
-	display($dbg_mon,0,"thread stopped");
+	display($dbg_mon,0,"thread exited abnormally!!");
 }
-
-
 
 
 
@@ -431,12 +387,11 @@ sub new
 		if !$callback;
 	$the_callback = $callback,
 	my $this = shared_clone({
-		started => !$CHECK_CHANGES_ON_INIT,
+		started => 0,
 		running => 0,
 		stopping => 0,
 		paused => 0 });
 	bless $this,$class;
-	return if !startWin32();
 	return $this;
 }
 
@@ -445,16 +400,24 @@ sub new
 sub start
 {
 	my ($this) = @_;
+	display($dbg_mon,0,"monitor::start()");
 	return !error("already running")
 		if $this->{running};
-	$this->{running} = 0;
+
+	$this->{started} = 0;
 	$this->{stopping} = 0;
 	$this->{paused} = 0;
 
-	display($dbg_mon,0,"starting thread");
-	$thread = threads->create(\&run,$this);
-	$thread->detach();
-	display($dbg_mon,0,"thread started");
+	if (!$thread)
+	{
+		display($dbg_mon,0,"starting thread");
+		$thread = threads->create(\&run,$this);
+		$thread->detach();
+		display($dbg_mon,0,"thread started");
+	}
+
+	$this->{running} = 1;
+	display($dbg_mon,0,"monitor started");
 	return 1;
 }
 
@@ -462,15 +425,14 @@ sub start
 sub stop
 {
 	my ($this) = @_;
-	display($dbg_mon,0,"stop()");
+	display($dbg_mon,0,"monitor::stop()");
 	$this->{stopping} = 1;
-	endWin32();
 	while ($this->{running})
 	{
 		display($dbg_mon,0,"waiting for thread to stop ...");
-		sleep(1);
+		sleep(0.2);
 	}
-	$thread = undef;
+	display($dbg_thread,0,"monitor stopped()");
 }
 
 
