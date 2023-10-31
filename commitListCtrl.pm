@@ -1,4 +1,3 @@
-#!/usr/bin/perl
 #
 # PRH TODO: NEED ARROW KEYS
 #

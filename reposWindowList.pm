@@ -1,10 +1,22 @@
-#-------------------------------------------------------------------------
-# Window to show repos by path with section breaks
-#-------------------------------------------------------------------------
 
-package apps::gitUI::pathWindow;
+# NEEDS:
+# -	THIS and the pathWindow should really not be multiple instance.
+# - THIS window's hyperlink should have and show the notion of a "selected" repo
+# - Pub::Wx::Frame() should have createOrActivateWindow({data})
+# - THIS windows onSetData() method would select the repo and scroll as necessary
+# - The repoMenu would include the menu item IF not from THIS window
+
+#-------------------------------------------
+# apps::gitUI::reposWindowList
+#-------------------------------------------
+# The left portion of the reposWindow showing a list of repos
+# Largely cut-and-past from pathWindow.pm
+
+package apps::gitUI::reposWindowList;
 use strict;
 use warnings;
+use threads;
+use threads::shared;
 use Wx qw(:everything);
 use Wx::Event qw(
 	EVT_SIZE
@@ -13,50 +25,56 @@ use Wx::Event qw(
 	EVT_ENTER_WINDOW
 	EVT_LEAVE_WINDOW);
 use Pub::Utils;
-use Pub::WX::Window;
 use apps::gitUI::repos;
 use apps::gitUI::utils;
 use apps::gitUI::myHyperlink;
 use apps::gitUI::repoMenu;
-use base qw(Wx::Window Pub::WX::Window apps::gitUI::repoMenu);
+use base qw(Wx::ScrolledWindow apps::gitUI::repoMenu);
 
-my $dbg_win = 0;
+my $dbg_life = 0;
 my $dbg_pop = 1;
 my $dbg_layout = 1;
 my $dbg_notify = 1;
 
+
 my $BASE_ID = 1000;
 
-my $ROW_START 	 = 10;
-my $ROW_HEIGHT   = 18;
-my $COLUMN_START = 10;
-my $COLUMN_WIDTH = 180;
+my $LINE_HEIGHT   = 18;
 
-my $win_instance = 0;
 
-sub new
-{
-	my ($class,$frame,$id,$book,$data) = @_;
-
-	my $instance = $win_instance++;
-	my $name = 'Paths';
-	$name .= "($instance)" if $instance;
-
-	display($dbg_win,0,"pathWindow::new($frame,$id,"._def($book).","._def($data).")");
-	my $this = $class->SUPER::new($book,$id);
-	$this->MyWindow($frame,$book,$id,$name,$data,$instance);
-
-	$this->SetBackgroundColour($color_white);
-	$this->{ctrl_sections} = [];
-
-	$this->populate();
-
-	$this->addRepoMenu();
-	EVT_SIZE($this, \&onSize);
-	return $this;
+BEGIN {
+    use Exporter qw( import );
+	our @EXPORT = qw (
+	);
 }
 
 
+sub new
+{
+    my ($class,$parent,$splitter,$data) = @_;
+	display($dbg_life,0,"new reposWindowList() data="._def($data));
+	$data ||= {};
+
+    my $this = $class->SUPER::new($splitter,-1,[0,0],[-1,-1]);
+
+	$this->{parent} = $parent;
+	$this->{frame} = $parent->{frame};
+	$this->{ctrl_sections} = [];
+
+	$this->{ysize} = 0;
+	$this->SetScrollRate(0,$LINE_HEIGHT);
+		# Learn the hard way.  A simple ScrolledWindow, even
+		# with controls, MUST call SetScrollRate() and still
+		# call SetVirtualSize() even though the damned window
+		# should just KNOW the size from the creation of the controls.
+
+	$this->SetBackgroundColour($color_white);
+	$this->populate();
+
+	EVT_SIZE($this, \&onSize);
+	return $this;
+
+}
 
 
 sub repoFromId
@@ -100,84 +118,37 @@ sub onLeaveLink
 }
 
 
-sub onLeftDown
-{
-	my ($ctrl,$event) = @_;
-	my $id = $event->GetId();
-	my $this = $ctrl->GetParent();
-	my $path = repoPathFromId($id);
-	display($dbg_win,0,"onLeftDown($id,$path)");
-	execNoShell('git gui',$path);
-}
-
-
 sub onRightDown
 {
 	my ($ctrl,$event) = @_;
 	my $id = $event->GetId();
 	my $this = $ctrl->GetParent();
 	my $repo = repoFromId($id);
-	display($dbg_win,0,"onRightDown($id,$repo->{path}");
+	display($dbg_life,0,"onRightDown($id,$repo->{path}");
 	$this->popupRepoMenu($repo);
 
 }
 
 
+sub onLeftDown
+{
+	my ($ctrl,$event) = @_;
+	my $id = $event->GetId();
+	my $this = $ctrl->GetParent();
+	my $repo = repoFromId($id);
+	$this->{parent}->{right}->notifyRepoSelected($repo);
+}
 
 
 sub onSize
 {
 	my ($this,$event) = @_;
-	$this->doLayout();
-    $event->Skip();
-}
-
-
-sub doLayout
-{
-	my ($this) = @_;
 	my $sz = $this->GetSize();
     my $width = $sz->GetWidth();
     my $height = $sz->GetHeight();
-	my $NUM_PER = int(($height - $ROW_START) / $ROW_HEIGHT);
-	return if $NUM_PER < 2;
-
-	display($dbg_layout,0,"doLayout() NUM_PER=$NUM_PER");
-
-	# always start new sections at top of the screen
-	# each column has at least one section
-	# do not start a section unless at least two items will fit
-
-	my $row = 0;
-	my $col = 0;
-	for my $ctrl_section (@{$this->{ctrl_sections}})
-	{
-		my $ctrls = $ctrl_section->{ctrls};
-		my $num_ctrls = @$ctrls;
-		display($dbg_layout,1,"ctrl_section($ctrl_section->{section}->{name}) row=$row col=$col  num=$num_ctrls");
-
-		if ($row + 2 >= $NUM_PER)	# to fit each section fully: $num_ctrls > $NUM_PER)
-		{
-			$row = 0;
-			$col++;
-		}
-
-		$row++ if $row;		# blank line for subsequent sections in same column
-
-		for my $ctrl (@$ctrls)
-		{
-			my $x = $COLUMN_START + $col * $COLUMN_WIDTH;
-			my $y = $ROW_START + $row * $ROW_HEIGHT;
-			$ctrl->Move($x,$y);
-
-			$row++;
-			if ($row >= $NUM_PER)
-			{
-				$row = 0;
-				$col++;
-			}
-		}
-	}
+	# $this->SetScrollbar(wxVERTICAL,0,3,$this->{ysize});
+	$this->SetVirtualSize([$width,$this->{ysize}]);
+    $event->Skip();
 }
 
 
@@ -197,13 +168,13 @@ sub newCtrlSection
 	return $ctrl_section;
 }
 
+
 sub addSectionCtrl
 {
 	my ($ctrl_section,$ctrl,$name) = @_;
 	display($dbg_pop,0,"addSectionCtrl($name)");
 	push @{$ctrl_section->{ctrls}},$ctrl;
 }
-
 
 
 sub populate
@@ -216,17 +187,24 @@ sub populate
 	$this->{ctrl_sections} = [];
 	$this->DestroyChildren();
 
+	my $ypos = 5;
+
+	my $page_started = 0;
 	for my $section (@$sections)
 	{
-		my $started = 0;
+		my $section_started = 0;
 		my $ctrl_section = newCtrlSection($this,$section);
+		$ypos += $LINE_HEIGHT if $page_started;	  # blank line between sections
+		$page_started = 1;
+
 		for my $repo (@{$section->{repos}})
 		{
-			if (!$started && $section->{name} ne $repo->{path})
+			if (!$section_started && $section->{name} ne $repo->{path})
 			{
 				display($dbg_pop,1,"staticText($section->{name})");
-				my $ctrl = Wx::StaticText->new($this,-1,$section->{name},[0,0]);
+				my $ctrl = Wx::StaticText->new($this,-1,$section->{name},[5,$ypos]);
 				addSectionCtrl($ctrl_section,$ctrl,$section->{name});
+				$ypos += $LINE_HEIGHT;
 			}
 
 			my $id = $repo->{num} + $BASE_ID;
@@ -244,28 +222,33 @@ sub populate
 				$this,
 				$id,
 				$display_name,
-				[0,0],
-				[$COLUMN_WIDTH-2,16],
+				[5,$ypos],
+				[-1,-1],
 				$color);
 			addSectionCtrl($ctrl_section,$ctrl,$display_name);
-			$started = 1;
+			$ypos += $LINE_HEIGHT;
 
+			$section_started = 1;
 			EVT_LEFT_DOWN($ctrl, \&onLeftDown);
 			EVT_RIGHT_DOWN($ctrl, \&onRightDown);
 			EVT_ENTER_WINDOW($ctrl, \&onEnterLink);
 			EVT_LEAVE_WINDOW($ctrl, \&onLeaveLink);
 		}
 	}
-	$this->doLayout();
+
+	$this->{ysize} = $ypos + $LINE_HEIGHT;
+	$this->SetVirtualSize([1000,$this->{ysize}]);
+	$this->Refresh();
 }
 
 
 
 sub notifyRepoChanged
+	# Called by reposWindow when the monitor
+	# detects a change to a repo
 {
 	my ($this,$repo) = @_;
 	display($dbg_notify,0,"notifyRepoChanged($repo->{path})");
-
 	for my $ctrl_section (@{$this->{ctrl_sections}})
 	{
 		for my $ctrl (@{$ctrl_section->{ctrls}})
@@ -290,7 +273,6 @@ sub notifyRepoChanged
 		}
 	}
 }
-
 
 
 

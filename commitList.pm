@@ -1,4 +1,3 @@
-#!/usr/bin/perl
 #-------------------------------------------
 # apps::gitUI::commitList
 #-------------------------------------------
@@ -50,7 +49,6 @@ sub new
 
     $this->{parent} = $parent;
 	$this->{is_staged} = $is_staged;
-	$this->{content} = [];
 
 	$this->SetBackgroundColour(
 		$is_staged? $color_git_staged : $color_git_unstaged);

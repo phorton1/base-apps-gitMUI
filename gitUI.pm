@@ -23,6 +23,7 @@ use apps::gitUI::Resources;
 use apps::gitUI::command;
 use apps::gitUI::monitor;
 use apps::gitUI::pathWindow;
+use apps::gitUI::reposWindow;
 use apps::gitUI::commitWindow;
 use apps::gitUI::progressDialog;
 use base qw(Pub::WX::Frame);
@@ -90,6 +91,11 @@ sub createPane
 	    $book ||= $this->{book};
         return apps::gitUI::pathWindow->new($this,$id,$book,$data);
     }
+	elsif ($id == $ID_REPOS_WINDOW)
+	{
+		$book ||= $this->{book};
+        return apps::gitUI::reposWindow->new($this,$id,$book,$data);
+	}
 	elsif ($id == $ID_COMMIT_WINDOW)
 	{
 		$book ||= $this->{book};
