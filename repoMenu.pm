@@ -13,15 +13,18 @@ use Wx qw(:everything);
 use Wx::Event qw(
 	EVT_MENU_RANGE );
 use Pub::Utils;
+use apps::gitUI::Resources;
 
 
 my $dbg_menu = 1;		# context menu and commands
 
 
-my ($ID_OPEN_GITUI,
+my ($ID_OPEN_DETAILS,
+	$ID_OPEN_GITUI,
 	$ID_BRANCH_HISTORY,
 	$ID_ALL_HISTORY ) = (19000..19999);
 my $menu_desc = {
+	$ID_OPEN_DETAILS	=> ['Details',			'Open the repository in the Repos Window' ],
 	$ID_OPEN_GITUI		=> ['GitGUI',			'Open the repository in original GitGUI' ],
 	$ID_BRANCH_HISTORY	=> ['Branch History',	'Show Branch History' ],
 	$ID_ALL_HISTORY		=> ['All History',		'Show All History' ],
@@ -37,8 +40,9 @@ BEGIN {
 
 sub addRepoMenu
 {
-	my ($this) = @_;
-	EVT_MENU_RANGE($this, $ID_OPEN_GITUI, $ID_ALL_HISTORY, \&onRepoMenu);
+	my ($this,$is_repos_window) = @_;
+	$this->{is_repos_window} = $is_repos_window;
+	EVT_MENU_RANGE($this, $ID_OPEN_DETAILS, $ID_ALL_HISTORY, \&onRepoMenu);
 }
 
 
@@ -48,11 +52,13 @@ sub popupRepoMenu
 	display($dbg_menu,1,"popupRepoMenu)($repo->{path})");
 
 	my $menu = Wx::Menu->new();
-	foreach my $id ($ID_OPEN_GITUI..$ID_ALL_HISTORY)
+	foreach my $id ($ID_OPEN_DETAILS..$ID_ALL_HISTORY)
 	{
+		next if $id == $ID_OPEN_DETAILS && $this->{is_repos_window};
 		my $desc = $menu_desc->{$id};
 		my ($text,$hint) = @$desc;
 		$menu->Append($id,$text,$hint,wxITEM_NORMAL);
+		$menu->AppendSeparator() if $id == $ID_OPEN_DETAILS;
 	}
 
 	$this->{popup_repo} = $repo;
@@ -68,7 +74,11 @@ sub onRepoMenu
 	my $repo = $this->{popup_repo};
 	display($dbg_menu,0,"onRepoMenu($command_id,$repo->{path})");
 
-	if ($command_id == $ID_OPEN_GITUI)
+	if ($command_id == $ID_OPEN_DETAILS)
+	{
+		getAppFrame->createPane($ID_REPOS_WINDOW,undef,{repo_id=>$repo->{id}});
+	}
+	elsif ($command_id == $ID_OPEN_GITUI)
 	{
 		execNoShell('git gui',$repo->{path});
 	}

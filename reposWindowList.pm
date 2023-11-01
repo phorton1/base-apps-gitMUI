@@ -35,6 +35,8 @@ my $dbg_life = 0;
 my $dbg_pop = 1;
 my $dbg_layout = 1;
 my $dbg_notify = 1;
+my $dbg_sel = 0;
+
 
 
 my $BASE_ID = 1000;
@@ -51,15 +53,20 @@ BEGIN {
 
 sub new
 {
-    my ($class,$parent,$splitter,$data) = @_;
-	display($dbg_life,0,"new reposWindowList() data="._def($data));
-	$data ||= {};
+    my ($class,$parent,$splitter) = @_;
+	display($dbg_life,0,"new reposWindowList()");
 
     my $this = $class->SUPER::new($splitter,-1,[0,0],[-1,-1]);
+	$this->addRepoMenu(1);
+		# 1 == this is the reposWindow
 
 	$this->{parent} = $parent;
 	$this->{frame} = $parent->{frame};
-	$this->{ctrl_sections} = [];
+	$this->{ctrls} = [];
+	$this->{ctrls_by_id} = {};
+	$this->{selected_id} = '';
+	$this->{bold_font} = $this->GetFont();
+	$this->{bold_font}->SetWeight(wxFONTWEIGHT_BOLD);
 
 	$this->{ysize} = 0;
 	$this->SetScrollRate(0,$LINE_HEIGHT);
@@ -71,40 +78,33 @@ sub new
 	$this->SetBackgroundColour($color_white);
 	$this->populate();
 
+
 	EVT_SIZE($this, \&onSize);
 	return $this;
 
 }
 
 
-sub repoFromId
+sub repoFromCtrlId
 {
-	my ($id) = @_;
+	my ($ctrl_id) = @_;
 	my $repo_list = getRepoList();
-	return $repo_list->[$id  - $BASE_ID];
-}
-
-
-sub repoPathFromId
-{
-	my ($id) = @_;
-	my $repo_list = getRepoList();
-	display(0,0,"repoPathFromId($id) num=".scalar(@$repo_list));
-	return $repo_list->[$id  - $BASE_ID]->{path};
+	return $repo_list->[$ctrl_id-$BASE_ID];
 }
 
 
 sub onEnterLink
 {
 	my ($ctrl,$event) = @_;
-	my $id = $event->GetId();
 	my $this = $ctrl->GetParent();
-	my $path = repoPathFromId($id);
+	my $ctrl_id = $event->GetId();
+	my $repo = repoFromCtrlId($ctrl_id);
+	my $path = $repo->{path};
+
 	$this->{frame}->SetStatusText($path);
-	my $font = Wx::Font->new($this->GetFont());
-	$font->SetWeight (wxFONTWEIGHT_BOLD );
-	$ctrl->SetFont($font);
+	$ctrl->SetFont($this->{bold_font});
 	$ctrl->Refresh();
+	$event->Skip();
 }
 
 
@@ -112,31 +112,98 @@ sub onLeaveLink
 {
 	my ($ctrl,$event) = @_;
 	my $this = $ctrl->GetParent();
+	my $ctrl_id = $event->GetId();
+	my $repo = repoFromCtrlId($ctrl_id);
+	my $path = $repo->{path};
+
 	$this->{frame}->SetStatusText('');
-	$ctrl->SetFont($this->GetFont());
+	$ctrl->SetFont($this->GetFont())
+		if $repo->{id} ne $this->{selected_id};
 	$ctrl->Refresh();
+	$event->Skip();
 }
 
 
 sub onRightDown
 {
 	my ($ctrl,$event) = @_;
-	my $id = $event->GetId();
 	my $this = $ctrl->GetParent();
-	my $repo = repoFromId($id);
-	display($dbg_life,0,"onRightDown($id,$repo->{path}");
+	my $event_id = $event->GetId();
+	my $repo = repoFromCtrlId($event_id);
+	display($dbg_life,0,"onRightDown($repo->{path}");
 	$this->popupRepoMenu($repo);
+}
+
+
+sub selectRepo
+{
+	my ($this,$id) = @_;
+	display($dbg_sel,0,"selectRepo($id)");
+
+	my $ctrl = $this->{ctrls_by_id}->{$id};
+	return !error("Could not find ctrl($id)")
+		if !$ctrl;
+	my $repo = getRepoById($id);
+	return !error("Could not find repo($id)")
+		if !$repo;
+
+	my $selected_id = $this->{selected_id};
+	if ($selected_id && $selected_id ne $id)
+	{
+		my $prev_sel = $this->{ctrls_by_id}->{$selected_id};
+		$prev_sel->SetBackgroundColour($color_white);
+		$prev_sel->SetFont($this->GetFont());
+		$prev_sel->Refresh();
+	}
+
+	my $path = $repo->{path};
+	$this->{selected_id} = $id;
+	$ctrl->SetBackgroundColour($color_medium_grey);
+	$ctrl->SetFont($this->{bold_font});
+	$ctrl->Update();
+
+	# if the repo is not visible, scroll it into view
+	# as close to middle of view as possible
+
+	my $sz = $this->GetSize();
+    my $height = $sz->GetHeight();
+	my $ctrl_y = $ctrl->GetPosition()->y;						# ctrl PIXEL y position relative to view
+	display($dbg_sel+1,1,"Scroll($ctrl_y) height($height)");
+
+	if ($ctrl_y < 0 || $ctrl_y > $height-$LINE_HEIGHT)
+	{
+		# I could boil these calculations down but
+		# I'm leaving them fleshed out for clarity
+
+		my ($unused,$start_y) = $this->GetViewStart();			# starting LINE number showing in view
+		my $lines = int($height / $LINE_HEIGHT);
+		my $middle = int($lines / 2);							# LINE number of middle of view
+		my $abs_y = $ctrl_y + ($start_y * $LINE_HEIGHT);		# absolute ctrl PIXEL position
+		my $abs_line = int($abs_y / $LINE_HEIGHT);				# absolute LINE number of ctrl
+		my $start_line = $abs_line - $middle;					# starting LINE number to bring ctrl to middle of view
+		$start_line = 0 if $start_line < 0;						# better if it's not less than zero
+
+		display($dbg_sel+1,1,"Scroll start_y($start_y) lines($lines) middle($middle) abs_y($abs_y) abs_line($abs_line) start_line($start_line)");
+
+		$this->Scroll(0,$start_line);
+		$this->Update();
+	}
+
+	$this->{frame}->SetStatusText($path);
+	$this->{parent}->{right}->notifyRepoSelected($repo);
 
 }
+
 
 
 sub onLeftDown
 {
 	my ($ctrl,$event) = @_;
-	my $id = $event->GetId();
 	my $this = $ctrl->GetParent();
-	my $repo = repoFromId($id);
-	$this->{parent}->{right}->notifyRepoSelected($repo);
+	my $ctrl_id = $event->GetId();
+	my $repo = repoFromCtrlId($ctrl_id);
+	$this->selectRepo($repo->{id});
+	$event->Skip();
 }
 
 
@@ -146,7 +213,10 @@ sub onSize
 	my $sz = $this->GetSize();
     my $width = $sz->GetWidth();
     my $height = $sz->GetHeight();
-	# $this->SetScrollbar(wxVERTICAL,0,3,$this->{ysize});
+	for my $ctrl (@{$this->{ctrls}})
+	{
+		$ctrl->SetSize([$width-10,$height]);
+	}
 	$this->SetVirtualSize([$width,$this->{ysize}]);
     $event->Skip();
 }
@@ -184,8 +254,9 @@ sub populate
 	display($dbg_pop,0,"populate()");
 
 	my $sections = groupReposBySection();
-	$this->{ctrl_sections} = [];
 	$this->DestroyChildren();
+	$this->{ctrls} = [];
+	$this->{ctrls_by_id} = {};
 
 	my $ypos = 5;
 
@@ -202,8 +273,7 @@ sub populate
 			if (!$section_started && $section->{name} ne $repo->{path})
 			{
 				display($dbg_pop,1,"staticText($section->{name})");
-				my $ctrl = Wx::StaticText->new($this,-1,$section->{name},[5,$ypos]);
-				addSectionCtrl($ctrl_section,$ctrl,$section->{name});
+				Wx::StaticText->new($this,-1,$section->{name},[5,$ypos]);
 				$ypos += $LINE_HEIGHT;
 			}
 
@@ -225,7 +295,8 @@ sub populate
 				[5,$ypos],
 				[-1,-1],
 				$color);
-			addSectionCtrl($ctrl_section,$ctrl,$display_name);
+			push @{$this->{ctrls}},$ctrl;
+			$this->{ctrls_by_id}->{$repo->{id}} = $ctrl;
 			$ypos += $LINE_HEIGHT;
 
 			$section_started = 1;

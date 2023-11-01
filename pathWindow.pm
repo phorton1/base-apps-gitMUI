@@ -71,7 +71,7 @@ sub repoPathFromId
 {
 	my ($id) = @_;
 	my $repo_list = getRepoList();
-	display(0,0,"repoPathFromId($id) num=".scalar(@$repo_list));
+	# display(0,0,"repoPathFromId($id) num=".scalar(@$repo_list));
 	return $repo_list->[$id  - $BASE_ID]->{path};
 }
 

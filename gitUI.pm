@@ -78,8 +78,9 @@ sub new
 }
 
 
-
 sub createPane
+	# Overloaded with "createOrActivatePane" semantic.
+	# See Pub::Wx::Frame::activateSingleInstancePane()
 {
 	my ($this,$id,$book,$data) = @_;
 	display($dbg_frame,0,"gitUI::Frame::createPane($id)".
@@ -88,11 +89,15 @@ sub createPane
 
 	if ($id == $ID_PATH_WINDOW)
 	{
+		my $pane = $this->activateSingleInstancePane($id,$book,$data);
+		return $pane if $pane;
 	    $book ||= $this->{book};
         return apps::gitUI::pathWindow->new($this,$id,$book,$data);
     }
 	elsif ($id == $ID_REPOS_WINDOW)
 	{
+		my $pane = $this->activateSingleInstancePane($id,$book,$data);
+		return $pane if $pane;
 		$book ||= $this->{book};
         return apps::gitUI::reposWindow->new($this,$id,$book,$data);
 	}

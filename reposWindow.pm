@@ -88,6 +88,7 @@ sub new
     $vert_splitter->SplitVertically($left,$right,300);
 
 	$this->doLayout();
+	$left->selectRepo($data->{repo_id}) if $data->{repo_id};
 
     EVT_SIZE($this,\&onSize);
 	EVT_SPLITTER_SASH_POS_CHANGED($this, $ID_SPLITTER_VERT, \&onSashPosChanged);
@@ -95,6 +96,21 @@ sub new
 	return $this;
 }
 
+
+sub setPaneData
+	# Called when via Wx::Frame::createPane() when
+	# the window is activated with new data.
+	# Prototype of this approach does more than
+	# it needs to for future reference.
+{
+	my ($this,$data) = @_;
+	if ($data && ref($data))
+	{
+		mergeHash($this->{data},$data);
+		my $repo_id = $data->{repo_id};
+		$this->{left}->selectRepo($repo_id) if $repo_id;
+	}
+}
 
 
 #------------------------------------------
@@ -164,6 +180,7 @@ sub getDataForIniFile
 	my $data = {};
 
 	$data->{left_width} = $this->{left_width};
+	$data->{repo_id} = $this->{left}->{selected_id};
 
 	return $data;
 }
