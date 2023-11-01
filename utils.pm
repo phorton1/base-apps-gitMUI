@@ -87,6 +87,7 @@ BEGIN
 		$color_orange
 		$color_white
 		$color_light_grey
+		$color_medium_grey
 		$color_dark_cyan
 
 		$color_git_staged
@@ -200,22 +201,22 @@ our $font_normal = Wx::Font->new(9,wxFONTFAMILY_DEFAULT,wxFONTSTYLE_NORMAL,wxFON
 our $font_bold = Wx::Font->new(9,wxFONTFAMILY_DEFAULT,wxFONTSTYLE_NORMAL,wxFONTWEIGHT_BOLD);
 
 
-our $color_black 	 = Wx::Colour->new(0x00, 0x00, 0x00);
-our $color_red     	 = Wx::Colour->new(0xE0, 0x00, 0x00);		# listCtrl deletes, pathWindow staged_changes
-our $color_green   	 = Wx::Colour->new(0x00, 0x90, 0x00);		# listCtrl staged M's, pathWindow: public
-our $color_blue    	 = Wx::Colour->new(0x00, 0x00, 0xC0);		# listCtrl icons and repo line, pathWindow: private
-our $color_cyan      = Wx::Colour->new(0x00, 0xC0, 0xC0);		# unused
-our $color_magenta   = Wx::Colour->new(0xC0, 0x00, 0xC0);		# path_window: remote_changes
-our $color_yellow    = Wx::Colour->new(0xFF, 0xD7, 0x00);		# commitRight title
-our $color_grey      = Wx::Colour->new(0x99, 0x99, 0x99);		# unused
-our $color_purple    = Wx::Colour->new(0x60, 0x00, 0xC0);		# unused
-our $color_orange    = Wx::Colour->new(0xC0, 0x60, 0x00);		# path_window: unstaged_changes
-our $color_white     = Wx::Colour->new(0xFF, 0xFF, 0xFF);
-our $color_dark_cyan = Wx::Colour->new(0x00, 0x80, 0x80);		# unused
-our $color_light_grey= Wx::Colour->new(0xF0, 0xF0, 0xF0);		# commitRight panel
-
-our $color_git_staged   = Wx::Colour->new(0xA0, 0xFF, 0xA0);	# commitList(staged) green headeer
-our $color_git_unstaged = Wx::Colour->new(0xff, 0xB0, 0xA0);	# commitList(unstqaged) orange header
+our $color_black 	     = Wx::Colour->new(0x00, 0x00, 0x00);
+our $color_red     	     = Wx::Colour->new(0xE0, 0x00, 0x00);		# listCtrl deletes, pathWindow staged_changes
+our $color_green   	     = Wx::Colour->new(0x00, 0x90, 0x00);		# listCtrl staged M's, pathWindow: public
+our $color_blue    	     = Wx::Colour->new(0x00, 0x00, 0xC0);		# listCtrl icons and repo line, pathWindow: private
+our $color_cyan          = Wx::Colour->new(0x00, 0xC0, 0xC0);		# unused
+our $color_magenta       = Wx::Colour->new(0xC0, 0x00, 0xC0);		# path_window: remote_changes
+our $color_yellow        = Wx::Colour->new(0xFF, 0xD7, 0x00);		# commitRight title
+our $color_grey          = Wx::Colour->new(0x99, 0x99, 0x99);		# unused
+our $color_purple        = Wx::Colour->new(0x60, 0x00, 0xC0);		# unused
+our $color_orange        = Wx::Colour->new(0xC0, 0x60, 0x00);		# path_window: unstaged_changes
+our $color_white         = Wx::Colour->new(0xFF, 0xFF, 0xFF);
+our $color_dark_cyan     = Wx::Colour->new(0x00, 0x80, 0x80);		# unused
+our $color_light_grey    = Wx::Colour->new(0xF0, 0xF0, 0xF0);		# commitRight panel
+our $color_medium_grey   = Wx::Colour->new(0xC0, 0xC0, 0xC0);		# reposWindowList selected itm
+our $color_git_staged    = Wx::Colour->new(0xA0, 0xFF, 0xA0);	# commitList(staged) green headeer
+our $color_git_unstaged  = Wx::Colour->new(0xff, 0xB0, 0xA0);	# commitList(unstqaged) orange header
 our $color_item_selected = Wx::Colour->new(0x00, 0x78, 0xD7);	# commitList selected item background
 	# 120, 215 from git highlight
 
