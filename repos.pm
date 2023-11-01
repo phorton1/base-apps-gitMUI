@@ -33,6 +33,7 @@ BEGIN
 		parseRepos
 		getRepoHash
 		getRepoList
+		getRepoById
 
 		canPushRepos
 		setCanPush
@@ -51,6 +52,13 @@ my $repos_can_push = shared_clone({});
 sub getRepoHash		{ return $repo_hash; }
 sub getRepoList		{ return $repo_list; }
 
+
+sub getRepoById
+{
+	my ($id) = @_;
+	my $path = repoIdToPath($id);
+	return $repo_hash->{$path};
+}
 
 
 sub canPushRepos
