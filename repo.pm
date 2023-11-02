@@ -66,10 +66,14 @@ sub new
 
 		# parsed fields
 
+		mine     => 1,						# if !FORKED && !NOT_MINE in file
 		private  => 0,						# if PRIVATE in file
 		forked   => 0,						# if FORKED [optional_blah] in file
 		parent   => '',						# "Forked from ..." or "Copied from ..."
 		descrip  => '',						# description from github
+		page_header => 0,					# PAGE_HEADER for ordered documents
+
+		docs     => shared_clone([]),		# MD documents in particular order
 		uses 	 => shared_clone([]),		# a list of the repositories this repository USES
 		needs	 => shared_clone([]),       # a list of the abitrary dependencies this repository has
 		friend   => shared_clone([]),       # a hash of repositories this repository relates to or can use
@@ -387,10 +391,13 @@ sub toTextCtrl
 	$this->contentLine($text_ctrl,0,'section_name');
 	$this->contentLine($text_ctrl,0,'section_path');
 	$this->contentLine($text_ctrl,1,'private');
+	$this->contentLine($text_ctrl,1,'mine');
 	$this->contentLine($text_ctrl,0,'forked');
 	$this->contentLine($text_ctrl,0,'parent');
 	$this->contentLine($text_ctrl,0,'descrip');
+	$this->contentLine($text_ctrl,0,'page_header');
 
+	$this->contentArray($text_ctrl,0,'docs');
 	$this->contentArray($text_ctrl,0,'uses');
 	$this->contentArray($text_ctrl,0,'needs');
 	$this->contentArray($text_ctrl,0,'friend');

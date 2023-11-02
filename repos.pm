@@ -112,6 +112,7 @@ sub parseRepos
 			$line =~ s/\s+$//;
 
 			# get section path RE and optional name if different
+			# SECTION and path-branch delimiter is TAB!!
 
 			if ($line =~ /^SECTION\t/i)
 			{
@@ -163,11 +164,27 @@ sub parseRepos
 					$line ||= 1;
 					display($dbg_parse+2,2,"FORKED $line");
 					$repo->{forked} = $line;
+					$repo->{mine} = '';
+				}
+				elsif ($line =~ /^MINE/i)
+				{
+					display($dbg_parse+2,2,"MINE");
+					$repo->{mine} = 1;
+				}
+				elsif ($line =~ /^NOT_MINE/i)
+				{
+					display($dbg_parse+2,2,"NOT_MINE");
+					$repo->{mine} = '';
+				}
+				elsif ($line =~ /^PAGE_HEADER/i)
+				{
+					display($dbg_parse+2,2,"PAGE_HEADER");
+					$repo->{page_header} = 1;
 				}
 
-				# add USES, NEEDS, GROUP, FRIEND
+				# add arrayed things
 
-				elsif ($line =~ s/^(USES|NEEDS|GROUP|FRIEND|NOTES|WARNINGS|ERRORS)\s+//i)
+				elsif ($line =~ s/^(DOCS|USES|NEEDS|GROUP|FRIEND|NOTES|WARNINGS|ERRORS)\s+//i)
 				{
 					my $what = $1;
 					display($dbg_parse+2,2,"$what $line");
