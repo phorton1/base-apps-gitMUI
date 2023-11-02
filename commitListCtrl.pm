@@ -72,13 +72,15 @@ my $ACTION_DO_SINGLE_FILE = 3;		# do a single (unselected) file
 
 my ($ID_REVERT_CHANGES,
 	$ID_OPEN_IN_KOMODO,
+	$ID_SHOW_EXPLORER,
 	$ID_OPEN_IN_SHELL,
 	$ID_OPEN_IN_NOTEPAD ) = (9000..9999);
 my $menu_desc = {
-	$ID_REVERT_CHANGES  => ['Revert',			'Revert changes to one or more items' ],
-	$ID_OPEN_IN_KOMODO	=> ['Komodo',			'Open one or more items in Komodo Editor' ],
-	$ID_OPEN_IN_SHELL   => ['Shell',			'Open single item in the Windows Shell' ],
-	$ID_OPEN_IN_NOTEPAD => ['Notepad',			'Open single item in the Windows Notepad' ],
+	$ID_REVERT_CHANGES  => ['Revert',	'Revert changes to one or more items' ],
+	$ID_OPEN_IN_KOMODO	=> ['Komodo',	'Open one or more items in Komodo Editor' ],
+	$ID_SHOW_EXPLORER   => ['Explorer',	'Open single item in Windows Explorer' ],
+	$ID_OPEN_IN_SHELL   => ['Shell',	'Open single item in the Windows Shell' ],
+	$ID_OPEN_IN_NOTEPAD => ['Notepad',	'Open single item in the Windows Notepad' ],
 };
 
 
@@ -105,6 +107,7 @@ sub new
 	bless $this,$class;
 
     $this->{parent} = $parent;
+	$this->{frame} = $parent->{frame};
 	$this->{is_staged} = $is_staged;
 	$this->{key} = $is_staged ? 'staged_changes' : 'unstaged_changes';
 	$this->{name} = $name;
@@ -1105,7 +1108,11 @@ sub onItemMenu
 
 	display($dbg_cmd,0,"onItemMenu($this->{name},$command_id) repo($id) fn($fn) selected($selected) multiple($multiple)");
 
-	if ($command_id == $ID_OPEN_IN_SHELL)
+	if ($command_id == $ID_SHOW_EXPLORER)
+	{
+		execExplorer("$repo->{path}/$fn");
+	}
+	elsif ($command_id == $ID_OPEN_IN_SHELL)
 	{
 		chdir $repo->{path};
 		system(1,"\"$repo->{path}/$fn\"");
@@ -1113,7 +1120,6 @@ sub onItemMenu
 	elsif ($command_id == $ID_OPEN_IN_NOTEPAD)
 	{
 		execNoShell("notepad \"$repo->{path}/$fn\"");
-		# system(1,"notepad \"$repo->{path}/$fn\"");
 	}
 	elsif ($command_id == $ID_OPEN_IN_KOMODO)
 	{
@@ -1136,8 +1142,7 @@ sub onItemMenu
 				}
 			}
 		}
-		my $komodo = "\"C:\\Program Files (x86)\\ActiveState Komodo Edit 8\\komodo.exe\"";
-		my $command = $komodo." ".join(" ",@$filenames);
+		my $command = $komodo_exe." ".join(" ",@$filenames);
 		display($dbg_cmd,1,"calling '$command'");
 		execNoShell($command);
 		# system(1,$command);

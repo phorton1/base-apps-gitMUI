@@ -359,10 +359,14 @@ sub contentLine
 	my $value = $this->{$key} || '';
 	return if !defined($value) || $value eq '';
 
+	my $context;
+	$context = { repo_path => $value } if $key eq 'path';
+
 	my $line = $text_ctrl->addLine();
 	$text_ctrl->addPart($line, 0, $color_black, pad($key,12)." = " );
-	$text_ctrl->addPart($line, $bold, $color_blue, $value );
+	$text_ctrl->addPart($line, $bold, $color_blue, $value, $context );
 }
+
 
 sub contentArray
 {
@@ -374,9 +378,16 @@ sub contentArray
 	$text_ctrl->addSingleLine($bold, $color_black, $key);
 	for my $item (@$array)
 	{
-		$text_ctrl->addSingleLine($bold, $color, pad('',10).$item);
+		my $context;
+		$context = { repo=>$this, file=>$item } if $key eq 'docs';
+		$context = { repo_path => $item } if $key eq 'uses';
+
+		my $line = $text_ctrl->addLine();
+		$text_ctrl->addPart($line, 0, $color_black, pad('',10));
+		$text_ctrl->addPart($line, $bold, $color, $item, $context);
 	}
 }
+
 
 sub toTextCtrl
 {

@@ -52,6 +52,8 @@ sub new
 	display($dbg_life,0,"new commitRight()");
     my $this = $class->SUPER::new($splitter);
     $this->{parent} = $parent;
+	$this->{frame} = $parent->{frame};
+
 	$this->{diff_repo} = '';
 	$this->{diff_item} = '';
 
@@ -75,7 +77,7 @@ sub new
 
 	$this->doLayout();
 	EVT_SIZE($this, \&onSize);
-	EVT_LEFT_DOWN($hyperlink, \&onLink);
+	# EVT_LEFT_DOWN($hyperlink, \&onLink);
 	EVT_BUTTON($this, $ID_COMMAND_RESCAN, \&onButton);
 	EVT_BUTTON($this, $COMMAND_COMMIT, \&onButton);
 	EVT_BUTTON($this, $ID_COMMAND_PUSH_ALL, \&onButton);
@@ -83,11 +85,7 @@ sub new
 
 	EVT_UPDATE_UI_RANGE($this, $ID_PUSH_WINDOW, $COMMAND_COMMIT, \&onUpdateUI);
 		# note range from Resources.pm
-
-
-
     return $this;
-
 }
 
 
@@ -141,20 +139,18 @@ sub onButton
 	my $id = $event->GetId();
 	display($dbg_cmds,0,"commitRight::onButton($id)");
 
-	my $app_frame = $this->{parent}->{frame};	# getAppFrame();
-		# ?!?!? Wx::Frame::DESTROY() gets called ?!?!?
-
+	my $frame = $this->{frame};
 	if ($id == $ID_PUSH_WINDOW)
 	{
-		$app_frame->createPane($ID_PUSH_WINDOW,$this->{book});
+		$frame->createPane($ID_PUSH_WINDOW,$this->{book});
 	}
 	if ($id == $ID_COMMAND_RESCAN)
 	{
-		$app_frame->onCommand($event);
+		$frame->onCommand($event);
 	}
 	if ($id == $ID_COMMAND_PUSH_ALL)
 	{
-		$app_frame->doPushCommand($id);
+		$frame->doPushCommand($id);
 	}
 	if ($id == $COMMAND_COMMIT)
 	{
@@ -186,11 +182,6 @@ my $LINE_ENDING_CRLF = 3;
 my $LINE_ENDING_MIXED = 4;
 
 
-sub addContentLine
-{
-	my ($content,$bold,$color,$text) = @_;
-	push @$content,[$bold,$color,$text];
-}
 
 sub determineType
 {
@@ -229,7 +220,7 @@ sub determineType
 			}
 			else
 			{
-				if ($buffer =~ /[\x00-\x08|\x0B-\x0C|\x0E-\x1F]/)
+				if ($buffer =~ /([\x00-\x08\x0B-\x0C\x0E-\x1F])/)
 				{
 					$this->{diff_binary} = 1;
 					$diff_ctrl->addSingleLine(1,$color_blue,$file_type."Binary File $size bytes");
@@ -401,7 +392,7 @@ sub notifyItemSelected
 	{
 		if (!$this->{is_staged} && $type eq 'A')
 		{
-			$this->determineType($diff_ctrl,$repo,$item,$file_type);
+			$this->determineType($repo,$item,$file_type);
 		}
 		else
 		{

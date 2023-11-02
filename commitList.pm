@@ -48,6 +48,7 @@ sub new
     my $this = $class->SUPER::new($splitter);
 
     $this->{parent} = $parent;
+	$this->{frame} = $parent->{frame};
 	$this->{is_staged} = $is_staged;
 
 	$this->SetBackgroundColour(

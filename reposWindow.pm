@@ -64,7 +64,7 @@ sub new
 
 	my $instance = $win_instance++;
 	my $name = 'Repos';
-	$name .= "($instance)" if $instance;
+	# $name .= "($instance)" if $instance;
 
 	my $this = $class->SUPER::new($book,$id);
 	$this->MyWindow($frame,$book,$id,$name,$data,$instance);

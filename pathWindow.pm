@@ -40,7 +40,7 @@ sub new
 
 	my $instance = $win_instance++;
 	my $name = 'Paths';
-	$name .= "($instance)" if $instance;
+	# $name .= "($instance)" if $instance;
 
 	display($dbg_win,0,"pathWindow::new($frame,$id,"._def($book).","._def($data).")");
 	my $this = $class->SUPER::new($book,$id);

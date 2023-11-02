@@ -52,6 +52,7 @@ sub new
     $this->{parent} = $parent;
 
 	$this->{cur_repo} = '';
+	$this->{frame} = $parent->{frame};
 
 	$this->SetBackgroundColour($color_cyan);
 
@@ -68,7 +69,7 @@ sub new
 	$this->doLayout();
 
 	EVT_SIZE($this, \&onSize);
-	EVT_LEFT_DOWN($repo_name, \&onLink);
+	# EVT_LEFT_DOWN($repo_name, \&onLink);
 	EVT_BUTTON($this, $COMMAND_SCAN_DOCS, \&onButton);
 	EVT_BUTTON($this, $COMMAND_UPDATE_DOCS, \&onButton);
 	EVT_UPDATE_UI_RANGE($this, $COMMAND_SCAN_DOCS, $COMMAND_UPDATE_DOCS, \&onUpdateUI);
@@ -139,9 +140,6 @@ sub notifyRepoSelected
 	my $text_ctrl = $this->{text_ctrl};
 	$text_ctrl->clearContent();
 
-	# '','' means to clear the diff window if it is showing an item.
-	# If it is showing a repo, we leave it.
-
 	if (!$id)
 	{
 		if ($this->{repo})
@@ -154,8 +152,10 @@ sub notifyRepoSelected
 	}
 	else
 	{
+		$text_ctrl->setRepoContext($repo);
 		$repo->toTextCtrl($text_ctrl);
 		historyToTextCtrl($text_ctrl,$repo,0);
+
 	}
 
 	$text_ctrl->Refresh();

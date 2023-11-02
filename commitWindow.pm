@@ -21,7 +21,7 @@ use base qw(Wx::Window Pub::WX::Window);
 
 
 my $dbg_life = 0;
-my $dbg_splitters = 0;
+my $dbg_splitters = 1;
 my $dbg_pop = 1;
 my $dbg_notify = 1;
 

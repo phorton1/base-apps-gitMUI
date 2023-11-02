@@ -83,7 +83,7 @@ sub createPane
 	# See Pub::Wx::Frame::activateSingleInstancePane()
 {
 	my ($this,$id,$book,$data) = @_;
-	display($dbg_frame,0,"gitUI::Frame::createPane($id)".
+	display($dbg_frame+1,0,"gitUI::Frame::createPane($id)".
 		" book="._def($book).
 		" data="._def($data) );
 

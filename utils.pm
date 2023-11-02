@@ -68,6 +68,7 @@ BEGIN
         $PUSH_CB_REFERENCE
 
 		$repo_filename
+		$komodo_exe
 
 		repoPathToId
 		repoIdToPath
@@ -111,6 +112,7 @@ BEGIN
 our $THREAD_EVENT:shared = Wx::NewEventType;
 	# This is a weird place for this, but it is includable by both gitUI & command
 
+our $komodo_exe = "\"C:\\Program Files (x86)\\ActiveState Komodo Edit 8\\komodo.exe\"";
 
 # PUSH callback types
 # PACK is called first, stage is 0 on first, 1 thereafter
