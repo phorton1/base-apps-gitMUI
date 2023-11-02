@@ -42,14 +42,12 @@ my $MIN_LEFT_WIDTH 	        = 5;
 my $MIN_RIGHT_WIDTH         = 5;
 my $INITIAL_LEFT_WIDTH  	= 200;
 
-
-my $win_instance = 0;
-
 #---------------------------
 # new
 #---------------------------
 
 sub new
+	# single instance window
 	# the 'data' member is the name of the connection information
 {
 	my ($class,$frame,$id,$book,$data) = @_;
@@ -62,12 +60,9 @@ sub new
 
 	# construct $this and set data members
 
-	my $instance = $win_instance++;
 	my $name = 'Repos';
-	# $name .= "($instance)" if $instance;
-
 	my $this = $class->SUPER::new($book,$id);
-	$this->MyWindow($frame,$book,$id,$name,$data,$instance);
+	$this->MyWindow($frame,$book,$id,$name,$data);
 
 	$this->{name} = $name;
 	$this->{data} = $data;

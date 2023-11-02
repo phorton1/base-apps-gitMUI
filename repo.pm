@@ -75,9 +75,12 @@ sub new
 
 		docs     => shared_clone([]),		# MD documents in particular order
 		uses 	 => shared_clone([]),		# a list of the repositories this repository USES
+		used_by  => shared_clone([]),		# list of repositorie sthat use this repository
+
 		needs	 => shared_clone([]),       # a list of the abitrary dependencies this repository has
 		friend   => shared_clone([]),       # a hash of repositories this repository relates to or can use
 		group    => shared_clone([]),       # a list of arbitrary groups that this repository belongs to
+
 		errors   => shared_clone([]),
 		warnings => shared_clone([]),
 		notes 	 => shared_clone([]),
@@ -380,7 +383,7 @@ sub contentArray
 	{
 		my $context;
 		$context = { repo=>$this, file=>$item } if $key eq 'docs';
-		$context = { repo_path => $item } if $key eq 'uses';
+		$context = { repo_path => $item } if $key eq 'uses' || $key eq 'used_by';
 
 		my $line = $text_ctrl->addLine();
 		$text_ctrl->addPart($line, 0, $color_black, pad('',10));
@@ -410,9 +413,12 @@ sub toTextCtrl
 
 	$this->contentArray($text_ctrl,0,'docs');
 	$this->contentArray($text_ctrl,0,'uses');
+	$this->contentArray($text_ctrl,0,'used_by');
+
 	$this->contentArray($text_ctrl,0,'needs');
 	$this->contentArray($text_ctrl,0,'friend');
-	$this->contentArray($text_ctrl,0,'group');
+	$this->contentArray($text_ctrl,0,'group')
+	;
 	$this->contentArray($text_ctrl,1,'errors',$color_red);
 	$this->contentArray($text_ctrl,1,'warnings',$color_yellow);
 	$this->contentArray($text_ctrl,0,'notes');

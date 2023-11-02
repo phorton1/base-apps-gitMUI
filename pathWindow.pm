@@ -16,8 +16,9 @@ use Pub::Utils;
 use Pub::WX::Window;
 use apps::gitUI::repos;
 use apps::gitUI::utils;
-use apps::gitUI::myHyperlink;
 use apps::gitUI::repoMenu;
+use apps::gitUI::Resources;
+use apps::gitUI::myHyperlink;
 use base qw(Wx::Window Pub::WX::Window apps::gitUI::repoMenu);
 
 my $dbg_win = 0;
@@ -32,19 +33,16 @@ my $ROW_HEIGHT   = 18;
 my $COLUMN_START = 10;
 my $COLUMN_WIDTH = 180;
 
-my $win_instance = 0;
 
 sub new
+	# single instance window
 {
 	my ($class,$frame,$id,$book,$data) = @_;
-
-	my $instance = $win_instance++;
 	my $name = 'Paths';
-	# $name .= "($instance)" if $instance;
 
 	display($dbg_win,0,"pathWindow::new($frame,$id,"._def($book).","._def($data).")");
 	my $this = $class->SUPER::new($book,$id);
-	$this->MyWindow($frame,$book,$id,$name,$data,$instance);
+	$this->MyWindow($frame,$book,$id,$name,$data);
 
 	$this->SetBackgroundColour($color_white);
 	$this->{ctrl_sections} = [];
@@ -55,8 +53,6 @@ sub new
 	EVT_SIZE($this, \&onSize);
 	return $this;
 }
-
-
 
 
 sub repoFromId
@@ -79,9 +75,9 @@ sub repoPathFromId
 sub onEnterLink
 {
 	my ($ctrl,$event) = @_;
-	my $id = $event->GetId();
+	my $event_id = $event->GetId();
 	my $this = $ctrl->GetParent();
-	my $path = repoPathFromId($id);
+	my $path = repoPathFromId($event_id);
 	$this->{frame}->SetStatusText($path);
 	my $font = Wx::Font->new($this->GetFont());
 	$font->SetWeight (wxFONTWEIGHT_BOLD );
@@ -103,21 +99,23 @@ sub onLeaveLink
 sub onLeftDown
 {
 	my ($ctrl,$event) = @_;
-	my $id = $event->GetId();
+	my $event_id = $event->GetId();
 	my $this = $ctrl->GetParent();
-	my $path = repoPathFromId($id);
-	display($dbg_win,0,"onLeftDown($id,$path)");
-	execNoShell('git gui',$path);
+	my $repo = repoFromId($event_id);
+	my $id = $repo->{id};
+	display($dbg_win,0,"onLeftDown($event_id,$id)");
+	$this->{frame}->createPane($ID_REPOS_WINDOW,undef,{repo_id=>$id});
+	# execNoShell('git gui',$path);
 }
 
 
 sub onRightDown
 {
 	my ($ctrl,$event) = @_;
-	my $id = $event->GetId();
+	my $event_id = $event->GetId();
 	my $this = $ctrl->GetParent();
-	my $repo = repoFromId($id);
-	display($dbg_win,0,"onRightDown($id,$repo->{path}");
+	my $repo = repoFromId($event_id);
+	display($dbg_win,0,"onRightDown($event_id,$repo->{path}");
 	$this->popupRepoMenu($repo);
 
 }

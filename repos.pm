@@ -182,9 +182,34 @@ sub parseRepos
 					$repo->{page_header} = 1;
 				}
 
-				# add arrayed things
+				# arrayed things with error checking
+				# DOCS and NEEDS cannot have any spaces in them
+				# but may have trailing data
 
-				elsif ($line =~ s/^(DOCS|USES|NEEDS|GROUP|FRIEND|NOTES|WARNINGS|ERRORS)\s+//i)
+				elsif ($line =~ s/^(DOCS)\s+//i)
+				{
+					my $what = $1;
+					display($dbg_parse+2,2,"$what $line");
+					push @{$repo->{lc($what)}},$line;
+
+					my ($root) = split(/\s+/,$line);
+					my $path = $repo->{path}.$root;
+					$repo->repoError("$what $root does not exist")
+						if !(-f $path);
+				}
+				elsif ($line =~ s/^(NEEDS)\s+//i)
+				{
+					my $what = $1;
+					display($dbg_parse+2,2,"$what $line");
+					push @{$repo->{lc($what)}},$line;
+					my ($path) = split(/\s+/,$line);
+					$repo->repoError("$what $path does not exist")
+						if !(-d $path);
+				}
+
+				# unchecked (here) arrayed things
+
+				elsif ($line =~ s/^(USES|GROUP|FRIEND|NOTES|WARNINGS|ERRORS)\s+//i)
 				{
 					my $what = $1;
 					display($dbg_parse+2,2,"$what $line");
@@ -198,6 +223,24 @@ sub parseRepos
         error("Could not open $repo_filename");
         return;
     }
+
+	# set used_by
+
+	for my $repo (@$repo_list)
+	{
+		for my $uses (@{$repo->{uses}})
+		{
+			my $used_repo = $repo_hash->{$uses};
+			if (!$used_repo)
+			{
+				$repo->repoError("invalid USES: $uses");
+			}
+			else
+			{
+				push @{$used_repo->{used_by}},$repo->{path};
+			}
+		}
+	}
 
     if (!@$repo_list)
     {
