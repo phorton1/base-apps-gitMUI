@@ -2,7 +2,6 @@
 # apps::gitUI::myTextCtrl
 #-------------------------------------------
 # context may be:
-#
 #    path => a fully qualified folder path
 #		execExplorer
 #       maybe show in komodo places somehow
@@ -12,6 +11,11 @@
 #    repo_path => a fully qualified repo path
 #		repoMenu
 #    repo,file => a repo and a relative filename
+#
+# ALT-mouse selects rectangle
+# Regular mouse selects lines
+# Refresh is not optimized.
+
 
 package apps::gitUI::myTextCtrl;
 use strict;
@@ -22,7 +26,9 @@ use Win32::GUI;
 use Wx qw(:everything);
 use Wx::Event qw(
 	EVT_PAINT
+	EVT_IDLE
 	EVT_MOUSE_EVENTS );
+use Time::HiRes qw(sleep);
 use Pub::Utils;
 use apps::gitUI::utils;
 use apps::gitUI::repos;
@@ -33,10 +39,19 @@ use base qw(Wx::ScrolledWindow apps::gitUI::contextMenu);
 
 my $dbg_ctrl = 0;
 my $dbg_draw = 1;
+	# -1 to show drag rectangles
 my $dbg_mouse = 1;
+	# -1 to show moves
+my $dbg_refresh = 1;
+	# -1 to show drag rectangles
+my $dbg_word = 1;
+my $dbg_scroll = 1;
+
 
 my $LINE_HEIGHT = 16;
 my $CHAR_WIDTH  = 7;
+my $LEFT_MARGIN = 5;
+
 
 
 BEGIN {
@@ -63,15 +78,26 @@ sub new
 
     $this->{parent} = $parent;
 	$this->{frame} = $parent->{frame};
+	$this->{width} = 0;
+	$this->{height} = 0;
+
 	$this->{hits} = [];
 	$this->{hit} = '';
 
+	$this->{drag_alt} = 0;
+	$this->{drag_start} = '';
+	$this->{drag_end} = '';
+	$this->{drag_started} = 0;
+
+	$this->{scroll_inc} = 0;
+
 	$this->clearContent();
 
-	$this->SetVirtualSize([0,0]);
+	$this->SetVirtualSize([$LEFT_MARGIN,0]);
 	$this->SetBackgroundColour($color_white);
 	$this->SetScrollRate($CHAR_WIDTH,$LINE_HEIGHT);
 
+	EVT_IDLE($this, \&onIdle);
 	EVT_PAINT($this, \&onPaint);
 	EVT_MOUSE_EVENTS($this, \&onMouse);
 	return $this;
@@ -85,14 +111,29 @@ sub setRepoContext
 }
 
 
+sub init_drag
+{
+	my ($this) = @_;
+	$this->refreshDrag() if $this->{drag_end};
+	$this->{drag_alt} = 0;
+	$this->{drag_start} = '';
+	$this->{drag_end} = '';
+	$this->{drag_started} = 0;
+	$this->{scroll_inc} = 0;
+}
+
+
 sub clearContent
 {
 	my ($this) = @_;
 	$this->{content} = [];
 	$this->{hits} = [];
 	$this->{width} = 0;
-	$this->SetVirtualSize([0,0]);
+	$this->{height} = 0;
+	$this->init_drag();
+	$this->SetVirtualSize([$LEFT_MARGIN,0]);
 }
+
 
 sub addLine
 {
@@ -102,7 +143,8 @@ sub addLine
 		width => 0,
 		parts => [] };
 	push @$content,$line;
-	$this->SetVirtualSize([$this->{width},@$content * $LINE_HEIGHT]);
+	$this->{height} = @$content * $LINE_HEIGHT;
+	$this->SetVirtualSize([$this->{width}+$LEFT_MARGIN,$this->{height} + $LINE_HEIGHT]);
 	return $line;
 }
 
@@ -129,7 +171,8 @@ sub addPart
 		my $rect = Wx::Rect->new(
 			$line->{width},
 			(@$content-1) * $LINE_HEIGHT,
-			$char_width,
+			$char_width + $CHAR_WIDTH,
+				# doesn't make sense, but refresh rect was wrong
 			$LINE_HEIGHT);
 
 		my $hit = {
@@ -157,13 +200,158 @@ sub addSingleLine
 # onPaint
 #-----------------------------------------------
 
-sub onPaint
+my $dbg_dr = 0;
+
+
+sub floor
 {
-	my ($this, $event) = @_;
+	my ($val,$mod) = @_;
+	$val = int($val / $mod) * $mod;
+	return $val;
+}
+
+sub ceil
+{
+	my ($val,$mod) = @_;
+	$val = int($val / $mod) * $mod;
+	return $val + $mod - 1;
+}
+
+sub floorX  { my ($v)=@_; return floor($v-$LEFT_MARGIN, $CHAR_WIDTH) + $LEFT_MARGIN; }
+sub ceilX   { my ($v)=@_; return ceil ($v-$LEFT_MARGIN, $CHAR_WIDTH) + $LEFT_MARGIN; }
+sub floorY  { my ($v)=@_; return floor($v, $LINE_HEIGHT); }
+sub ceilY   { my ($v)=@_; return ceil ($v, $LINE_HEIGHT); }
+
+
+
+sub swap
+{
+	my ($v1,$v2) = @_;
+	my $tmp = $$v1;
+	$$v1 = $$v2;
+	$$v2 = $tmp;
+}
+
+
+
+sub drawIntersectRect
+{
+	my ($dc,$urect,$rect) = @_;
+	display_rect($dbg_draw,0,"drawIntersectRect() rect",$urect);
+
+	my $is = Wx::Rect->new($rect->x,$rect->y,$rect->width,$rect->height);
+	$is->Intersect($urect);
+	$dc->DrawRectangle($is->x,$is->y,$is->width,$is->height)
+		if $is->width && $is->height;
+}
+
+
+sub getAltRectangle
+{
+	my ($this) = @_;
+	my ($sx,$sy) = @{$this->{drag_start}};
+	my ($ex,$ey) = @{$this->{drag_end}};
+
+	swap(\$sx,\$ex) if $sx > $ex;
+	swap(\$sy,\$ey) if $sy > $ey;
+
+	($sx,$sy,$ex,$ey) = (
+		floorX($sx),
+		floorY($sy),
+		ceilX($ex),
+		ceilY($ey) );
+
+	display($dbg_draw,0,"getAltRectangle($sx,$sy,$ex,$ey)");
+
+	return Wx::Rect->new($sx,$sy,$ex-$sx+1,$ey-$sy+1);
+}
+
+
+sub getRectangles
+{
+	my ($this) = @_;
+	return ($this->getAltRectangle()) if $this->{drag_alt};
 
  	my $sz = $this->GetSize();
     my $width = $sz->GetWidth();
-    my $height = $sz->GetHeight();
+
+	my ($sx,$sy) = @{$this->{drag_start}};
+	my ($ex,$ey) = @{$this->{drag_end}};
+	my ($sl,$el) = (int($sy/$LINE_HEIGHT), int($ey/$LINE_HEIGHT));
+	my $num = abs($el-$sl) + 1;
+	my $yplus = 1;
+
+	display($dbg_draw,0,"getRectangles() start($sx,$sy) end($ex,$ey) lines($sl,$el)");
+
+	$sy = floorY($sy);
+	$ey = floorY($ey);
+		# in all cases we write from the top down
+
+	if ($sy<$ey || ($sy==$ey && $sx<=$ex))	# bottom half from floor(start)
+	{
+		$sx = floorX($sx);
+	}
+	else 									# top half to ceil(start)
+	{
+		$yplus = 0;
+		$sx = ceilX($sx);
+	}
+
+	my ($fr,$mr,$lr);
+
+	if ($yplus)				# bottom half
+	{
+		$ex = ceilX($ex);
+		my $ex1 = $num>1 ? $width : $ex;
+		display($dbg_draw+1,1,"bottom_half start($sx,$sy) end($ex,$ey) ex1($ex1)");
+
+		$fr = Wx::Rect->new($sx,  $sy,                $ex1-$sx+1, $LINE_HEIGHT);
+		$mr = Wx::Rect->new(0,    $sy + $LINE_HEIGHT, $width,	  ($num-2) * $LINE_HEIGHT) if $num>2;
+		$lr = Wx::Rect->new(0,    $ey, 				  $ex+1,	  $LINE_HEIGHT) if $num>1;
+	}
+	else 					# top half
+	{
+		my $sx1 = $num>1 ? 0 : floorX($ex);
+		$ex = floorX($ex);
+
+		display($dbg_draw+1,1,"top_half    start($sx,$sy) end($ex,$ey) sx1($sx1)");
+
+		$fr = Wx::Rect->new($sx1, $sy,                $sx-$sx1+1,   $LINE_HEIGHT);
+		$mr = Wx::Rect->new(0,    $ey + $LINE_HEIGHT, $width,	    ($num-2) * $LINE_HEIGHT) if $num>2;
+		$lr = Wx::Rect->new($ex,  $ey, 				  $width-$ex+1,	$LINE_HEIGHT) if $num > 1;
+	}
+
+	display_rect($dbg_draw+1,1,"got fr",$fr) if $fr;
+	display_rect($dbg_draw+1,1,"got mr",$mr) if $mr;
+	display_rect($dbg_draw+1,1,"got lr",$lr) if $lr;
+
+	return ($fr,$mr,$lr);
+}
+
+
+
+sub drawDrag
+{
+	my ($this,$dc,$urect) = @_;
+
+	display_rect($dbg_draw,0,"drawDrag() urect",$urect);
+
+	$dc->SetBackgroundMode(wxTRANSPARENT);
+	$dc->SetPen(wxLIGHT_GREY_PEN);
+	$dc->SetBrush(wxLIGHT_GREY_BRUSH);
+
+	my ($r1,$r2,$r3) = $this->getRectangles();
+
+	drawIntersectRect($dc,$urect,$r1) if $r1;
+	drawIntersectRect($dc,$urect,$r2) if $r2;
+	drawIntersectRect($dc,$urect,$r3) if $r3;
+}
+
+
+
+sub onPaint
+{
+	my ($this, $event) = @_;
 
 	# the dc uses virtual (unscrolled) coordinates
 
@@ -174,56 +362,508 @@ sub onPaint
 
 	my $region = $this->GetUpdateRegion();
 	my $box = $region->GetBox();
-	my ($xstart,$ystart) = $this->CalcUnscrolledPosition($box->x,$box->y);
-	my $update_rect = Wx::Rect->new($xstart,$ystart,$box->width,$box->height);
-	my $bottom = $update_rect->GetBottom();
-	display_rect($dbg_draw,0,"onPaint(bottom=$bottom) update_rect=",$update_rect);
+	my ($ux,$uy) = $this->CalcUnscrolledPosition($box->x,$box->y);
+	my ($uw,$uh) = ($box->width,$box->height);
+	my ($xe,$ye) = ($ux + $uw - 1, $uy + $uh - 1);
+	my $urect = Wx::Rect->new($ux,$uy,$uw,$uh);
+
+	display($dbg_draw,0,"onPaint rect($ux,$uy,$uw,$uh) xe($xe) ye($ye)");
 
 	$dc->SetPen(wxWHITE_PEN);
 	$dc->SetBrush(wxWHITE_BRUSH);
-	$dc->DrawRectangle($update_rect->x,$update_rect->y,$update_rect->width,$update_rect->height);
+	$dc->DrawRectangle($ux,$uy,$uw,$uh);
 	$dc->SetBackgroundMode(wxSOLID);
-		# background mode for text
+
+	my $drag_end = $this->{drag_end};
+	$this->drawDrag($dc,$urect) if $drag_end;
 
 	# we gather all the lines that intersect the unscrolled rectangle
 	# it is important to use int() to prevent artifacts
 
-	my $first_line = int($ystart / $LINE_HEIGHT);
-	my $last_line = int($bottom / $LINE_HEIGHT) + 1;
+	my $first_line = int($uy / $LINE_HEIGHT);
+	my $last_line  = int($ye / $LINE_HEIGHT);
 	my $content = $this->{content};
 	$last_line = @$content-1 if $last_line > @$content-1;
 
-	# drawing could be optimized to clip in X direction
+	display($dbg_draw,1,"first_line($first_line) last_line($last_line)");
+
+	# drawing optimized to clip in X direction
 
 	$dc->SetFont($font_fixed);
+
 	for (my $i=$first_line; $i<=$last_line; $i++)
 	{
-		display($dbg_draw+1,1,"line($i)");
-
-		my $xpos = 5;
+		my $ys = $i * $LINE_HEIGHT;
 		my $parts = $content->[$i]->{parts};
+		display($dbg_draw,1,"line($i) at ys($ys)");
+
+		my $xs = $LEFT_MARGIN;		# where to draw next full part
 		for (my $j=0; $j<@$parts; $j++)
 		{
 			my $part = $parts->[$j];
 			my $text = $part->{text};
-			display($dbg_draw,2,"part($text})");
-			$dc->SetFont($part->{bold} ? $font_fixed_bold : $font_fixed);
-			$dc->SetTextForeground($part->{color});
-			$dc->SetTextBackground($part->{hit} ? $color_medium_grey : $color_white);
+			my $len  = length($text);
+			my $tw   = $len * $CHAR_WIDTH;
+			my $te   = $xs + $tw - 1;
 
-			$dc->DrawText($text,$xpos,$i * $LINE_HEIGHT);
-			$xpos += length($text) * $CHAR_WIDTH;
+			display($dbg_draw,2,"part($j) len($len) tw($tw) te($te) at($xs,$ys) text($text)");
+
+			# if the text starts to the left end of the update rectangle,
+			# and ends after the beginning, it overlaps and will be drawn
+
+			if ($xs <= $xe && $te >= $ux)
+			{
+				# clip the part start pixel to the update rect
+
+				my $ps = $ux > $xs ? $ux : $xs;		# if starts to left of update rect
+				my $pe = $te > $xe ? $xe : $te;		# if ends to right of update rect
+
+				# get the character indexes for any chars in view
+				# and set cw to the number of chars
+
+				my $cs = int(($ps-$xs) / $CHAR_WIDTH);
+				my $ce = int(($pe-$xs) / $CHAR_WIDTH);
+				my $cw = $ce - $cs + 1;
+
+				my $txt = substr($text,$cs,$cw);
+
+				display($dbg_draw,3,"ps($ps) pe($pe) cs($cs) ce($ce) cw($cw) at($ps,$ys) txt($txt)");
+
+				$dc->SetFont($part->{bold} ? $font_fixed_bold : $font_fixed);
+				$dc->SetTextForeground($part->{color});
+				$dc->SetTextBackground($drag_end || $part->{hit} ? $color_medium_grey : $color_white);
+				$dc->DrawText($txt,$ps,$ys);
+			}
+
+			$xs += $tw;
 		}
 	}
-
-
 }	# onPaint()
+
+
+
+sub selectWordAt
+{
+	my ($this,$ux,$uy) = @_;
+
+	my $l = int($uy / $LINE_HEIGHT);
+	my $c = int(($ux-$LEFT_MARGIN) / $CHAR_WIDTH);
+	$c = 0 if $c < 0;
+
+	display($dbg_word,0,"selectWordAt($ux,$uy) l($l) c($c)");
+
+	my $line = $this->{content}->[$l];
+	if ($line)
+	{
+		my $at = 0;
+		my $parts = $line->{parts};
+		for my $part (@$parts)
+		{
+			my $text = $part->{text};
+			my $len  = length($text);
+			display($dbg_word,1,"part_at($at) len($len) '$text'");
+
+			if ($c >= $at && $c <= $at + $len - 1)
+			{
+				my $off = $c - $at;
+				my $char = substr($text,$off,1);
+				display($dbg_word,2,"off($off) char($char)");
+
+				if ($char !~ /^\s$/)
+				{
+					if ($off > 0)
+					{
+						while ($off > 0 && $char !~ /^\s/)
+						{
+							$off--;
+							$char = substr($text,$off,1);
+							display($dbg_word,3,"next($off) char($char)");
+						}
+
+						display($dbg_word,2,"ended at off($off) char($char)");
+
+						$off++ if $char =~ /^\s/;
+						my $sub = substr($text,$off);
+						my ($piece) = split(/\s/,$sub);
+
+						display($dbg_word,2,"sub($sub) char($piece)");
+
+						my $x = ($at + $off) * $CHAR_WIDTH + $LEFT_MARGIN;
+						my $y = $l * $LINE_HEIGHT;
+						my $w = length($piece) * $CHAR_WIDTH;
+						my $h = $LINE_HEIGHT;
+
+						display($dbg_word,2,"selecting($x,$y,$w,$h)");
+
+						$this->{drag_start} = [$x,$y];
+						$this->{drag_end}   = [$x + $w -1, $y + $LINE_HEIGHT];
+						$this->refreshScrolled(Wx::Rect->new($x,$y,$w,$h));
+						return;
+					}
+				}
+				else
+				{
+					display($dbg_word,2,"clicked on blank");
+				}
+			}	# $c is in part
+
+			$at += $len;
+
+		}	# for each part
+
+		display($dbg_word,1,"clicked outside of parts");
+	}
+	display($dbg_word,0,"no word found");
+}
+
+
+#------------------------------------------------
+# Optimized Refreshing
+#------------------------------------------------
+
+sub samePt
+{
+	my ($p1,$p2) = @_;
+	return (
+		$p1 && $p2 &&
+		$p1->[0] == $p2->[0] &&
+		$p1->[1] == $p2->[1]) ? 1 : 0;
+}
+
+
+sub sameRect
+{
+	my ($r1,$r2) = @_;
+	return (
+		$r1 && $r2 &&
+		$r1->x==$r2->x &&
+		$r1->y==$r2->y &&
+		$r1->width==$r2->width &&
+		$r1->height==$r2->height) ? 1 : 0;
+}
+
+
+sub refreshScrolled
+	# refresh an absolute rectangle in its scrolled position
+{
+	my ($this,$rect) = @_;
+	my ($sx,$sy) = $this->CalcScrolledPosition($rect->x,$rect->y);
+	$this->RefreshRect(Wx::Rect->new($sx,$sy,$rect->width,$rect->height));
+}
+
+
+sub refreshAltDiff
+	# refresh the diff between two alt (columnar) rectangles
+	#
+	#			xplus,yplus == 1							  xplus,yplus == 0
+	#
+    #       <--------- w1 ---------->                   <--------- w1 ---------->
+	#    `   x1,x2   ex2                                 x1
+	#       +-----------------------+         ^         +-----------------------+
+	# y1,y2 |           |           |         |      y1 |           |           |
+	#       |           |           |         |         |           |           |
+	#       |        h2 |    [1]    |         |         |    [3]    |    [2]    |
+	#       |           |           |         |         |           |           |
+	#  ey2 `|    w2     |           |         |         |           | x2        |
+	#       +-----------------------+         h1        +-----------------------+
+	#       |           |                     |`        |        y2 |           |
+	#       |           |           |         |         |           |           |
+	#       |    [2]    |    [3]    |         |         |    [1]    | h2        |
+	#       |           |           |         |         |           |           |
+	#       |           |           | ey1     |         |           |    w2     | ey1,ey2
+	#       +-----------------------+         v         +-----------------------+
+	#                            ex1                                      ex1,ex2
+{
+	my ($this,$contains,$contained) = @_;
+
+	my $xplus = $contains->x == $contained->x ? 1 : 0;
+	my $yplus = $contains->y == $contained->y ? 1 : 0;
+	my ($x1,$y1) = ($contains->x,		$contains->y);
+	my ($x2,$y2) = ($contained->x,		$contained->y);
+	my ($w1,$h1) = ($contains->width,	$contains->height);
+	my ($w2,$h2) = ($contained->width,	$contained->height);
+	my ($ex1,$ey1) = ($x1 + $w1 - 1,  $y1 + $h1 -1);
+	my ($ex2,$ey2) = ($x2 + $w2 - 1,  $y2 + $h2 -1);
+	display($dbg_refresh,0,"refreshAltDiff xplus($xplus) yplus($yplus) rect1($x1,$y1,$w1,$h1) rect2($x2,$y2,$w2,$h2)");
+
+	if ($w1 > $w2)
+	{
+		my $fx = $xplus ? $ex2 + 1  : $x1;
+		my $fy = $y2;
+		my $w  = $w1 - $w2;
+		my $h  = $h2;
+		my $rect = Wx::Rect->new($fx,$fy,$w,$h);
+		display_rect($dbg_refresh,1,"part1",$rect);
+		$this->refreshScrolled($rect);
+	}
+	if ($h1 > $h2)
+	{
+		my $fx = $xplus ? $x1   	: $x2;
+		my $fy = $yplus ? $ey2 + 1  : $y1;
+		my $w  = $w2;
+		my $h  = $h1 - $h2;
+		my $rect = Wx::Rect->new($fx,$fy,$w,$h);
+		display_rect($dbg_refresh,1,"part2",$rect);
+		$this->refreshScrolled($rect);
+	}
+	if ($w1 > $w2 && $h1 > $h2)
+	{
+		my $fx = $xplus ? $ex2 + 1  : $x1;
+		my $fy = $yplus ? $ey2 + 1  : $y1;
+		my $w  = $w1 - $w2;
+		my $h  = $h1 - $h2;
+		my $rect = Wx::Rect->new($fx,$fy,$w,$h);
+		display_rect($dbg_refresh,1,"part3",$rect);
+		$this->refreshScrolled($rect);
+	}
+}
+
+
+sub refreshAlt
+	# refresn the alt (columnar) reectangles
+{
+	my ($this,$or,$nr) = @_;
+	if ($nr->Contains($or))		# rectangle grew
+	{
+		display($dbg_refresh,0,"refreshAlt new_rect contains old_rect");
+		$this->refreshAltDiff($nr,$or);
+	}
+	elsif ($or->Contains($nr))	# rectangle shrank
+	{
+		display($dbg_refresh,0,"refreshAlt old_rect contains new_rect");
+		$this->refreshAltDiff($or,$nr);
+	}
+	else	# rectangle switched
+	{
+		my ($l,$t,$r,$b) = (
+			$or->x < $nr->x ? $or->x : $nr->x,
+			$or->y < $nr->y ? $or->y : $nr->y,
+			$or->GetRight > $nr->GetRight ? $or->GetRight : $nr->GetRight,
+			$or->GetBottom > $nr->GetBottom ? $or->GetBottom : $nr->GetBottom );
+		my $ref_rect = Wx::Rect->new($l,$t,$r-$l+1,$b-$t+1);
+		display_rect($dbg_refresh,0,"refreshAlt disjoint refresh_rect",$ref_rect);
+		$this->refreshScrolled($ref_rect);
+	}
+}
+
+
+
+sub refreshCur
+	# refresh the current line selection
+{
+	my ($this) = @_;
+	display($dbg_refresh+1,2,"refreshCur()");
+	my ($r1,$r2,$r3) = $this->getRectangles();
+	$this->refreshScrolled($r1) if $r1;
+	$this->refreshScrolled($r2) if $r2;
+	$this->refreshScrolled($r3) if $r3;
+}
+
+
+sub refreshDiff
+	# refresh the difference between old and new line selection
+	# we have to resolve everything down to character cells before
+	# doing any math or making any comparisons. The default direction
+	# within a single cell is forwards.
+{
+	my ($this,$old,$new) = @_;
+	my ($startx,$starty) = @{$this->{drag_start}};
+	my ($ox,$oy) = @$old;
+	my ($nx,$ny) = @$new;
+
+	# get the character cell and line numbers
+
+	my ($sl,$sc) = (int($starty/$LINE_HEIGHT), 	int(($startx-$LEFT_MARGIN)/$CHAR_WIDTH));
+	my ($ol,$oc) = (int($oy/$LINE_HEIGHT), 		int(($ox-$LEFT_MARGIN)/$CHAR_WIDTH));
+	my ($nl,$nc) = (int($ny/$LINE_HEIGHT), 		int(($nx-$LEFT_MARGIN)/$CHAR_WIDTH));
+	$sc=0 if $sc<0;
+	$oc=0 if $oc<0;
+	$nc=0 if $oc<0;
+
+	# short ending if the line and character did not change
+
+	if ($ol == $nl && $oc == $nc)
+	{
+		display($dbg_refresh+1,1,"refreshDiff opos($ol,$oc) npos($nl,$nc) short ending");
+		return;
+	}
+
+	my $oplus = $ol<$sl || $ol==$sl && $oc<$sc ? 0 : 1;
+	my $nplus = $nl<$sl || $nl==$sl && $nc<$sc ? 0 : 1;
+
+	if ($oplus != $nplus)	# disjoint
+	{
+		display($dbg_refresh,1,"refreshDiff disjoint start($startx,$starty) old($ox,$oy) new($nx,$ny) opos($ol,$oc) npos($nl,$nc) oplus($oplus)");
+		display($dbg_refresh,2,"opos($ol,$oc) npos($nl,$nc) oplus($oplus) nplus($nplus)");
+		$this->refreshCur();
+		$this->{drag_end} = $new;
+		$this->refreshCur();
+	}
+	else
+	{
+		my $sz = $this->GetSize();
+		my $width = $sz->width;
+
+		display($dbg_refresh,1,"refreshDiff start($startx,$starty) old($ox,$oy) new($nx,$ny) opos($ol,$oc) npos($nl,$nc) oplus($oplus)");
+
+		my ($fr,$mr,$lr);
+		my $num_old = abs($sl-$ol) + 1;
+		my $num_new = abs($nl-$ol) + 1;
+		my $mh = ($num_new-2) * $LINE_HEIGHT;
+
+		# in all cases we write from the top down
+
+		$oy = floorY($oy);
+		$ny = floorY($ny);
+
+		if ($oplus)				# bottom half
+		{
+			if ($nl>$ol || ($nl==$ol && $nc>$oc))	# adding to bottom half
+			{
+				$ox = floorX($ox);		# will redraw first character
+				$nx = ceilX($nx);
+				my $ex1 = $num_new>1 ? $width : $nx;
+
+				display($dbg_refresh,2,"bottom adding ox($ox) nx($nx) ex1($ex1)");
+
+				$fr = Wx::Rect->new($ox, $oy, $ex1-$ox+1, $LINE_HEIGHT);
+				$mr = Wx::Rect->new(0,   $oy + $LINE_HEIGHT, $width, $mh)
+					if $num_new > 2;
+				$lr = Wx::Rect->new(0,   $ny, $nx+1, 	  $LINE_HEIGHT)
+					if $num_new > 1;
+			}
+			else	# subtracting from bottom half
+			{
+				$ox = ceilX($ox);
+				$nx = floorX($nx>$CHAR_WIDTH ? $nx-$CHAR_WIDTH : $nx);
+					# don't erase last character
+				my $sx1 = $num_new>1 ? 0 : $nx;
+
+				display($dbg_refresh,2,"bottom subtracting");
+
+				$fr = Wx::Rect->new($sx1, $oy, 	$ox-$sx1+1,   $LINE_HEIGHT);
+				$mr = Wx::Rect->new(0,    $ny + $LINE_HEIGHT, $width, $mh)
+					if $num_new > 2;
+				$lr = Wx::Rect->new($nx,  $ny,  $width-$nx+1, $LINE_HEIGHT)
+					if $num_new > 1;
+			}
+		}
+		else	# top half
+		{
+			if ($nl<$ol || ($nl==$ol && $nc<$oc))	# adding to top half
+			{
+				$ox = ceilX($ox);	# will redraw first character
+
+				$nx = floorX($nx);
+				my $sx1 = $num_new>1 ? 0 : $nx;
+
+				display($dbg_refresh,2,"top adding");
+
+				$fr = Wx::Rect->new($sx1, $oy, 	$ox-$sx1+1,   $LINE_HEIGHT);
+				$mr = Wx::Rect->new(0,    $ny + $LINE_HEIGHT, $width, $mh)
+					if $num_new > 2;
+				$lr = Wx::Rect->new($nx,  $ny,  $width-$nx+1, $LINE_HEIGHT)
+					if $num_new > 1;
+			}
+			else	# subtracting from top half
+			{
+				$ox = floorX($ox);
+				$nx = ceilX($nx>$CHAR_WIDTH ? $nx-$CHAR_WIDTH : $nx);
+					# don't erase last character
+
+				my $ex1 = $num_new>1 ? $width : $nx;;
+
+				display($dbg_refresh,2,"top subtracting");
+
+				$fr = Wx::Rect->new($ox, $oy, $ex1-$ox+1, 	$LINE_HEIGHT);
+				$mr = Wx::Rect->new(0,   $oy + $LINE_HEIGHT, $width, $mh)
+					if $num_new > 2;
+				$lr = Wx::Rect->new(0, $ny, $nx+1,	$LINE_HEIGHT)
+					if $num_new > 1;
+			}
+		}
+
+		display_rect($dbg_refresh+1,3,"fr",$fr) if $fr;
+		display_rect($dbg_refresh+1,3,"mr",$mr) if $mr;
+		display_rect($dbg_refresh+1,3,"lr",$lr) if $lr;
+
+		$this->refreshScrolled($fr) if $fr;
+		$this->refreshScrolled($mr) if $mr;
+		$this->refreshScrolled($lr) if $lr;
+
+		$this->{drag_end} = $new;
+	}
+}
+
+
+
+
+sub refreshDrag
+	# refresh using current {drag_end}, if any, and new $end,
+	# either of which might be ''
+{
+	my ($this,$new) = @_;
+	my $old = $this->{drag_started} ? $this->{drag_end} : '';
+	my $start = $this->{drag_start};
+	$this->{drag_started} = 1;
+
+	my $show_old = $old ? $old->[0].",".$old->[1] : '';
+	my $show_new = $new ? $new->[0].",".$new->[1] : '';
+	my $show_start = $start->[0].",".$start->[1];
+	display($dbg_refresh+1,0,"refreshDrag start($show_start) old($show_old) new($show_new)");
+
+	if ($this->{drag_alt})
+	{
+		my $or = $old ? $this->getAltRectangle() : '';
+		$this->{drag_end} = $new;
+		my $nr = $new ? $this->getAltRectangle() : '';
+
+		if (!sameRect($or,$nr))
+		{
+			display($dbg_refresh,1,"refreshDrag alt");
+
+			if ($or && $nr)
+			{
+				$this->refreshAlt($or,$nr);
+			}
+			elsif ($or)
+			{
+				$this->refreshScrolled($or);
+			}
+			elsif ($nr)
+			{
+				$this->refreshScrolled($nr);
+			}
+		}
+	}
+	else
+	{
+		display($dbg_refresh+1,1,"refreshDrag lines");
+
+		if ($old && !$new)
+		{
+			display($dbg_refresh,2,"refreshCur start($show_start) old($show_old) new($show_new)");
+			$this->refreshCur();
+			$this->{drag_end} = $new;
+		}
+		elsif ($new && !$old)
+		{
+			display($dbg_refresh,2,"refreshCur start($show_start) old($show_old) new($show_new)");
+			$this->{drag_end} = $new;
+			$this->refreshCur();
+		}
+		else
+		{
+			$this->refreshDiff($old,$new);
+		}
+	}
+}
+
 
 
 #------------------------------------------------
 # Mouse Event Handling
 #------------------------------------------------
-
 
 sub onMouse
 {
@@ -231,9 +871,15 @@ sub onMouse
 	my $cp = $event->GetPosition();
 	my ($sx,$sy) = ($cp->x,$cp->y);
 	my ($ux,$uy) = $this->CalcUnscrolledPosition($sx,$sy);
-	my $lclick = $event->LeftDown() || $event->LeftDClick();
+	my $dclick = $event->LeftDClick();
+	my $lclick = $dclick || $event->LeftDown();
 	my $rclick = $event->RightDown() || $event->RightDClick();
-	display($dbg_mouse,0,"onMouse($sx,$sy) unscrolled($ux,$uy) left($lclick) right($rclick)");
+	my $dragging = $event->Dragging();
+
+	$this->{scroll_inc} = 0;
+
+	my $dbg = $lclick || $rclick || $dragging ? 0 : 1;
+	display($dbg_mouse + $dbg,0,"onMouse($sx,$sy) unscrolled($ux,$uy) left($lclick) right($rclick) dragging($dragging)");
 
 	my $hit = '';
 	for my $h (@{$this->{hits}})
@@ -245,29 +891,61 @@ sub onMouse
 		}
 	}
 
-	$this->mouseOver($hit);
-	$this->mouseClick($hit->{part},$lclick,$rclick) if $hit && $hit->{part} && ($lclick || $rclick);
-}
+	if ($lclick)
+	{
+		$this->refreshDrag() if $this->{drag_end};
+		init_drag();
+	}
 
+	if ($dclick && !$hit)
+	{
+		# set the drag rectangle to the word under the mouse if any
+		$this->selectWordAt($ux,$uy);
+	}
+	elsif ($lclick && !$hit)
+	{
+		my $VK_ALT = 0x12;
+		$this->{drag_alt} = Win32::GUI::GetAsyncKeyState($VK_ALT)?1:0;
+		$this->{drag_start} = [$ux,$uy];
+		# $this->refreshDrag([$ux,$uy]);
+	}
+
+	elsif ($this->{drag_start} && $dragging)
+	{
+		$this->refreshDrag([$ux,$uy]);
+		$this->handleScroll($sx,$sy); # if $this->{drag_end};
+	}
+	else
+	{
+		$this->mouseOver($hit);
+	}
+
+	if ($hit && ($lclick || $rclick))
+	{
+		$this->mouseClick($hit->{part},$lclick,$rclick);
+	}
+}
 
 
 sub mouseOver
 {
 	my ($this,$hit) = @_;
-	my $cur_hit = $this->{hit};
-	return if $hit eq $cur_hit;
-	display($dbg_mouse,0,"mouseOver($hit)");
+	my $old_hit = $this->{hit};
+	return if $hit eq $old_hit;
+	display($dbg_mouse,0,"mouseOver(".($old_hit?1:0).",".($hit?1:0).")");
 
-	if ($cur_hit)
+	if ($old_hit)
 	{
-		$this->Refresh($cur_hit->{rect});
-		$cur_hit->{part}->{hit} = 0;
+		display_rect($dbg_mouse,1,"clearing old_hit",$old_hit->{rect});
+		$this->refreshScrolled($old_hit->{rect});
+		$old_hit->{part}->{hit} = 0;
 	}
 
 	my $status = '';
 	if ($hit)
 	{
-		$this->Refresh($hit->{rect});
+		display_rect($dbg_mouse,1,"refreshing hit",$hit->{rect});
+		$this->refreshScrolled($hit->{rect});
 		$hit->{part}->{hit} = 1;
 		my $context = $hit->{part}->{context};
     	if ($context->{path})
@@ -299,6 +977,7 @@ sub mouseOver
 	$this->{hit} = $hit;
 	$this->{frame}->SetStatusText($status);
 	$this->Update();
+
 }
 
 
@@ -357,5 +1036,57 @@ sub mouseClick
 
 }
 
+
+#--------------------------------------------------------
+# auto scrolling
+#--------------------------------------------------------
+
+sub handleScroll
+{
+	my ($this,$sx,$sy) = @_;
+ 	my $sz = $this->GetSize();
+	my $height = $sz->height;
+
+	my $inc =
+		$sy > $height - $LINE_HEIGHT * 2 ? 1 :
+		$sy < $LINE_HEIGHT * 2 ? -1 : 0;
+	return if !$inc;
+
+	display($dbg_scroll,0,"scroll inc($inc)");
+
+	$this->{scroll_inc} = $inc;
+
+	my ($cur_x, $cur_y) = $this->GetViewStart();
+	my $new_y = $cur_y + $inc;
+	$new_y = 0 if $new_y < 0;
+	$this->Scroll($cur_x,$new_y);
+	$this->Update();
+}
+
+
+sub onIdle
+{
+	my ($this,$event) = @_;
+	my $inc = $this->{scroll_inc};
+	if ($inc)
+	{
+
+		my ($ex,$ey) = @{$this->{drag_end}};
+		$ey += $inc * $LINE_HEIGHT;
+		return if $ey < 0 || $ey > $this->{height};
+
+		display($dbg_scroll,0,"onIdle autoX($inc)");
+
+		my ($cur_x, $cur_y) = $this->GetViewStart();
+		my $new_y = $cur_y + $inc;
+		$new_y = 0 if $new_y < 0;
+		$this->Scroll($cur_x,$new_y);
+
+		$this->refreshDrag([$ex,$ey]);
+		$this->Update();
+		sleep(0.02);
+		$event->RequestMore();
+	}
+}
 
 1;
