@@ -88,6 +88,7 @@ sub new
 	$this->{drag_start} = '';
 	$this->{drag_end} = '';
 	$this->{drag_started} = 0;
+	$this->{in_drag} = 0;
 
 	$this->{scroll_inc} = 0;
 
@@ -119,6 +120,7 @@ sub init_drag
 	$this->{drag_start} = '';
 	$this->{drag_end} = '';
 	$this->{drag_started} = 0;
+	$this->{in_drag} = 0;
 	$this->{scroll_inc} = 0;
 }
 
@@ -169,7 +171,7 @@ sub addPart
 	{
 		my $content = $this->{content};
 		my $rect = Wx::Rect->new(
-			$line->{width},
+			$line->{width} + $LEFT_MARGIN,
 			(@$content-1) * $LINE_HEIGHT,
 			$char_width + $CHAR_WIDTH,
 				# doesn't make sense, but refresh rect was wrong
@@ -336,7 +338,7 @@ sub drawDrag
 
 	display_rect($dbg_draw,0,"drawDrag() urect",$urect);
 
-	$dc->SetBackgroundMode(wxTRANSPARENT);
+	# $dc->SetBackgroundMode(wxTRANSPARENT) if $this->{in_drag};
 	$dc->SetPen(wxLIGHT_GREY_PEN);
 	$dc->SetBrush(wxLIGHT_GREY_BRUSH);
 
@@ -369,10 +371,11 @@ sub onPaint
 
 	display($dbg_draw,0,"onPaint rect($ux,$uy,$uw,$uh) xe($xe) ye($ye)");
 
-	$dc->SetPen(wxWHITE_PEN);
-	$dc->SetBrush(wxWHITE_BRUSH);
-	$dc->DrawRectangle($ux,$uy,$uw,$uh);
-	$dc->SetBackgroundMode(wxSOLID);
+	# $dc->SetPen(wxWHITE_PEN);
+	# $dc->SetBrush(wxWHITE_BRUSH);
+	# $dc->DrawRectangle($ux,$uy,$uw,$uh);
+	# $dc->SetBackgroundMode(wxSOLID);
+	$dc->SetBackgroundMode(wxTRANSPARENT);
 
 	my $drag_end = $this->{drag_end};
 	$this->drawDrag($dc,$urect) if $drag_end;
@@ -429,9 +432,16 @@ sub onPaint
 
 				display($dbg_draw,3,"ps($ps) pe($pe) cs($cs) ce($ce) cw($cw) at($ps,$ys) txt($txt)");
 
+				if ($part->{hit})
+				{
+					$dc->SetPen(wxGREEN_PEN);
+					$dc->SetBrush(wxGREEN_BRUSH);
+					drawIntersectRect($dc,$urect,$part->{hit}->{rect})
+				}
+
 				$dc->SetFont($part->{bold} ? $font_fixed_bold : $font_fixed);
 				$dc->SetTextForeground($part->{color});
-				$dc->SetTextBackground($drag_end || $part->{hit} ? $color_medium_grey : $color_white);
+				# $dc->SetTextBackground($part->{hit} ? $color_item_selected : $color_white);
 				$dc->DrawText($txt,$ps,$ys);
 			}
 
@@ -805,6 +815,7 @@ sub refreshDrag
 	my ($this,$new) = @_;
 	my $old = $this->{drag_started} ? $this->{drag_end} : '';
 	my $start = $this->{drag_start};
+	$this->{in_drag} = 1;
 	$this->{drag_started} = 1;
 
 	my $show_old = $old ? $old->[0].",".$old->[1] : '';
@@ -876,10 +887,15 @@ sub onMouse
 	my $rclick = $event->RightDown() || $event->RightDClick();
 	my $dragging = $event->Dragging();
 
+	my $VK_ALT = 0x12;
+	my $VK_SHIFT = 0x10;
+	my $alt = Win32::GUI::GetAsyncKeyState($VK_ALT)?1:0;
+	my $shift = Win32::GUI::GetAsyncKeyState($VK_SHIFT)?1:0;
+
 	$this->{scroll_inc} = 0;
 
 	my $dbg = $lclick || $rclick || $dragging ? 0 : 1;
-	display($dbg_mouse + $dbg,0,"onMouse($sx,$sy) unscrolled($ux,$uy) left($lclick) right($rclick) dragging($dragging)");
+	display($dbg_mouse + $dbg,0,"onMouse($sx,$sy) unscrolled($ux,$uy) left($lclick) right($rclick) dragging($dragging) alt($alt) shift($shift)");
 
 	my $hit = '';
 	for my $h (@{$this->{hits}})
@@ -891,10 +907,15 @@ sub onMouse
 		}
 	}
 
-	if ($lclick)
+	if ($lclick && !$shift)
 	{
 		$this->refreshDrag() if $this->{drag_end};
 		init_drag();
+	}
+
+	if ($event->LeftUp())
+	{
+		$this->{in_drag} = 0;
 	}
 
 	if ($dclick && !$hit)
@@ -904,10 +925,15 @@ sub onMouse
 	}
 	elsif ($lclick && !$hit)
 	{
-		my $VK_ALT = 0x12;
-		$this->{drag_alt} = Win32::GUI::GetAsyncKeyState($VK_ALT)?1:0;
-		$this->{drag_start} = [$ux,$uy];
-		# $this->refreshDrag([$ux,$uy]);
+		if ($this->{drag_start} && $shift)
+		{
+			$this->refreshDrag([$ux,$uy]);
+		}
+		else
+		{
+			$this->{drag_alt} = $alt;
+			$this->{drag_start} = [$ux,$uy];
+		}
 	}
 
 	elsif ($this->{drag_start} && $dragging)
@@ -946,7 +972,7 @@ sub mouseOver
 	{
 		display_rect($dbg_mouse,1,"refreshing hit",$hit->{rect});
 		$this->refreshScrolled($hit->{rect});
-		$hit->{part}->{hit} = 1;
+		$hit->{part}->{hit} = $hit;
 		my $context = $hit->{part}->{context};
     	if ($context->{path})
 		{
@@ -1068,9 +1094,8 @@ sub onIdle
 {
 	my ($this,$event) = @_;
 	my $inc = $this->{scroll_inc};
-	if ($inc)
+	if ($inc && $this->{in_drag})
 	{
-
 		my ($ex,$ey) = @{$this->{drag_end}};
 		$ey += $inc * $LINE_HEIGHT;
 		return if $ey < 0 || $ey > $this->{height};
