@@ -195,6 +195,30 @@ sub monitor_callback
 }
 
 
+#----------------------------
+# global Copy functionality
+#----------------------------
+# These methods are currently unused.
+# These methods are only needed if we put Copy in
+# the application menu. Otherwise the ctrl itself
+# implements a EVT_CHAR(3) handler for CTRL-C, and
+# it's contextMenu() calls back to it directly
+#
+#	sub canCopy
+#	{
+#		my ($this) = @_;
+#		my $pane = $this->{current_pane};
+#		display($dbg_copy,0,"canCopy "._def($pane));
+#		return $pane->canCopy() if $pane && $pane->can('canCopy');
+#		return 0;
+#	}
+#
+#	sub doCopy
+#	{
+#		my ($this) = @_;
+#		$this->{current_pane}->doCopy() if $this->canCopy();
+#	}
+
 
 
 #----------------------------------------------------

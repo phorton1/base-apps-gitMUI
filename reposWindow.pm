@@ -15,10 +15,11 @@ use Wx qw(:everything);
 use Wx::Event qw(
 	EVT_SPLITTER_SASH_POS_CHANGED
 	EVT_SIZE );
-use apps::gitUI::reposWindowList;
-use apps::gitUI::reposWindowRight;
 use Pub::Utils;
 use Pub::WX::Window;
+use apps::gitUI::utils;
+use apps::gitUI::reposWindowList;
+use apps::gitUI::reposWindowRight;
 use base qw(Wx::Window Pub::WX::Window);
 
 
@@ -179,6 +180,30 @@ sub getDataForIniFile
 
 	return $data;
 }
+
+
+#----------------------------
+# global Copy functionality
+#----------------------------
+# These methods are currently unused.
+# These methods are only needed if we put Copy in
+# the application menu. Otherwise the ctrl itself
+# implements a EVT_CHAR(3) handler for CTRL-C, and
+# it's contextMenu() calls back to it directly
+#
+#	sub canCopy
+#	{
+#		my ($this) = @_;
+#		display($dbg_copy,0,"canCopy()");
+#		return $this->{right}->{text_ctrl}->canCopy();
+#	}
+#
+#	sub doCopy
+#	{
+#		my ($this) = @_;
+#		display($dbg_copy,0,"doCopy()");
+#		return $this->{right}->{text_ctrl}->doCopy();
+#	}
 
 
 
