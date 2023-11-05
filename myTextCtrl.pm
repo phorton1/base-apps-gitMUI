@@ -23,11 +23,13 @@ use warnings;
 use threads;
 use threads::shared;
 use Win32::GUI;
+use Win32::Clipboard;
 use Wx qw(:everything);
 use Wx::Event qw(
 	EVT_PAINT
 	EVT_IDLE
-	EVT_MOUSE_EVENTS );
+	EVT_MOUSE_EVENTS
+	EVT_CHAR );
 use Time::HiRes qw(sleep);
 use Pub::Utils;
 use apps::gitUI::utils;
@@ -46,6 +48,7 @@ my $dbg_refresh = 1;
 	# -1 to show drag rectangles
 my $dbg_word = 1;
 my $dbg_scroll = 1;
+my $dbg_copy = 1;
 
 
 my $LINE_HEIGHT = 16;
@@ -101,6 +104,8 @@ sub new
 	EVT_IDLE($this, \&onIdle);
 	EVT_PAINT($this, \&onPaint);
 	EVT_MOUSE_EVENTS($this, \&onMouse);
+	EVT_CHAR($this, \&onChar);
+
 	return $this;
 }
 
@@ -892,6 +897,14 @@ sub onMouse
 	my $alt = Win32::GUI::GetAsyncKeyState($VK_ALT)?1:0;
 	my $shift = Win32::GUI::GetAsyncKeyState($VK_SHIFT)?1:0;
 
+	$this->SetFocus() if $lclick || $rclick;
+		# The text ctrl receives focus on any clicks within it
+		# so-as to enable the EVT_CHAR.  Note that if the user
+		# switches to another pane (or ctrl that takes focus),
+		# in order to NOT lose the selection, one has to right
+		# click in the window.
+
+
 	$this->{scroll_inc} = 0;
 
 	my $dbg = $lclick || $rclick || $dragging ? 0 : 1;
@@ -913,7 +926,13 @@ sub onMouse
 		init_drag();
 	}
 
-	if ($event->LeftUp())
+
+	if ($rclick)
+	{
+		my ($repo,$path) = getHitContext($hit);
+		$this->popupContextMenu($repo,$path);
+	}
+	elsif ($event->LeftUp())
 	{
 		$this->{in_drag} = 0;
 	}
@@ -946,10 +965,13 @@ sub onMouse
 		$this->mouseOver($hit);
 	}
 
-	if ($hit && ($lclick || $rclick))
+	if ($hit && $lclick)
 	{
-		$this->mouseClick($hit->{part},$lclick,$rclick);
+		$this->mouseClick($hit);
 	}
+
+	$event->Skip();
+		# needed or else wont get key events
 }
 
 
@@ -1009,25 +1031,12 @@ sub mouseOver
 
 sub mouseClick
 {
-	my ($this,$part,$lclick,$rclick)  = @_;
-	display($dbg_mouse,0,"mouseClick($part->{text}) lclick($lclick) rclick($rclick)");
+	my ($this,$hit)  = @_;
 
-	my $repo = '';
-	my $path = '';
+	my $show_part = $hit->{part};
+	display($dbg_mouse,0,"mouseClick($show_part->{text})");
 
-	my $context = $part->{context};
-	$repo = $context->{repo} if $context->{repo};
-	$repo = getRepoHash()->{$context->{repo_path}} if $context->{repo_path};
-	$repo ||= '';
-
-	$path = $context->{path} if $context->{path};
-	$path = $context->{filename} if $context->{filename};
-	$path = "$repo->{path}$context->{file}" if $repo && $context->{file};
-
-	if ($rclick)
-	{
-		$this->popupContextMenu($repo,$path);
-	}
+	my ($repo,$path) = getHitContext($hit);
 
 	# decide the best thing to do on a left click
 	# path = md,gif,png,jpg,jpeg,pdf - shell
@@ -1035,7 +1044,7 @@ sub mouseClick
 	# repo - show repo details if not in that window, open gitUI otherwise
 	# otherwise, show in explorer
 
-	elsif ($path =~ /\.(md|gif|png|jpg|jpeg|pdf)$/)
+	if ($path =~ /\.(md|gif|png|jpg|jpeg|pdf)$/)
 	{
 		chdir $path;
 		system(1,"\"$path\"");
@@ -1060,6 +1069,27 @@ sub mouseClick
 		execExplorer($path);
 	}
 
+}
+
+
+sub getHitContext
+{
+	my ($hit) = @_;
+	my $repo = '';
+	my $path = '';
+
+	if ($hit)
+	{
+		my $context = $hit->{part}->{context};
+		$repo = $context->{repo} if $context->{repo};
+		$repo = getRepoHash()->{$context->{repo_path}} if $context->{repo_path};
+		$repo ||= '';
+
+		$path = $context->{path} if $context->{path};
+		$path = $context->{filename} if $context->{filename};
+		$path = "$repo->{path}$context->{file}" if $repo && $context->{file};
+	}
+	return ($repo,$path);
 }
 
 
@@ -1113,5 +1143,158 @@ sub onIdle
 		$event->RequestMore();
 	}
 }
+
+
+#----------------------------------------------
+# copy to clipboard
+#-----------------------------------------------
+# note that $dbg_copy is in utils.pm
+
+sub onChar
+{
+	my ($this,$event) = @_;
+	my $key_code = $event->GetKeyCode();
+	display($dbg_copy,0,"onChar($key_code)");
+	$this->doCopy() if $key_code == 3 && $this->canCopy();
+	$event->Skip();
+}
+
+sub canCopy
+{
+	my ($this) = @_;
+	my $ret = $this->{drag_end} ? 1 : 0;
+	display($dbg_copy,0,"canCopy() returning $ret");
+	return $ret
+}
+
+
+sub doCopy
+{
+	my ($this) = @_;
+	display($dbg_copy,0,"doCopy()");
+	my $clip = Win32::Clipboard();
+	$clip->Set($this->getSelectedText());
+}
+
+
+sub getSelectedText
+{
+	my ($this) = @_;
+	my $alt = $this->{drag_alt};
+	my ($sx,$sy) = @{$this->{drag_start}};
+	my ($ex,$ey) = @{$this->{drag_end}};
+	my ($sl,$sc,$el,$ec) = (
+		int($sy / $LINE_HEIGHT),
+		int(($sx - $LEFT_MARGIN) / $CHAR_WIDTH),
+		int($ey / $LINE_HEIGHT),
+		int(($ex - $LEFT_MARGIN) / $CHAR_WIDTH));
+	$sc=0 if $sc<0;
+	$ec=0 if $ec<0;
+	my $num_lines = abs($sl-$el+1);
+	my $fwd = $el>$sl || ($el==$sl && $ec>=$sc)?1:0;
+
+	display($dbg_copy,0,"get($fwd,$num_lines) start($sx,$sy) end($ex,$ey) begin($sl,$sc) end($el,$ec)");
+
+	swap(\$sl,\$el) if $alt && $sl > $el;
+	swap(\$sc,\$ec) if $alt && $sc > $ec;
+
+	my $retval = '';
+	my $content = $this->{content};
+
+	my ($l1,$l2) = ($sl,$el);
+	swap(\$l1,\$l2) if $l1>$l2;
+
+	display($dbg_copy,1,"loop $l1 .. $l2");
+	for my $line_num ($l1..$l2)
+	{
+		my $line = $content->[$line_num];
+		my $parts = $line->{parts};
+		my $cn = 0;
+			# character num within line
+			# 'start of the text'
+
+		my $MAX_LINE = 100000000;
+		my ($left_x, $right_x) = ($sc,$ec);
+
+		# for line selection mode, we need to know the orientation
+		# of the start & end, and whether we are on the first, middle
+		# or last lines ...
+
+		if (!$alt)
+		{
+			if ($line_num == $sl)						# first line
+			{
+				$left_x = $fwd ?
+					$sc :
+					$sl==$el ? $ec : 0 ;
+				$right_x = $fwd ?
+					$sl==$el ? $ec : $MAX_LINE :
+					$sc;
+				display($dbg_copy,0,"first line left($left_x) right($right_x)");
+			}
+			elsif ($num_lines > 2 && $line_num != $sl && $line_num != $el)
+			{
+				$left_x = 0;
+				$right_x = $MAX_LINE;
+			}
+			elsif ($num_lines > 1 && $line_num == $el)	# last line
+			{
+				$left_x = $fwd ?
+					0 : $ec;
+				$right_x = $fwd ?
+					$ec : $MAX_LINE;
+				display($dbg_copy,0,"last line left($left_x) right($right_x)");
+			}
+		}
+
+		display($dbg_copy,1,"line_num($line_num) left_x($left_x) right_x($right_x)");;
+
+		for my $part (@$parts)
+		{
+			my $text = $part->{text};
+			my $len = length($text);
+			my $text_end = $cn+$len-1;
+
+			# if the part starts before right_x and ends after left_x ...
+
+			if ($cn <= $right_x && $text_end >= $left_x)
+			{
+				# if the string starts before the rectangle, then the copy position
+				# is the offset of the rectangle within the string, otherwise we
+				# copy the string starting from zero.
+
+				my $cs = $cn < $left_x ? $left_x - $cn : 0;
+
+				# the copy end is the min of the right and the end of the text
+				# and the copy length is the usual ...
+
+				my $ce = $text_end > $right_x ? $right_x : $text_end;
+				my $cl = $ce - $cs + 1;
+
+				display($dbg_copy,2,"cn($cn) len($len) end($text_end) cs($cs) ce($ce) cl($cl) substr($cs,$cl,"._lim($text,40).")");
+
+				my $txt = substr($text,$cs,$cl);
+				display($dbg_copy,3,"($txt)");
+				$retval .= $txt;
+
+			}	# copy from this part
+
+			$cn += $len;
+
+		}	# for each part
+
+		# I could pad the alt rectangle as needed ... but for now
+		# contrarily, I'm removing any trialing whitepace
+
+		$retval =~ s/\s+$//;
+		$retval .= "\n";
+			# for now all lines are \n terminated
+
+	}	# for each line
+
+	return $retval;
+}
+
+
 
 1;

@@ -17,19 +17,21 @@ use apps::gitUI::utils;
 use apps::gitUI::Resources;
 
 
-my $dbg_menu = 1;		# context menu and commands
+my $dbg_menu = 0;		# context menu and commands
 
 
-my ($ID_OPEN_DETAILS,		# repo
+my ($ID_COPY,				# any
+	$ID_OPEN_DETAILS,		# repo
 	$ID_OPEN_GITUI,			# repo
 	$ID_BRANCH_HISTORY,		# repo
 	$ID_ALL_HISTORY,		# repo
 	$ID_OPEN_EXPLORER,		# repo, path
 	$ID_OPEN_IN_KOMODO,		# path
 	$ID_OPEN_IN_SHELL,		# path
-	$ID_OPEN_IN_NOTEPAD,  ) = (19000..19999);
+	$ID_OPEN_IN_NOTEPAD  ) = (19000..19999);
 
 my $menu_desc = {
+	$ID_COPY            => ['Copy',				'Copy selected region to clipboard' ],
 	$ID_OPEN_DETAILS	=> ['Details',			'Open the repository in the Repos Window' ],
 	$ID_OPEN_GITUI		=> ['GitGUI',			'Open the repository in original GitGUI' ],
 	$ID_BRANCH_HISTORY	=> ['Branch History',	'Show Branch History' ],
@@ -51,7 +53,7 @@ BEGIN {
 sub addContextMenu
 {
 	my ($this) = @_;
-	EVT_MENU_RANGE($this, $ID_OPEN_DETAILS, $ID_OPEN_IN_NOTEPAD, \&onContextMenu);
+	EVT_MENU_RANGE($this, $ID_COPY, $ID_OPEN_IN_NOTEPAD, \&onContextMenu);
 }
 
 
@@ -70,14 +72,19 @@ sub popupContextMenu
 		$repo->{id} eq $repo_context->{id};
 
 	my $menu = Wx::Menu->new();
-	foreach my $id ($ID_OPEN_DETAILS..$ID_OPEN_IN_NOTEPAD)
+	foreach my $id ($ID_COPY..$ID_OPEN_IN_NOTEPAD)
 	{
+		next if $id == $ID_COPY && (!$this->can('canCopy') || !$this->canCopy());
 		next if $id == $ID_OPEN_DETAILS && $is_this_repo;
-		next if $id <= $ID_ALL_HISTORY && !$repo;
+		next if $id > $ID_COPY && $id <= $ID_ALL_HISTORY && !$repo;
 		next if $id >= $ID_OPEN_IN_KOMODO && !$path;
+		next if $id == $ID_OPEN_EXPLORER && !$repo && !$path;
+
 		my $desc = $menu_desc->{$id};
 		my ($text,$hint) = @$desc;
 		$menu->Append($id,$text,$hint,wxITEM_NORMAL);
+		$menu->AppendSeparator()
+			if $id == $ID_COPY && ($repo || $path);
 		$menu->AppendSeparator()
 			if $id == $ID_ALL_HISTORY && $repo && $path;
 	}
@@ -96,6 +103,10 @@ sub onContextMenu
 
 	display($dbg_menu,0,"onContextMenu($command_id,$id,$path)");
 
+	if ($command_id == $ID_COPY)
+	{
+		$this->doCopy() if $this->can('doCopy');
+	}
 	if ($command_id == $ID_OPEN_DETAILS)
 	{
 		getAppFrame->createPane($ID_REPOS_WINDOW,undef,{repo_id=>$repo->{id}});
