@@ -242,7 +242,7 @@ $ini_file = "$data_dir/gitUI.ini";
 
 
 $USE_SHARED_LOCK_SEM = 1;
-createSTDOUTSemaphore($HOW_SEMAPHORE_LOCAL);
+# createSTDOUTSemaphore('gitUISTDOUT');
 
 
 my $dbg_app = 0;

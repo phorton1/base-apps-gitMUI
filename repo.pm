@@ -144,7 +144,7 @@ sub repoNote
 	my ($this,$dbg_level,$indent,$msg,$call_level,$color) = @_;
 	$call_level ||= 0;
 	$call_level++;
-	$color |= $display_color_white;
+	$color |= $win_color_white;
 	display($dbg_level,$indent,"repo($this->{path}): ".$msg,$call_level,$color)
 		if !$repo_quiet;
 	push @{$this->{notes}},$msg;
