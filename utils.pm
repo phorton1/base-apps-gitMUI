@@ -44,6 +44,8 @@ $temp_dir = "/base_data/temp/gitUI";
 $data_dir = "/base_data/data/gitUI";
 	# we set these here, even though they aren't used
 	# until gitUI::reposGithub.pm, cuz it's easy to find.
+my_mkdir $temp_dir if !-d $temp_dir;
+my_mkdir $data_dir if !-d $data_dir;
 
 
 my $dbg_ids = 1;
