@@ -20,7 +20,7 @@ use Pub::WX::Window;
 use apps::gitUI::utils;
 use apps::gitUI::reposWindowList;
 use apps::gitUI::reposWindowRight;
-use base qw(Wx::Window Pub::WX::Window);
+use base qw(Pub::WX::Window);
 
 
 my $dbg_life = 0;
@@ -91,6 +91,7 @@ sub new
 
 	return $this;
 }
+
 
 
 sub setPaneData

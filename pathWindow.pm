@@ -19,7 +19,7 @@ use apps::gitUI::utils;
 use apps::gitUI::repoMenu;
 use apps::gitUI::Resources;
 use apps::gitUI::myHyperlink;
-use base qw(Wx::Window Pub::WX::Window apps::gitUI::repoMenu);
+use base qw(Pub::WX::Window apps::gitUI::repoMenu);
 
 my $dbg_win = 0;
 my $dbg_pop = 1;

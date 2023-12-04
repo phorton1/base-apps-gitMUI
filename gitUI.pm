@@ -41,6 +41,18 @@ my $dbg_mon = 1;
 my $monitor;
 my $MONITOR_EVENT:shared = Wx::NewEventType;
 
+# use Win32::OLE;
+# Win32::OLE::prhSetThreadNum(1);
+	# I found this old fix in my own build, under /src/wx/Win32_OLE.
+	# This prevents threads from crashing on return (i.e. in HTTPServer
+	# 	connections) by setting a flag into my version of Win32::OLE
+	# 	that causees it to short return from it's AtExit() method,
+	# 	not deleting anything. Otherwise threads get messed up.
+	# Presumably everytinng is deleted when the main Perl interpreter
+	# 	realy exits.
+	# I *may* not have needed to enclose $mp in a loop, but it's
+	#	done now so I'm not changing it!
+
 
 
 #--------------------------------------

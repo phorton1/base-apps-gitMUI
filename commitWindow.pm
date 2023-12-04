@@ -17,7 +17,7 @@ use apps::gitUI::commitList;
 use apps::gitUI::commitRight;
 use Pub::Utils;
 use Pub::WX::Window;
-use base qw(Wx::Window Pub::WX::Window);
+use base qw(Pub::WX::Window);
 
 
 my $dbg_life = 0;
@@ -108,14 +108,6 @@ sub new
 	return $this;
 }
 
-
-sub onClose
-{
-	my ($this,$event) = @_;
-	display($dbg_life,0,"commitWindow::onClose() called");
-	$this->SUPER::onClose($event);
-	$event->Skip();
-}
 
 
 sub canCommit

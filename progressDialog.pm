@@ -124,15 +124,6 @@ sub setDone
 }
 
 
-sub onClose
-{
-    my ($this,$event) = @_;
-	display($dbg_dlg,0,"ProgressDialog::onClose()");
-    # $event->Veto() if !$this->{aborted};
-	$event->Skip();
-}
-
-
 sub onButton
 {
     my ($this,$event) = @_;
