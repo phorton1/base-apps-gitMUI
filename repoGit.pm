@@ -307,7 +307,14 @@ sub getRemoteChanges
 sub gitIndex
 	# git add -A
 	# Note that we manually generate a monitor_callback
-	# after adjusting repo hashes
+	# after adjusting repo hashes.
+	# CHMOD NOTE:  Git::Raw does not have a 'chmod' function or
+	#   support setting the executable bit on new files
+	#   from windows, as is done with the pre-commit
+	#   script for .pm/pl/cgi files in the regular gitUI.
+	#   New .pm/ files should be added using the regular
+	#   gitUI, and/or run /bat/fix_git_exe_bits.pm in that
+	#   repo if you forget!!
 {
 	my ($repo,$is_staged,$paths) = @_;
 	my $show = $is_staged ? 'staged' : 'unstaged';
@@ -343,7 +350,8 @@ sub gitIndex
 			{
 				$u_type eq 'D' ?
 					$index->remove($path) :
-					$index->add($path);
+					$index->add($path);			# Add a single file
+
 				$index->write;
 				$staged->{$path} = $uchange;
 				delete $unstaged->{$path};
@@ -363,7 +371,7 @@ sub gitIndex
 
 	elsif (!$is_staged)
 	{
-		$index->add_all({ paths => ['*'] });
+		$index->add_all({ paths => ['*'] });	# Add all files
 		$index->write;
 		mergeHash($repo->{staged_changes},$repo->{unstaged_changes});
 		$repo->{'staged_changes'} = shared_clone({});
