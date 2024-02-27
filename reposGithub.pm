@@ -54,15 +54,24 @@ my $git_api_token = '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';
 #----------------------------------------------------
 # github access
 #----------------------------------------------------
+# Using paged requests requires an all or none approach
+# to deleting cachefiles.
 
 sub gitHubRequest
+	# if $ppage is specified it will contain the page number to get
+	# and will be appended to the location as '&page=$$ppage' and
+	# the cachefile as '_$$page'.
 {
-    my ($what,$location,$use_cache) = @_;
+    my ($what,$location,$use_cache,$ppage) = @_;
 	$use_cache ||= 0;
 
-	display($dbg_request,0,"gitHubRequest($what,$location) use_cache($use_cache)");
+	my $use_page = $ppage ? $$ppage : '';
+	$location .= "&page=$use_page" if $use_page;
+	my $cache_page = $use_page ? "_$use_page" : '';
 
-	my $cache_filename = "$temp_dir/$what.txt";
+	display($dbg_request,0,"gitHubRequest($what$cache_page,$location) use_cache($use_cache)");
+
+	my $cache_filename = "$temp_dir/$what$cache_page.txt";
 
 	my $content = $use_cache || $USE_TEST_CACHE ?
 		getTextFile($cache_filename) : '';
@@ -73,7 +82,25 @@ sub gitHubRequest
     # my $url = 'https://api.github.com/user/repos?per_page=100';
         # requires authentication that is not done on browser
 
-    if (!$content)
+	# if using the cache and we get a hit, we have to check for
+	# the next page and return that. Remember all or none on delete
+	# of the repo_N cache files.
+
+    if ($content)
+	{
+		display($dbg_request,1,"found cachefile($cache_filename) in cache");
+		if ($ppage)
+		{
+			my $next_filename = "$temp_dir/$what"."_".($$ppage+1).".txt";
+			if (-f $next_filename)
+			{
+				$$ppage = $$ppage + 1;
+				display($dbg_request,1,"found next page($$ppage) in cache");
+			}
+		}
+
+	}
+	else
 	{
 		my $url = 'https://api.github.com/' . $location;
 
@@ -107,6 +134,22 @@ sub gitHubRequest
 			}
 			else
 			{
+				# check for the 'Link' header which indictes that more gets are needed,
+				# and return it in the case of doing the main repos list ...
+
+				if ($ppage)
+				{
+					# print "headers=".$response->headers_as_string()."\n";
+					my $link = $response->headers()->header('Link') || '';
+					# Link: <https://api.github.com/user/repos?per_page=50&page=2>; rel="next", <https://api.github.com/user/repos?per_page=50&page=2>; rel="last"
+					# display(0,0,"link=$link");
+					if ($link =~ /&page=(\d+)>; rel="next"/)
+					{
+						$$ppage = $1;
+						display($dbg_request,1,"next_page=$$ppage");
+					}
+				}
+
 				$content = $response->content() || '';
 				my $content_type = $response->headers()->header('Content-Type') || 'unknown';
 				my $content_len = length($content);
@@ -194,13 +237,19 @@ sub doGitHub
 	}
 
 
-    my $data = gitHubRequest("repos",'user/repos?per_page=100',$use_cache);
+	my $page = 0;
+	my $next_page = 1;
+
+	while ($page != $next_page)
+	{
+		$page = $next_page;
+		my $data = gitHubRequest("repos","user/repos?per_page=50",$use_cache,\$next_page);
+		last if !$data;
+
         # returns an array of hashes (upto 100)
         # prh - will need to do it multiple times if I get more than 100 repositories
 
-    if ($data)
-    {
-        display($dbg_github,1,"found ".scalar(@$data)." github repos");
+        display($dbg_github,1,"found ".scalar(@$data)." github repos on page($page)");
 
         for my $entry (@$data)
         {
@@ -269,7 +318,7 @@ sub doGitHub
 
 			} 	# found $repo
         }   # foreach $entry
-    }   # got $data
+    }   # while $page
 
 	for my $repo (@$repo_list)
 	{
