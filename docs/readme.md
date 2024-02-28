@@ -29,7 +29,7 @@ The SECTION verb is used to create a 'break' in the listing of
 repos, grouping repos together into sections in the main windows
 of repos.
 
-	SECTION path (name)
+	SECTION path (optional name)
 
 If the **path** starts with a forward slash, it will
 be used within the windows to lessen the horizontal space
@@ -72,26 +72,64 @@ or to support dependency schemes:
   repository, and a separate github request will be
   made to get information about the fork.
 
+- MINE, NOT MINE - repos default to 'mine'. Forked
+  repos then default to 'not mine'.  Basically unused
+  at this time, except for repoDocs.pm, which allows
+  for working only {mine} repos.
+
+- PAGE_HEADER - nascent scheme to implement self fixing
+  Document Headers. See repoDocs section below.
+
+- DOC relative_path - part of nascent scheme, but the
+  file, at least, ARE checked for existence, with shortcuts
+  in the repo info window to opening them in the browser.
+
+
+- NEEDS abs_path - an absolute path to a directory that
+  must exist.  For dependencies other than repos.
+  does not exist (but not necessarily the repo),
+  and provides shortcuts in the repo info window.
+  No shortcut at this time, but *could* open the
+  directory in Windows Explorer
+
+- USES abs_repo_path - speficies that this repo USES
+  another repo. In turn creates USED_BY members
+  on those repos, both of which end up being shortcuts
+  to opening the refererd repo in the repo info window.
+
+
+- GROUP|FRIEND|NOTES|WARNINGS|ERRORS (value) - arbitrary
+  keywords that let you push the rest of the line onto
+  one of the arrays on the repo object.
+
+  GROUP and FRIEND are intended to support a scheme.
+  NOTES, WARNINGS, and ERRORS, can allow you to push
+  these things (like an error) WITHOUT generating the
+  actual error message during scanning.  Only ERRORS
+  are currently useful as, without a tabular display,
+  there is no good way to see everything that has
+  NOTES and WARNINGS.
+
+
+## Other funny stuff
+
+IF my description includes "Copied from blah" followed
+by a space, the {parent} member will be display as (blah)
+as a reminder of where i got it
+
+TODO: This needs to get built into the eventual tabular display.
 
 
 
 
-- MINE, NOT MINE - change the colors in the repo list
 
 
+## repoDocs.pm
 
-
-
-
-
-
-
-
-
-
-##
+Is currently a stand-alone program that was a start at
+parsing MD's to automatically create and update headers.
+It requires all the DOC = lines to be setup correctly,
+and for the repo to have a
 
 
 	SECTION
-
-

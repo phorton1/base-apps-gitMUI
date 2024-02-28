@@ -143,43 +143,47 @@ e same repo in two different places.
 
 ## Incorporation into my gitUI
 
-I obvioiusly need to be able to commit and push from any
-submodule from within my git-ui.
+The SUBMODULE specifier in git_repositories.txt tells
+the system what submodules exist, and where to find them.
 
-I suspect that I need to know where the submodules are
-in my git_repositories.txt.
+	SUBMODULE	/local_path	/actual/repository/path
 
-For example, the master sub-repo could list the other
-repos that include it, and/or the including repos could
-explicitly mention that they have submodules at given
-paths.
+For example, in my initial test, for /junk/test_repo2
+the specification would be
 
-The first idea is just to add the submodules as entirely
-separate repositories into my git_repositories.txt.
-However, this will not work, since the sub repository names
-don't map to valid github repositories
+	SUBMODULE	/copy_sub1	/junk/test_repo1/test_sub1
 
-	/junk/test_repo2/copy_sub1		is actually the
-	junk-test_repo-test_sub2		repository
+This needs to do (at least) two things.
 
-Therefore an addition needs to be made to my git_repositories
-specification.  The directories need to be monitored in the
-context of the second repo (test_repo2), while still knowing
-that the sub-repo itself is different for purposes of pushing.
+- it should switch the repo over to the kind that
+  monitors individual subdirectories, and should
+  ignore the submodule directory, at least with regards
+  to performing callbacks to git_changes for the
+  main repo when a file in the sub-repo merely
+  changes.
+- It needs to generate another repo that monitors
+  for changes, just like any other repo.
 
+In fact, maybe the SUBMODULE specification should be
+independent of the master repo:
 
+	SUBMODULE	/junk/test_repo2/copy_sub1	/junk/test_repo1/test_sub1
 
+though I like the idea that they are 'sub modules' of a
+given existing master repo.
 
+*multiple levels of nesting*
 
-## Normalizztion process
+They need to generate a separate repo object for ease of
+use in the monitor, commit window, and so on.  They *should*
+show up as indendented in any list formats.
 
-I suspect a manual 'normalize' process will be needed,
-so that it is not onerous for gitUI to always be fetching
-and looking for changes in the sub-repos, but to provide
-an easy way, for the simplest case of working on a sub-repo
-from one location at a time only.   This would be similar
-to the Update features I added to Artisan, myIOTServer,
-and the inventory app, the difference being that it would
-check all instances that might need an update, fetch them
-all, pull them all, and even possibly make the 'submodule
-commit' within the other repos that include the submodule.
+I obviously need to be able to commit and push for any
+submodule from within my git-ui.  Currently they will
+be monitoried for file changes under the main repo, which
+will generate a (useles?) call to git_changes on that
+repo.
+
+In a way, the SUBMODULE is just a way of specifying
+an additional repo in the system, where the path
+is not cannonical.
