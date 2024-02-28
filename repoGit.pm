@@ -75,6 +75,17 @@ sub new_change
 }
 
 
+sub gitError
+{
+	my ($repo,$msg,$call_level) = @_;
+	$call_level ||= 0;
+	$call_level++;
+	my $show_path = $repo ? "repo($repo->{path}): " : '';
+	error($show_path.$msg,$call_level);
+	return undef;
+}
+
+
 #--------------------------------------------
 # utilities for calling Git::Raw stuff
 #--------------------------------------------
@@ -86,15 +97,15 @@ sub getTree
 	my ($repo, $git_repo, $name) = @_;
 
 	my $id = Git::Raw::Reference->lookup($name, $git_repo)->peel('commit');
-	return $repo->repoError("Could not get id for ref($name)")
+	return gitError($repo,"Could not get id for ref($name)")
 		if !$id;
 
 	my $commit = Git::Raw::Commit->lookup($git_repo,$id);
-	return $repo->repoError("Could not get commit($name) for id($id)")
+	return gitError($repo,"Could not get commit($name) for id($id)")
 		if !$commit;
 
 	my $tree = $commit->tree();
-	return $repo->repoError("Could not get tree($name) from commit($commit)")
+	return gitError($repo,"Could not get tree($name) from commit($commit)")
 		if !$tree;
 
 	return $tree;
@@ -114,7 +125,7 @@ sub gitChanges
 	my ($repo) = @_;
 	display($dbg_chgs,0,"getChanges($repo->{path})");
 	my $git_repo = Git::Raw::Repository->open($repo->{path});
-	return $repo->repoError("Could not create git_repo") if !$git_repo;
+	return gitError($repo,"Could not create git_repo") if !$git_repo;
 
 	my $changes_changed = 0;
 
@@ -158,7 +169,7 @@ sub getLocalChanges
 		include_untracked => 1,
 		recurse_untracked_dirs => 1 }};
 	my $status = $git_repo->status($opts);
-	return $repo->repoError("No result from git_status")
+	return gitError($repo,"No result from git_status")
 		if !$status;
 
 	my $unstaged_changed = 0;
@@ -255,11 +266,11 @@ sub getRemoteChanges
 	# short return if no changes
 
 	my $diff = $tree_remote->diff({ tree => $tree_head });
-	return $repo->repoError("Could not get diff()")
+	return gitError($repo,"Could not get diff()")
 		if !$diff;
 
 	my $text = $diff->buffer("name_status");
-	return $repo->repoError("Could not get diff text($diff)")
+	return gitError($repo,"Could not get diff text($diff)")
 		if !defined($text);
 
 	$text =~ s/^\s+|\s$//g;
@@ -324,10 +335,10 @@ sub gitIndex
 	# Create the repo and get the index
 
 	my $git_repo = Git::Raw::Repository->open($repo->{path});
-	return $repo->repoError("Could not create git_repo") if !$git_repo;
+	return gitError($repo,"Could not create git_repo") if !$git_repo;
 
 	my $index = $git_repo->index();
-	return $repo->repoError("Could not get index") if !$index;
+	return gitError($repo,"Could not get index") if !$index;
 
 	# Move particular $paths.
 	# Call $index->add() or remove() to move from unstaged to staged,
@@ -402,7 +413,7 @@ sub unstage
 	# get the ID of the HEAD commit
 
 	my $head_id = Git::Raw::Reference->lookup("HEAD", $git_repo)->peel('commit');
-	return $repo->repoError("Could not get ref(HEAD)")
+	return gitError($repo,"Could not get ref(HEAD)")
 		if !$head_id;
 
 	$git_repo->reset( $head_id, {
@@ -431,9 +442,9 @@ sub gitRevert
 	# get the git_repo and its index
 
 	my $git_repo = Git::Raw::Repository->open($repo->{path});
-	return $repo->repoError("Could not create git_repo") if !$git_repo;
+	return gitError($repo,"Could not create git_repo") if !$git_repo;
 	my $index = $git_repo->index();
-	return $repo->repoError("Could not get index") if !$index;
+	return gitError($repo,"Could not get index") if !$index;
 
 	# the options
 
@@ -489,10 +500,10 @@ sub gitCommit
 	display($dbg_commit,0,"gitCommit($repo->{path}) $num staged_changes msg='$msg'");
 
 	my $git_repo = Git::Raw::Repository->open($repo->{path});
-	return $repo->repoError("Could not create git_repo") if !$git_repo;
+	return gitError($repo,"Could not create git_repo") if !$git_repo;
 
 	my $index = $git_repo->index();
-	return $repo->repoError("Could not get index") if !$index;
+	return gitError($repo,"Could not get index") if !$index;
 
 	# create a new tree out of the repository index
 
@@ -519,7 +530,7 @@ sub gitCommit
 		[ $git_repo->head()->target() ],
 		$tree );
 
-	return $repo->repoError("Could not create git_commit")
+	return gitError($repo,"Could not create git_commit")
 		if !$commit;
 
 	# move the changes from 'staged' to 'remote'
@@ -549,7 +560,7 @@ sub gitTag
 	my ($repo,$tag) = @_;
 	display($dbg_tag,0,"gitTag($tag,$repo->{path})");
 	my $git_repo = Git::Raw::Repository->open($repo->{path});
-	return $repo->repoError("Could not create git_repo") if !$git_repo;
+	return gitError($repo,"Could not create git_repo") if !$git_repo;
 
 	my $config = $git_repo->config();
 	my $name   = $config->str('user.name');
@@ -558,11 +569,11 @@ sub gitTag
 	my $sig = Git::Raw::Signature->new($name, $email, time(), 0);
 
 	my $ref = Git::Raw::Reference->lookup("HEAD", $git_repo);
-	return $repo->repoError("Could not get ref(HEAD)")
+	return gitError($repo,"Could not get ref(HEAD)")
 		if !$ref;
 	my $ref2 = $ref->target();
 	my $id = $ref2->target();
-	return $repo->repoError("Could not get id_remote(HEAD)")
+	return gitError($repo,"Could not get id_remote(HEAD)")
 		if !$id;
 
 	display($dbg_tag+1,1,"ref=$ref id=$id");
@@ -687,16 +698,16 @@ sub gitPush
 	display($dbg_push,0,"gitPush($branch,$repo->{path}) $num remote_chanes)");
 
 	my $git_repo = Git::Raw::Repository->open($repo->{path});
-	return $repo->repoError("Could not create git_repo")
+	return gitError($repo,"Could not create git_repo")
 		if !$git_repo;
 
 	my $remote = Git::Raw::Remote->load($git_repo, 'origin');
-	return $repo->repoError("Could not create remote")
+	return gitError($repo,"Could not create remote")
 		if !$remote;
 
 	my $refspec_str = "refs/heads/$branch";
 	my $refspec = Git::Raw::RefSpec->parse($refspec_str,0);
-	return $repo->repoError("Could not create refspec($refspec_str)")
+	return gitError($repo,"Could not create refspec($refspec_str)")
 		if !$refspec;
 
 	warning(0,0,"progres_cb=".\&cb_pack);
@@ -777,7 +788,7 @@ sub gitDiff
 	# get the git_repo and its index
 
 	my $git_repo = Git::Raw::Repository->open($repo->{path});
-	return $repo->repoError("Could not create git_repo") if !$git_repo;
+	return gitError($repo,"Could not create git_repo") if !$git_repo;
 
 	# the options
 
@@ -799,7 +810,7 @@ sub gitDiff
 		if $is_staged;
 
 	my $diff = $git_repo->diff($opts);
-	return $repo->repoError("Could not do diff()") if !$diff;
+	return gitError($repo,"Could not do diff()") if !$diff;
 
 	if ($dbg_diff < 0)
 	{

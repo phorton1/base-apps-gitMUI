@@ -93,6 +93,8 @@ BEGIN
 		$color_medium_grey
 		$color_dark_cyan
 
+		linkDisplayColor
+
 		$color_git_staged
         $color_git_unstaged
 		$color_item_selected
@@ -223,6 +225,19 @@ our $color_git_staged    = Wx::Colour->new(0xA0, 0xFF, 0xA0);	# commitList(stage
 our $color_git_unstaged  = Wx::Colour->new(0xff, 0xB0, 0xA0);	# commitList(unstqaged) orange header
 our $color_item_selected = Wx::Colour->new(0x00, 0x78, 0xD7);	# commitList selected item background
 	# 120, 215 from git highlight
+
+
+sub linkDisplayColor
+{
+	my ($repo) = @_;
+	return
+		@{$repo->{errors}} ? $color_red :
+		keys %{$repo->{unstaged_changes}} ? $color_orange :
+		keys %{$repo->{staged_changes}} ? $color_cyan :
+		keys %{$repo->{remote_changes}} ? $color_magenta :
+		$repo->{private} ? $color_blue :
+		$color_green;
+}
 
 
 #----------------------------------------------------------

@@ -8,6 +8,10 @@
 #
 # This file can parse them from the file and
 # add members from local git/config files.
+#
+# parseRepos(1) takes an optional parameter indicating
+# that it should start a UI window if it encounters
+# any errors, yet this package remains usable without WX.
 
 
 package apps::gitUI::repos;
@@ -92,7 +96,7 @@ sub clearSelected
 
 sub parseRepos
 {
-    display($dbg_parse,0,"parseRepos($repo_filename)");
+    repoDisplay($dbg_parse,0,"parseRepos($repo_filename)");
 	$repo_hash = shared_clone({});
 	$repo_list = shared_clone([]);
 
@@ -132,7 +136,7 @@ sub parseRepos
 
 				if (!$TEST_JUNK_ONLY || $path =~ /junk/)
 				{
-					display($dbg_parse+1,1,"repo($repo_num,$path,$branch,$section_path,$section_name)");
+					repoDisplay($dbg_parse+1,1,"repo($repo_num,$path,$branch,$section_path,$section_name)");
 					$repo = apps::gitUI::repo->new($repo_num++,$path,$branch,$section_path,,$section_name);
 
 					push @$repo_list,$repo;
@@ -153,7 +157,7 @@ sub parseRepos
 
 				if ($line =~ /^PRIVATE$/i)
 				{
-					display($dbg_parse+2,2,"PRIVATE");
+					repoDisplay($dbg_parse+2,2,"PRIVATE");
 					$repo->{private} = 1;
 				}
 
@@ -162,23 +166,23 @@ sub parseRepos
 				elsif ($line =~ s/^FORKED\s*//i)
 				{
 					$line ||= 1;
-					display($dbg_parse+2,2,"FORKED $line");
+					repoDisplay($dbg_parse+2,2,"FORKED $line");
 					$repo->{forked} = $line;
 					$repo->{mine} = '';
 				}
 				elsif ($line =~ /^MINE/i)
 				{
-					display($dbg_parse+2,2,"MINE");
+					repoDisplay($dbg_parse+2,2,"MINE");
 					$repo->{mine} = 1;
 				}
 				elsif ($line =~ /^NOT_MINE/i)
 				{
-					display($dbg_parse+2,2,"NOT_MINE");
+					repoDisplay($dbg_parse+2,2,"NOT_MINE");
 					$repo->{mine} = '';
 				}
 				elsif ($line =~ /^PAGE_HEADER/i)
 				{
-					display($dbg_parse+2,2,"PAGE_HEADER");
+					repoDisplay($dbg_parse+2,2,"PAGE_HEADER");
 					$repo->{page_header} = 1;
 				}
 
@@ -189,7 +193,7 @@ sub parseRepos
 				elsif ($line =~ s/^(DOCS)\s+//i)
 				{
 					my $what = $1;
-					display($dbg_parse+2,2,"$what $line");
+					repoDisplay($dbg_parse+2,2,"$what $line");
 					push @{$repo->{lc($what)}},$line;
 
 					my ($root) = split(/\s+/,$line);
@@ -200,7 +204,7 @@ sub parseRepos
 				elsif ($line =~ s/^(NEEDS)\s+//i)
 				{
 					my $what = $1;
-					display($dbg_parse+2,2,"$what $line");
+					repoDisplay($dbg_parse+2,2,"$what $line");
 					push @{$repo->{lc($what)}},$line;
 					my ($path) = split(/\s+/,$line);
 					$repo->repoError("$what $path does not exist")
@@ -212,7 +216,7 @@ sub parseRepos
 				elsif ($line =~ s/^(USES|GROUP|FRIEND|NOTES|WARNINGS|ERRORS)\s+//i)
 				{
 					my $what = $1;
-					display($dbg_parse+2,2,"$what $line");
+					repoDisplay($dbg_parse+2,2,"$what $line");
 					push @{$repo->{lc($what)}},$line;
 				}
 			}
@@ -293,7 +297,6 @@ sub groupReposBySection
 
 use Git::Raw;
 
-
 my $all_tags = {};
 
 
@@ -302,8 +305,11 @@ sub addRepoTags
 	my ($repo) = @_;
 
 	my $git_repo = Git::Raw::Repository->open($repo->{path});
-	return $repo->repoError("Could not create git_repo") if !$git_repo;
-
+	if (!$git_repo)
+	{
+		return $repo->repoError("Could not create git_repo");
+		return 0;
+	}
 	my @tag_refs = $git_repo->tags( 'all' );
 
 	my $started = 0;
@@ -342,14 +348,8 @@ sub addRepoTags
 		$tag->{paths}->{$repo->{path}} = 1;
 	}
 
+	return 1;
 }
-
-
-
-
-
-
-
 
 
 if (0)
@@ -373,8 +373,6 @@ if (0)
 		}
 	}
 }
-
-
 
 
 1;

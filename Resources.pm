@@ -26,6 +26,7 @@ BEGIN
 		$ID_TAG_WINDOW
 
 		$ID_COMMAND_RESCAN
+		$ID_COMMAND_REBUILD_CACHE
 		$ID_COMMAND_PUSH_ALL
 
 		$COMMAND_ADD
@@ -52,6 +53,7 @@ our (
 	# UI Commands handled by appFrame::onCommand
 
 	$ID_COMMAND_RESCAN,
+	$ID_COMMAND_REBUILD_CACHE,
 	$ID_COMMAND_PUSH_ALL,
 
 	# specific commands handled by appFrame::doGitCommand()
@@ -74,8 +76,9 @@ mergeHash($resources->{command_data},{
 	$ID_PUSH_WINDOW			=> ['Push',		'Push selected repositories' ],
 	$ID_TAG_WINDOW 			=> ['Tag',		'Apply Tags to selected repositories' ],
 
-	$ID_COMMAND_RESCAN			=> ['Rescan',	'Re-initialize repository information'],
-	$ID_COMMAND_PUSH_ALL		=> ['PushAll',	'Push All commited changes'],
+	$ID_COMMAND_RESCAN			=> ['Rescan',		'Re-initialize repository information'],
+	$ID_COMMAND_REBUILD_CACHE	=> ['RebuildCache',	'Re-build the cache from github'],
+	$ID_COMMAND_PUSH_ALL		=> ['PushAll',		'Push All commited changes'],
 
 });
 
@@ -101,6 +104,8 @@ unshift @{$resources->{view_menu}},(
 
 my @actions_menu = (
 	$ID_COMMAND_RESCAN,
+	$ID_COMMAND_REBUILD_CACHE,
+
     $ID_SEPARATOR,
 	$ID_TAG_WINDOW,
 	$ID_PUSH_WINDOW,

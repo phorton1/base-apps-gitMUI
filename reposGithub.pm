@@ -69,7 +69,7 @@ sub gitHubRequest
 	$location .= "&page=$use_page" if $use_page;
 	my $cache_page = $use_page ? "_$use_page" : '';
 
-	display($dbg_request,0,"gitHubRequest($what$cache_page,$location) use_cache($use_cache)");
+	repoDisplay($dbg_request,0,"gitHubRequest($what$cache_page,$location) use_cache($use_cache)");
 
 	my $cache_filename = "$temp_dir/$what$cache_page.txt";
 
@@ -88,14 +88,14 @@ sub gitHubRequest
 
     if ($content)
 	{
-		display($dbg_request,1,"found cachefile($cache_filename) in cache");
+		repoDisplay($dbg_request,1,"found cachefile($cache_filename) in cache");
 		if ($ppage)
 		{
 			my $next_filename = "$temp_dir/$what"."_".($$ppage+1).".txt";
 			if (-f $next_filename)
 			{
 				$$ppage = $$ppage + 1;
-				display($dbg_request,1,"found next page($$ppage) in cache");
+				repoDisplay($dbg_request,1,"found next page($$ppage) in cache");
 			}
 		}
 
@@ -122,15 +122,15 @@ sub gitHubRequest
 
 		if (!$response)
 		{
-			error("gitHubRequest($location) - no response");
+			repoError(undef,"gitHubRequest($location) - no response");
 		}
 		else
 		{
 			my $status_line = $response->status_line();
-			display($dbg_request+1,1,"response = $status_line");
+			repoDisplay($dbg_request+1,1,"response = $status_line");
 			if ($status_line !~ /200/)
 			{
-				error("gitHubRequest($location) bad_status: $status_line");
+				repoError(undef,"gitHubRequest($location) bad_status: $status_line");
 			}
 			else
 			{
@@ -142,26 +142,26 @@ sub gitHubRequest
 					# print "headers=".$response->headers_as_string()."\n";
 					my $link = $response->headers()->header('Link') || '';
 					# Link: <https://api.github.com/user/repos?per_page=50&page=2>; rel="next", <https://api.github.com/user/repos?per_page=50&page=2>; rel="last"
-					# display(0,0,"link=$link");
+					# repoDisplay(0,0,"link=$link");
 					if ($link =~ /&page=(\d+)>; rel="next"/)
 					{
 						$$ppage = $1;
-						display($dbg_request,1,"next_page=$$ppage");
+						repoDisplay($dbg_request,1,"next_page=$$ppage");
 					}
 				}
 
 				$content = $response->content() || '';
 				my $content_type = $response->headers()->header('Content-Type') || 'unknown';
 				my $content_len = length($content);
-				display($dbg_request+1,1,"content bytes($content_len) type=$content_type");
+				repoDisplay($dbg_request+1,1,"content bytes($content_len) type=$content_type");
 				if (!$content)
 				{
-					error("gitHubRequest($location) - no content returned");
+					repoError(undef,"gitHubRequest($location) - no content returned");
 				}
 				elsif ($response->headers()->header('Content-Type') !~ 'application/json')
 				{
 					printVarToFile(1,"$temp_dir/$what.error.txt",$content);
-					error("gitHubRequest($location) unexpected content type: $content_type; see $temp_dir/$what.error.txt");
+					repoError(undef,"gitHubRequest($location) unexpected content type: $content_type; see $temp_dir/$what.error.txt");
 					$content = '';
 				}
 				else
@@ -180,7 +180,7 @@ sub gitHubRequest
 		my $rslt = decode_json($content);
 		if (!$rslt)
 		{
-			error("gitHubRequest($location) could not json_decode");
+			repoError(undef,"gitHubRequest($location) could not json_decode");
 		}
 		else
 		{
@@ -220,7 +220,7 @@ sub doGitHub
 	$use_cache ||= 0;
 	$validate_configs ||= 0;
 
-    display($dbg_github,0,"doGitHub($use_cache)");
+    repoDisplay($dbg_github,0,"doGitHub($use_cache,$validate_configs)");
 
 	my $repo_list = getRepoList();
 	if (!$repo_list)
@@ -232,8 +232,13 @@ sub doGitHub
 	for my $repo (@$repo_list)
 	{
 		$repo->{found_on_github} = 0;
-		$repo->clearErrors();
+			# retain {errors} from parseRepos, which
+			# is always called just before doGithub()
+			# (they are always paired).
+			# $repo->clearErrors();
 		$repo->checkGitConfig();
+			# Currently only place checkGitConfig() is called
+			# ignore return value
 	}
 
 
@@ -249,7 +254,7 @@ sub doGitHub
         # returns an array of hashes (upto 100)
         # prh - will need to do it multiple times if I get more than 100 repositories
 
-        display($dbg_github,1,"found ".scalar(@$data)." github repos on page($page)");
+        repoDisplay($dbg_github,1,"found ".scalar(@$data)." github repos on page($page)");
 
         for my $entry (@$data)
         {
@@ -261,17 +266,18 @@ sub doGitHub
 
 			if (!$repo)
 			{
-				error("doGitHub() cannot find repo($id) = path($path)");
+				repoError(undef,"doGitHub() cannot find repo($id) = path($path)");
 			}
 			else
 			{
 				$repo->{found_on_github} = 1;
+				$repo->{size} = $entry->{size} || 0;
 				$repo->{descrip} = $entry->{description} || '';
 				my $is_private = $entry->{visibility} eq 'private' ? 1 : 0;
 				my $is_forked = $entry->{fork} ? 1 : 0;
 				my $repo_forked = $repo->{forked} ? 1 : 0;
 
-				display($dbg_github+1,1,"doGitHub($id) private($is_private) forked($is_forked)");
+				repoDisplay($dbg_github+1,1,"doGitHub($id) private($is_private) forked($is_forked)");
 
 				$repo->repoError("validateGitHub($id) - local private($repo->{private}) != github($is_private)")
 					if $repo->{private} != $is_private;
@@ -289,7 +295,7 @@ sub doGitHub
 					}
 					elsif (!$info->{parent})
 					{
-						repoError("doGitHub($id) - no parent for forked repo");
+						$repo->repoError("doGitHub($id) - no parent for forked repo");
 					}
 					elsif (!$info->{parent}->{full_name})
 					{
@@ -298,7 +304,7 @@ sub doGitHub
 					else
 					{
 						$repo->{parent} = $info->{parent}->{full_name};
-						display($dbg_github,2,"fork parent = $repo->{parent}");
+						repoDisplay($dbg_github,2,"fork parent = $repo->{parent}");
 					}
 
 				}   # $GET_GITHUB_PARENTS
@@ -334,8 +340,6 @@ sub doGitHub
 #-----------------------------------------------
 # test main
 #-----------------------------------------------
-# Currently only place checkGitConfig() is called, and
-# only one that would check that
 
 if (0)
 {

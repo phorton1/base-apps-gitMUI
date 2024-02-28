@@ -1,9 +1,9 @@
 #----------------------------------------------------
 # base::apps::gitUI::repo
 #----------------------------------------------------
-# The client must implement ABORT.
-# To abort a PUSH, the push must be in a thread
-# 		and the user should kill the thread.
+# Facilitates a UI with repoDisplay, repoError,
+# repoWarning, and repoNote methods, which can
+# yet can be used without including WX.
 
 package apps::gitUI::repo;
 use strict;
@@ -26,17 +26,22 @@ BEGIN
 {
  	use Exporter qw( import );
 	our @EXPORT = qw(
+		repoDisplay
+		repoError
+		repoWarning
+		repoNote
+
+		setRepoUI
 	);
 }
 
 
 
-my $repo_quiet:shared = 0;
+my $repo_ui;
 
-sub setRepoQuiet { $repo_quiet = shift; }
-	# turns off repoErrors, repoWarnings, and repoNotes
-	# for calling from gitUI windows without reporting
-	# those kinds of errors
+sub setRepoUI { $repo_ui = shift; }
+	# call with undef, or an object that supports
+	# display, error, and warning
 
 
 #---------------------------
@@ -71,6 +76,7 @@ sub new
 		forked   => 0,						# if FORKED [optional_blah] in file
 		parent   => '',						# "Forked from ..." or "Copied from ..."
 		descrip  => '',						# description from github
+		size	 => 0,						# size in KB from github
 		page_header => 0,					# PAGE_HEADER for ordered documents
 
 		docs     => shared_clone([]),		# MD documents in particular order
@@ -120,34 +126,42 @@ sub clearErrors
 	$this->{notes} = shared_clone([]);
 }
 
+sub repoDisplay
+	# accepts a WX Color, not for use by Utils::display
+{
+	my ($dbg,$indent,$msg,$color) = @_;
+	$repo_ui->do_display($dbg,$indent,$msg,$color)
+		if $repo_ui;
+	display($dbg,$indent,$msg,1);
+}
 sub repoError
 {
-	my ($this,$msg,$call_level) = @_;
-	$call_level ||= 0;
-	$call_level++;
-	error("repo($this->{path}): ".$msg,$call_level)
-		if !$repo_quiet;
-	push @{$this->{errors}},$msg;
+	my ($this,$msg) = @_;
+	my $show_path = $this ? "repo($this->{path}): " : '';
+	$repo_ui->do_error($show_path.$msg)
+		if $repo_ui;
+	error($show_path.$msg,1); # ,$repo_ui);
+		# $repo_ui == supress_show
+	push @{$this->{errors}},$msg if $this;
 	return undef;
 }
 sub repoWarning
 {
-	my ($this,$dbg_level,$indent,$msg,$call_level) = @_;
-	$call_level ||= 0;
-	$call_level++;
-	warning($dbg_level,$indent,"repo($this->{path}): ".$msg,$call_level)
-		if !$repo_quiet;
-	push @{$this->{warnings}},$msg;
+	my ($this,$dbg_level,$indent,$msg) = @_;
+	my $show_path = $this ? "repo($this->{path}): " : '';
+	$repo_ui->do_warning($dbg_level,$indent,$show_path.$msg)
+		if $repo_ui;
+	warning($dbg_level,$indent,$show_path.$msg,1);
+	push @{$this->{warnings}},$msg if $this;
 }
 sub repoNote
 {
-	my ($this,$dbg_level,$indent,$msg,$call_level,$color) = @_;
-	$call_level ||= 0;
-	$call_level++;
-	$color |= $UTILS_COLOR_WHITE;
-	display($dbg_level,$indent,"repo($this->{path}): ".$msg,$call_level,$color)
-		if !$repo_quiet;
-	push @{$this->{notes}},$msg;
+	my ($this,$dbg_level,$indent,$msg) = @_;
+	my $show_path = $this ? "repo($this->{path}): " : '';
+	$repo_ui->do_display($dbg_level,$indent,$show_path.$msg,$color_white)
+		if $repo_ui;
+	display($dbg_level,$indent,$show_path.$msg,1,$UTILS_COLOR_WHITE);
+	push @{$this->{notes}},$msg if $this;
 }
 
 
@@ -215,13 +229,19 @@ sub checkGitConfig
 	my $path = $this->{path};
     display($dbg_config+1,0,"checkGitConfig($path)");
 
-    return $this->repoError("validateGitConfig($path) path not found")
-		if !(-d $path);
+    if (!(-d $path))
+	{
+		$this->repoError("validateGitConfig($path) path not found");
+		return 0;
+	}
 
     my $git_config_file = "$path/.git/config";
     my $text = getTextFile($git_config_file);
-    return $this->repoError("checkGitConfig($path) no text in .git/config")
-		if !$text;
+	if (!$text)
+	{
+		$this->repoError("checkGitConfig($path) no text in .git/config");
+		return 0;
+	}
 
 
 	my $branch;
@@ -347,6 +367,7 @@ sub checkGitConfig
 	}
 
 	return !$errors;
+		# return value is currently ignored in only caller: reposGitHub
 
 }   # checkGitConfig()
 

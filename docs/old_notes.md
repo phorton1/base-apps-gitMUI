@@ -1,4 +1,4 @@
-# gitUI
+# old notes
 
 -------------------------------------b-
 Interesting.  I am starting to understand.

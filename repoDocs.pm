@@ -1,6 +1,7 @@
 #----------------------------------------------------
 # apps::gitUI::repoDocs
 #----------------------------------------------------
+# Currently unincluded - test program only
 # Any time I add a page of documentation I have to modify
 # git_repositories.txt.  Page Headers and Footers are
 # another issue.
@@ -43,23 +44,36 @@ BEGIN
 sub copyTo
 {
 	my ($repo,$file_msg,$line,$len,$ppos,$ptext,$openers,$closer,$where) = @_;
-	return $repo->repoError("Unexpected end of line1 at $where($$ppos) $file_msg")
-		if $$ppos >= $len;
+
+	if ($$ppos >= $len)
+	{
+		$repo->repoError("Unexpected end of line1 at $where($$ppos) $file_msg");
+		return 0;
+	}
 	for my $opener (@$openers)
 	{
 		my $c = substr($line,$$ppos++,1);
-		return $repo->repoError("$file_msg Expected opener '$opener'")
-			if $c ne $opener;
-		return $repo->repoError("$file_msg Unexpected end of line2")
-			if $$ppos >= $len;
+		if ($c ne $opener)
+		{
+			$repo->repoError("$file_msg Expected opener '$opener'");
+			return 0;
+		}
+		if ($$ppos >= $len)
+		{
+			$repo->repoError("$file_msg Unexpected end of line2");
+			return 0;
+		}
 	}
 	while (1)
 	{
 		my $c = substr($line,$$ppos++,1);
 		last if $c eq $closer;
 		$$ptext .= $c;
-		return $repo->repoError("$file_msg Unexpected end of line3")
-			if $$ppos >= $len;
+		if ($$ppos >= $len)
+		{
+			$repo->repoError("$file_msg Unexpected end of line3");
+			return 0;
+		}
 	}
 
 	return 1;
@@ -77,8 +91,11 @@ sub parseMD
 	display($dbg_md,0,"DOC($doc) $other");
 	my $filename = $repo->{path}.$doc;
 	my $text = getTextFile($filename);
-	return $repo->repoError("Empty or missing MD $filename")
-		if !$text;
+	if (!$text)
+	{
+		$repo->repoError("Empty or missing MD $filename");
+		return 0;
+	}
 
 	my $level = 0;
 	my $in_code = 0;
@@ -165,6 +182,9 @@ sub parseMD
 
 		}	# whlle ($cpos < $len)
 	}	# for each $line
+
+	return 1;
+
 }	# parseMD
 
 

@@ -72,7 +72,7 @@ my $font_fixed_bold = Wx::Font->new(9,wxFONTFAMILY_MODERN,wxFONTSTYLE_NORMAL,wxF
 sub new
 {
     my ($class,$parent) = @_;
-	display($dbg_ctrl,0,"new diffCtrl()");
+	display($dbg_ctrl,0,"new myTextCtrl()");
 
     my $this = $class->SUPER::new($parent);	# ,-1,[0,0],[100,100],wxVSCROLL | wxHSCROLL);
 	bless $this,$class;

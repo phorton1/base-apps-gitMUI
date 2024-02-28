@@ -281,13 +281,7 @@ sub populate
 			my $display_name = $repo->pathWithinSection();
 			display($dbg_pop,1,"hyperLink($id,$display_name)");
 
-			my $color =
-				keys %{$repo->{unstaged_changes}} ? $color_orange :
-				keys %{$repo->{staged_changes}} ? $color_red :
-				keys %{$repo->{remote_changes}} ? $color_magenta :
-				$repo->{private} ? $color_blue :
-				$color_green;
-
+			my $color = linkDisplayColor($repo);
 			my $ctrl = apps::gitUI::myHyperlink->new(
 				$this,
 				$id,
@@ -330,12 +324,7 @@ sub notifyRepoChanged
 				my $found_repo = repoFromId($id);
 				if ($repo->{path} eq $found_repo->{path})
 				{
-					my $color =
-						keys %{$repo->{unstaged_changes}} ? $color_orange :
-						keys %{$repo->{staged_changes}} ? $color_red :
-						keys %{$repo->{remote_changes}} ? $color_magenta :
-						$repo->{private} ? $color_blue :
-						$color_green;
+					my $color = linkDisplayColor($repo);
 					$ctrl->SetForegroundColour($color);
 					$ctrl->Refresh();
 					return;

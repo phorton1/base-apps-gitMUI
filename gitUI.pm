@@ -1,6 +1,12 @@
 #--------------------------------------------------------
 # gitUI Frame
 #--------------------------------------------------------
+# TODO: eliminate /bat/git_changes.bat which denormalizes
+# much of the code in this repo for duplicate unused functionality,
+# the main benefits of which are:
+#
+#	It provides a report with the size and overall usage on github in kb
+#	It searches for repos on the machine which dont exist on github.
 
 package apps::gitUI::Frame;
 use strict;
@@ -26,6 +32,7 @@ use apps::gitUI::pathWindow;
 use apps::gitUI::reposWindow;
 use apps::gitUI::commitWindow;
 use apps::gitUI::progressDialog;
+use apps::gitUI::dialogDisplay;
 use base qw(Pub::WX::Frame);
 
 $TEST_JUNK_ONLY = 0;
@@ -36,6 +43,7 @@ my $dbg_cmd = 0;
 	# onCommand
 my $dbg_mon = 1;
 	# monitor callback
+
 
 
 my $monitor;
@@ -64,8 +72,21 @@ sub new
 {
 	my ($class, $parent) = @_;
 
-	return if !parseRepos();
-	doGitHub(1,1);
+	setAppFrame(1);
+		# recent mod to wxFrame to allow errors to be reported
+		# during startup.  We'll see how it goes before turning
+		# it on in other apps.
+
+	my $dlg = apps::gitUI::dialogDisplay->new(undef,'gitUI display');
+	setRepoUI($dlg);
+	return if !parseRepos();		# parseRepos only fails on hard errors
+	doGitHub(1,1);  				# use cache, validate_configs
+	setRepoUI(undef);
+	apps::gitUI::dialogDisplay::closeSelfIfNoErrors();
+
+	# error('blah');
+	# Pub::WX::Frame::showError(undef,"blah");
+	# setAppFrame(undef);
 
 	Pub::WX::Frame::setHowRestore($RESTORE_ALL);
 		# $RESTORE_MAIN_RECT);
@@ -87,6 +108,13 @@ sub new
 	return if !$monitor->start();
 
 	return $this;
+}
+
+sub onCloseFrame
+{
+	my ($this) = @_;
+	apps::gitUI::dialogDisplay::closeSelf();
+	$this->SUPER::onCloseFrame();
 }
 
 
@@ -140,16 +168,27 @@ sub onCommand
 	{
 		$this->doPushCommand($id);
 	}
-	elsif ($id == $ID_COMMAND_RESCAN)
+	elsif ($id == $ID_COMMAND_RESCAN ||
+		   $id == $ID_COMMAND_REBUILD_CACHE)
 	{
 		$monitor->stop();
-		parseRepos();
+
+		my $dlg = apps::gitUI::dialogDisplay->new($this,'gitUI display');
+		setRepoUI($dlg);
+		return if !parseRepos();		# parseRepos only fails on hard errors
+		doGitHub(0,1)  				# no cache, validate_configs
+			if $id == $ID_COMMAND_REBUILD_CACHE;
+		setRepoUI(undef);
+		# could leave the dialog open and require manual close
+		apps::gitUI::dialogDisplay::closeSelfIfNoErrors();
+
 		for my $pane (@{$this->{panes}})
 		{
 			$pane->populate() if $pane->can('populate');
 		}
 		$monitor->start();
 	}
+
 }
 
 sub onUpdateUI
