@@ -1,12 +1,13 @@
 #--------------------------------------------------------
 # gitUI Frame
 #--------------------------------------------------------
-# TODO: eliminate /bat/git_changes.bat which denormalizes
-# much of the code in this repo for duplicate unused functionality,
-# the main benefits of which are:
+# TODO: get rid of obsolete "git_changes.bat" that uses this repository, but which I never use
+# TODO: get rid of obsolete "git_repos.bat" which denormalizes this code:
 #
 #	It provides a report with the size and overall usage on github in kb
 #	It searches for repos on the machine which dont exist on github.
+#	It provides a tabular condensed form showing errors, notes, and warning in one place
+
 
 package apps::gitUI::Frame;
 use strict;

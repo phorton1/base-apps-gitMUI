@@ -214,13 +214,15 @@ sub pathWithinSection
 # check git/.config files
 #------------------------------------------
 
+
 sub checkGitConfig
-	# ugh.  Validate
+	# For every repo, validate that
 	#
 	# - config file exists
-	# - it has exactly one [remote "origin"] that points to our repository
+	# - it has exactly one [remote "origin"]
+	# - that the remote origin points to our repository
 	# - it has a [branch "blah"] that matches $this->{branch}
-	# - that all braches have "remote = origin"
+	# - that the repos' {branch} has "remote = origin"
 	#
 	# Note any additional branches
 {
@@ -245,27 +247,34 @@ sub checkGitConfig
 
 
 	my $branch;
-	my %branches;
 	my $errors = 0;
 	my $has_url = 0;
     my $remote_count = 0;
 	my $has_remote_origin = 0;
     my $has_branch_master = 0;
+	my $master_has_origin = 0;
 
 	my $in_remote = 0;
 	my $in_branch = 0;
+	my $in_submodule = 0;
 
     for my $line (split(/\n/,$text))
     {
 		$line =~ s/^\s+|\s+$//g;
+
+		if ($line =~ /^\[/)
+		{
+			$in_remote = 0;
+			$in_branch = 0;
+			$in_submodule = 0;
+		}
+
 		if ($line =~ /^\[remote \"(.*)"\]/)
         {
             my $remote = $1;
 			display($dbg_config+1,1,"remote = $remote");
 
-			$remote_count++;
 			$in_remote = 1;
-			$in_branch = 0;
 			if ($remote eq 'origin')
 			{
 				$has_remote_origin = 1;
@@ -275,14 +284,17 @@ sub checkGitConfig
 				$errors++;
 				$this->repoError("checkGitConfig($path) remote($remote) != origin");
 			}
+			if ($remote_count++)
+			{
+				$errors++;
+				$this->repoError("checkGitConfig($path) has more than one remote");
+			}
 		}
 		elsif ($line =~ /^\[branch \"(.*)"\]/)
         {
             $branch = $1;
 			display($dbg_config+1,1,"branch = $branch");
 
-			$branches{$branch} = '';
-			$in_remote = 0;
 			$in_branch = 1;
 			if ($branch eq $this->{branch})
 			{
@@ -293,25 +305,33 @@ sub checkGitConfig
 				$this->repoNote($dbg_config,1,"$git_config_file: branch($branch) != master");
 			}
         }
-		elsif ($line =~ /^\[/)
+
+
+		elsif ($in_branch && $line =~ /^remote = (.*)$/)
 		{
-			$in_remote = 0;
-			$in_branch = 0;
+			my $remote = $1;
+			display($dbg_config+1,1,"branh($branch) remote = $remote");
+			if ($remote ne 'origin')
+			{
+				$errors++;
+				$this->repoError("checkGitConfig($path) branch($branch) has remote($remote)");
+			}
+			elsif ($branch eq $this->{branch})
+			{
+				$master_has_origin = 1;
+			}
 		}
-		elsif ($line =~ /^url = (.*)$/)
+
+
+		elsif ($in_remote && $line =~ /^url = (.*)$/)
 		{
 			my $url = $1;
 			display($dbg_config+1,1,"url = $url");
 
-			if (!$in_remote)
+			if ($url !~ s/^https:\/\/github.com\/phorton1\///)
 			{
 				$errors++;
-				$this->repoError("checkGitConfig($path) url= outside of [remote]: $url");
-			}
-			elsif ($url !~ s/^https:\/\/github.com\/phorton1\///)
-			{
-				$errors++;
-				$this->repoError("checkGitConfig($path) invalid url: $url");
+				$this->repoError("checkGitConfig($path) invalid remote url: $url");
 			}
 
 			# the .git extension on the url is optional
@@ -322,29 +342,17 @@ sub checkGitConfig
 				if ($url ne repoPathToId($path))
 				{
 					$errors++;
-					$this->repoError("checkGitConfig($path) incorrect url: $url != ".repoPathToId($path));
+					$this->repoError("checkGitConfig($path) incorrect remot url: $url != ".repoPathToId($path));
 				}
 			}
 		}
-		elsif ($line =~ /^remote = (.*)$/)
-		{
-			my $remote = $1;
-			display($dbg_config+1,1,"branh($branch) remote = $remote");
-			if (!$in_branch)
-			{
-				$errors++;
-				$this->repoError("checkGitConfig($path) remote= outside of [branch]: $remote");
-			}
-			elsif ($remote ne 'origin')
-			{
-				$errors++;
-				$this->repoError("checkGitConfig($path) branch($branch) has remote($remote)");
-			}
-			else
-			{
-				$branches{$branch} = $remote;
-			}
-		}
+
+		# submodule handling
+		#
+		#	git_repositories.txt gets SUBMODULE local_path  remote_path
+		#		that maps a local sub-repo (i.e. /copy_sub1 from /junk/test_repo2, to a known
+		#		'master' github repositoriy (i.e. /junk/test_repo1/test_sub1)
+
 	}
 
 	if (!$has_remote_origin)
@@ -357,13 +365,10 @@ sub checkGitConfig
 		$errors++;
 		$this->repoError("checkGitConfig($path) Could not find [branch \"$this->{branch}\"]");
 	}
-	for my $br (sort keys %branches)
+	if (!$master_has_origin)
 	{
-		if ($branches{$br} ne 'origin')
-		{
-			$errors++;
-			$this->repoError("checkGitConfig($path) branch($br) remote($branches{$br}) != 'origin'");
-		}
+		$errors++;
+		$this->repoError("checkGitConfig($path) Could not find remote = origin for [branch \"$this->{branch}\"]");
 	}
 
 	return !$errors;
