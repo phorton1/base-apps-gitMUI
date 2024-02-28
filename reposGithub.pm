@@ -194,7 +194,7 @@ sub gitHubRequest
 					$line =~ s/\s*$//;
 					$text .= $line."\n";
 				}
-				printVarToFile(1,"$temp_dir/$what.json.txt",$text);
+				printVarToFile(1,"$temp_dir/$what$cache_page.json.txt",$text);
 			}
 
 			return $rslt;
