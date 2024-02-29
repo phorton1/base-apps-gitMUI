@@ -114,9 +114,9 @@ sub new
 	$this->{data} = $data;
 	$this->{repos} = {};
 	$this->{expanded} = {};
-		# hash by id of expanded state of repos
+		# hash by path of expanded state of repos
 	$this->{selection} = {};
-		# a nested hash of repos by id and 1 by filename
+		# a nested hash of repos by path and 1 by filename
 		# of ALL durrently selected files.
 	$this->{anchor} = '';
 		# the anchor item, if any for SHIFT selection
@@ -145,10 +145,10 @@ sub getDataForIniFile
 	my $contracted = {};
 	my $data = { contracted => $contracted };
 	my $repos = $this->{repos};
-	for my $id (sort keys %$repos)
+	for my $path (sort keys %$repos)
 	{
-		$contracted->{$id} = 1
-			if !$this->{expanded}->{$id};
+		$contracted->{$path} = 1
+			if !$this->{expanded}->{$path};
 	}
 	display_hash($dbg_ctrl,0,"getDataForIniFile(expanded)",$contracted);
 	return $data;
@@ -157,8 +157,8 @@ sub getDataForIniFile
 
 sub isSelected
 {
-	my ($this,$id,$fn) = @_;
-	my $sel_repo = $this->{selection}->{$id};
+	my ($this,$path,$fn) = @_;
+	my $sel_repo = $this->{selection}->{$path};
 	my $selected = $sel_repo && $sel_repo->{$fn} ? 1 : 0;
 	return $selected;
 }
@@ -198,12 +198,12 @@ sub updateRepos
 	$this->{anchor} = @_;
 
 	# vars only set/used if $MONITOR_NOTIFY_EVERY_CHANGE
-	my $notify_id = $this->{notify_repo} ? $this->{notify_repo}->{id} : '';
+	my $notify_path = $this->{notify_repo} ? $this->{notify_repo}->{path} : '';
 	my $notify_fn = $this->{notify_item} ? $this->{notify_item}->{fn} : '';
 	$this->{notify_repo} = '';
 	$this->{notify_item} = '';
 
-	display($dbg_pop,0,"updateRepos($this->{name}) notify_id($notify_id) notify_fn($notify_fn}");
+	display($dbg_pop,0,"updateRepos($this->{name}) notify_path($notify_path) notify_fn($notify_fn}");
 
 	my $vheight = 0;
 	my $num_repos = 0;
@@ -214,27 +214,27 @@ sub updateRepos
 	my $repo_list = getRepoList();
 	for my $repo (@$repo_list)
 	{
-		my $id = $repo->{id};
+		my $path = $repo->{path};
 		my $items = $repo->{$this->{key}};
 		my $num_items = scalar(keys %$items);
 		if ($num_items)
 		{
 			$num_repos++;
 			$vheight += $ROW_HEIGHT;
-			$this->{repos}->{$id} = $repo;
-			if ($this->{data}->{contracted}->{$id})
+			$this->{repos}->{$path} = $repo;
+			if ($this->{data}->{contracted}->{$path})
 			{
-				display($dbg_ctrl,1,"contracting $id");
-				$this->{expanded}->{$id} = 0;
-				delete $this->{data}->{contracted}->{$id};
+				display($dbg_ctrl,1,"contracting $path");
+				$this->{expanded}->{$path} = 0;
+				delete $this->{data}->{contracted}->{$path};
 			}
 			else
 			{
-				$this->{expanded}->{$id} = defined($save_expanded->{$id}) ?
-					$save_expanded->{$id} : 1;
+				$this->{expanded}->{$path} = defined($save_expanded->{$path}) ?
+					$save_expanded->{$path} : 1;
 			}
 			$vheight += $num_items * $ROW_HEIGHT
-				if $this->{expanded}->{$id};
+				if $this->{expanded}->{$path};
 		}
 	}
 
@@ -250,12 +250,12 @@ sub updateRepos
 
 		my $notify_repo = '';
 		my $notify_item = '';
-		if ($notify_id)
+		if ($notify_path)
 		{
-			$notify_repo = $this->{repos}->{$notify_id} || '';
+			$notify_repo = $this->{repos}->{$notify_path} || '';
 			if ($notify_repo)
 			{
-				display($dbg_pop,1,"found notify_id($notify_id}");
+				display($dbg_pop,1,"found notify_path($notify_path}");
 				if ($notify_fn)
 				{
 					$notify_item = $notify_repo->{$this->{key}}->{$notify_fn} || '';
@@ -330,9 +330,9 @@ sub onPaint
 
 	my $ypos = 0;
 	my $item_rect = Wx::Rect->new(0,$ypos,$width,$ROW_HEIGHT);
-	for my $id (sort keys %$repos)
+	for my $path (sort keys %$repos)
 	{
-		my $repo = $repos->{$id};
+		my $repo = $repos->{$path};
 
 		$item_rect->SetY($ypos);
 		$this->drawRepo($dc,$item_rect,$repo)
@@ -341,7 +341,7 @@ sub onPaint
 		$ypos += $ROW_HEIGHT;
 		last if $ypos >= $bottom;
 
-		if ($this->{expanded}->{$id})
+		if ($this->{expanded}->{$path})
 		{
 			my $items = $repo->{$this->{key}};
 			for my $fn (sort keys %$items)
@@ -372,18 +372,20 @@ my $TEXT_LEFT    = 30;
 sub drawRepo
 {
 	my ($this,$dc,$rect,$repo) = @_;
-	my $id = $repo->{id};
-	display_rect($dbg_draw,0,"drawRepo($this->{name},$id)",$rect);
+	my $path = $repo->{path};
+	display_rect($dbg_draw,0,"drawRepo($this->{name},$path)",$rect);
 
 	my $ypos = $rect->y;
 	my $width = $rect->width;
-	my $expanded = $this->{expanded}->{$id};
+	my $expanded = $this->{expanded}->{$path};
 	my $num_items = scalar(keys %{$repo->{$this->{key}}});
-	my $repo_sel = $this->{selection}->{$id};
+	my $repo_sel = $this->{selection}->{$path};
 	my $num_selected = $repo_sel ? scalar(keys %$repo_sel) : 0;
-	my $name = "$id (".($num_selected?"$num_selected/":'')."$num_items)";
 
-	display($dbg_draw,0,"drawRepo($this->{name},$ypos) exp($expanded) sel($num_selected) num($num_items) $id");
+	my $use_name = repoPathToId($path);
+	my $name = "$use_name (".($num_selected?"$num_selected/":'')."$num_items)";
+
+	display($dbg_draw,0,"drawRepo($this->{name},$ypos) exp($expanded) sel($num_selected) num($num_items) $path=$use_name");
 
 	my $bm = $expanded ? $bm_up_arrow : $bm_right_arrow;
 
@@ -410,8 +412,8 @@ sub drawItem
 	my $width = $rect->width();
 	my $type = $item->{type};
 	my $repo = $item->{repo};
-	my $id = $repo->{id};
-	my $selected = $this->isSelected($id,$fn);
+	my $path = $repo->{path};
+	my $selected = $this->isSelected($path,$fn);
 
 	display($dbg_draw,0,"drawItem($this->{name},$ypos) sel($selected) $type $fn");
 
@@ -479,19 +481,19 @@ sub findClickItem
 	$this->{item_uy} = 0;
 
 	my $repos = $this->{repos};
-	for my $id (sort keys %$repos)
+	for my $path (sort keys %$repos)
 	{
-		my $repo = $repos->{$id};
+		my $repo = $repos->{$path};
 		my $items = $repo->{$this->{key}};
 		my $num_items = scalar(keys %$items);
-		my $repo_height = $this->{expanded}->{$id} ?
+		my $repo_height = $this->{expanded}->{$path} ?
 			($num_items + 1) * $ROW_HEIGHT : $ROW_HEIGHT;
 
 		if ($uy >= $ypos && $uy <= $ypos + $repo_height-1)
 		{
 			$this->{found_repo} = $repo;
 			$this->{repo_uy} = $ypos;
-			display($dbg_sel,1,"foundRepo($this->{name},$id) at ypos($ypos) with height($repo_height)");
+			display($dbg_sel,1,"foundRepo($this->{name},$path) at ypos($ypos) with height($repo_height)");
 			if ($uy >= $ypos + $ROW_HEIGHT)
 			{
 				my $off = $uy - $ypos - $ROW_HEIGHT;		# mouse y offset within repo's items
@@ -583,8 +585,8 @@ sub onLeftDown
 			if ($ux >= $ICON_LEFT)
 			{
 				my $fn = $this->{found_item}->{fn};
-				my $id = $this->{found_repo}->{id};
-				my $selected = $this->isSelected($id,$fn);
+				my $path = $this->{found_repo}->{path};
+				my $selected = $this->isSelected($path,$fn);
 				my $how = $selected ?
 					$ACTION_DO_SELECTED :
 					$ACTION_DO_SINGLE_FILE;
@@ -609,10 +611,10 @@ sub onLeftDown
 	elsif ($this->{found_repo})
 	{
 		my $repo = $this->{found_repo};
-		my $id = $repo->{id};
+		my $path = $repo->{path};
 		if ($ux <= $TOGGLE_RIGHT)
 		{
-			$this->{expanded}->{$id} = !$this->{expanded}->{$id};
+			$this->{expanded}->{$path} = !$this->{expanded}->{$path};
 			$this->{refresh_rect} = $this->{win_srect}; 	# refresh whole window
 		}
 		elsif ($ux <= $ICON_RIGHT)
@@ -621,7 +623,7 @@ sub onLeftDown
 			{
 				display($dbg_actions,0,"ACTION_DO_REPO");
 				$this->doAction($ACTION_DO_REPO)
-					if $this->{selection}->{$id};
+					if $this->{selection}->{$path};
 			}
 		}
 		else	# expand and ICON do not count as selecting the repo
@@ -667,10 +669,10 @@ sub addShiftSelection
 	my $anchor_item = $this->{anchor};
 	my $anchor_fn   = $anchor_item->{fn};
 	my $anchor_repo = $anchor_item->{repo};
-	my $anchor_id   = $anchor_repo->{id};
+	my $anchor_path = $anchor_repo->{path};
 
-	display($dbg_sel,0,"addShiftSelection($this->{name}) anchor($anchor_id,$anchor_fn) found(".
-		($found_repo?$found_repo->{id}:'').",".
+	display($dbg_sel,0,"addShiftSelection($this->{name}) anchor($anchor_path,$anchor_fn) found(".
+		($found_repo?$found_repo->{path}:'').",".
 		($found_item?$found_item->{fn}:'').")");
 
 	my $first_repo = $anchor_repo;
@@ -684,26 +686,26 @@ sub addShiftSelection
 
 	if ($found_repo)
 	{
-		# we determine the direction based on comparing the ids
+		# we determine the direction based on comparing the paths
 		# if going up and no item, then the whole repo was selected
 		# but its the opossite going down.
 
-		my $found_id = $found_repo->{id};
+		my $found_path = $found_repo->{path};
 
-		if ($found_id lt $anchor_id)
+		if ($found_path lt $anchor_path)
 		{
 			# going up, will include all items in the found repo
 			# if no item was specified.
-			display($dbg_sel,2,"found_id($found_id) lt anchor_id($anchor_id)");
+			display($dbg_sel,2,"found_path($found_path) lt anchor_path($anchor_path)");
 			$first_repo = $found_repo;
 			$found_item = $found_item;
 			$last_repo = $anchor_repo;
 			$last_item = $anchor_item;
 		}
-		elsif ($found_id gt $anchor_id)
+		elsif ($found_path gt $anchor_path)
 		{
 			# going down will STOP on the last repo if no item
-			display($dbg_sel,2,"found_id($found_id) gt anchor_id($anchor_id)");
+			display($dbg_sel,2,"found_path($found_path) gt anchor_path($anchor_path)");
 			$last_repo = $found_repo;
 			$last_item = $found_item;
 			$stop_on_last = 1 if !$found_item;
@@ -730,7 +732,7 @@ sub addShiftSelection
 			}
 			else
 			{
-				display($dbg_sel,2,"same SHIFT_ITEM($anchor_id,$anchor_fn) RETURNING with no change!");
+				display($dbg_sel,2,"same SHIFT_ITEM($anchor_path,$anchor_fn) RETURNING with no change!");
 				return 0;
 			}
 		}
@@ -746,27 +748,27 @@ sub addShiftSelection
 	my $any_changes = 0;
 	my $repos = $this->{repos};
 
-	my $first_id = $first_repo->{id};
+	my $first_path = $first_repo->{path};
 	my $first_fn = $first_item ? $first_item->{fn} : '';
-	my $last_id = $last_repo ? $last_repo->{id} : '';
+	my $last_path = $last_repo ? $last_repo->{path} : '';
 	my $last_fn = $last_item ? $last_item->{fn} : '';
 
-	display($dbg_sel,1,"first($first_id,$first_fn) last($last_id,$last_fn)");
+	display($dbg_sel,1,"first($first_path,$first_fn) last($last_path,$last_fn)");
 
-	my @ids = sort keys %$repos;
-	my $id = shift @ids;
-	my $repo = $repos->{$id};
+	my @paths = sort keys %$repos;
+	my $path = shift @paths;
+	my $repo = $repos->{$path};
 	my $items = $repo->{$this->{key}};
-	my $last = !@ids || $id eq $last_id ? 1 : 0;
+	my $last = !@paths || $path eq $last_path ? 1 : 0;
 
 	while (1)
 	{
-		if ($id ge $first_id)
+		if ($path ge $first_path)
 		{
-			my $first = $id eq $first_id ? 1 : 0;
-			my $between = $id gt $first_id ? 1 : 0;
+			my $first = $path eq $first_path ? 1 : 0;
+			my $between = $path gt $first_path ? 1 : 0;
 
-			display($dbg_sel,1,"REPO($this->{name},$id) first($first) between($between) last($last) stop_on_last($stop_on_last)");
+			display($dbg_sel,1,"REPO($this->{name},$path) first($first) between($between) last($last) stop_on_last($stop_on_last)");
 			last if $stop_on_last && $last;
 
 			for my $fn (sort keys %$items)
@@ -795,10 +797,10 @@ sub addShiftSelection
 
 		# next repo
 
-		$id = shift @ids;
-		$repo = $repos->{$id};
+		$path = shift @paths;
+		$repo = $repos->{$path};
 		$items = $repo->{$this->{key}};
-		$last = !@ids || $id eq $last_id ? 1 : 0;
+		$last = !@paths || $path eq $last_path ? 1 : 0;
 	}
 
 	display($dbg_sel,0,"addShiftSelection($this->{name},) returning $any_changes");
@@ -810,14 +812,14 @@ sub addShiftSel
 {
 	my ($this,$repo,$fn) = @_;
 	my $selection = $this->{selection};
-	my $id = $repo->{id};
-	display($dbg_sel+1,0,"addShiftSel($this->{name},$id,$fn)");
+	my $path = $repo->{path};
+	display($dbg_sel+1,0,"addShiftSel($this->{name},$path,$fn)");
 
-	my $repo_sel = $selection->{$id};
+	my $repo_sel = $selection->{$path};
 	if (!$repo_sel)
 	{
 		display($dbg_sel+1,1,"creating new repo_sel");
-		$selection->{$id} = { $fn => 1 };
+		$selection->{$path} = { $fn => 1 };
 		return 1;
 	}
 	elsif (!$repo_sel->{$fn})
@@ -844,14 +846,14 @@ sub deleteSelectionsExcept
 	my $item = $this->{found_item};
 	my $repo = $item->{repo};
 	my $fn = $item->{fn};
-	my $id = $repo->{id};
+	my $path = $repo->{path};
 
-	my $repo_sel = $this->{selection}->{$id};
+	my $repo_sel = $this->{selection}->{$path};
 	my $num_repo_sels = $repo_sel ? scalar(keys %$repo_sel) : 0;
 	my $cur_sel = $repo_sel ? $repo_sel->{$fn} : 0;
 	$cur_sel ||= 0;
 
-	display($dbg_sel,0,"deleteSectionsExcept($this->{name},$id,$fn) num_sels($num_sels) num_repo_sels($num_repo_sels) cur_sel($cur_sel)");
+	display($dbg_sel,0,"deleteSectionsExcept($this->{name},$path,$fn) num_sels($num_sels) num_repo_sels($num_repo_sels) cur_sel($cur_sel)");
 
 	return 0 if !$num_sels;
 	return 0 if $cur_sel && $num_sels == 1 && $num_repo_sels == 1;
@@ -860,7 +862,7 @@ sub deleteSelectionsExcept
 
 	if ($cur_sel)
 	{
-		$repo_sel = $this->{selection}->{$id} = {};
+		$repo_sel = $this->{selection}->{$path} = {};
 		$repo_sel->{$fn} = 1;
 	}
 	return 1;
@@ -870,14 +872,14 @@ sub deleteSelectionsExcept
 sub notifyItemSelected
 {
 	my ($this,$repo,$item) = @_;
-	my $id = $repo ? $repo->{id} : '';
+	my $path = $repo ? $repo->{path} : '';
 	my $fn = $item ? $item->{fn} : '';
 	if ($MONITOR_NOTIFY_EVERY_CHANGE)
 	{
 		$this->{notify_repo} = $repo;
 		$this->{notify_item} = $item;
 	}
-	display($dbg_sel,0,"notifyItemSelected($this->{name},$id,$fn)");
+	display($dbg_sel,0,"notifyItemSelected($this->{name},$path,$fn)");
 	$this->{parent}->{parent}->{right}->notifyItemSelected({
 		is_staged => $this->{is_staged},
 		repo =>$repo,
@@ -893,24 +895,24 @@ sub toggleSelection
 	my $fn = $item->{fn};
 
 	my $repo = $item->{repo};
-	my $id = $repo->{id};
+	my $path = $repo->{path};
 	my $selection = $this->{selection};
-	my $repo_sel = $selection->{$id};
+	my $repo_sel = $selection->{$path};
 	my $selected = $repo_sel ? $repo_sel->{$fn} : 0;
 	$selected |= 0;
 
-	display($dbg_sel,0,"toggleSelection($this->{name},$id,$fn) selected=$selected");
+	display($dbg_sel,0,"toggleSelection($this->{name},$path,$fn) selected=$selected");
 
 	if ($selected)	# unselecting
 	{
 		delete $repo_sel->{$fn};
-		delete $selection->{$id} if !keys %$repo_sel;
+		delete $selection->{$path} if !keys %$repo_sel;
 		$this->{anchor} = '';
 	}
 	elsif (!$repo_sel)
 	{
 		$repo_sel = { $fn => 1 };
-		$selection->{$id} = $repo_sel;
+		$selection->{$path} = $repo_sel;
 		$this->{anchor} = $item;
 		$this->notifyItemSelected($repo,$item);
 	}
@@ -955,11 +957,11 @@ sub doActionRepo
 	# in all cases, the repo's selection is going away
 {
 	my ($this,$how,$repo) = @_;
-	my $id = $repo->{id};
-	display($dbg_actions,0,"doActionRepo($this->{name},$how,$id)");
+	my $path = $repo->{path};
+	display($dbg_actions,0,"doActionRepo($this->{name},$how,$path)");
 
-	my $repo_sel = $this->{selection}->{$id};
-	delete $this->{selection}->{$id};
+	my $repo_sel = $this->{selection}->{$path};
+	delete $this->{selection}->{$path};
 
 	my $doit = 1;						# do all by default
 	my $paths = '';
@@ -1010,11 +1012,11 @@ sub doAction
 	{
 		my $repos = $this->{repos};
 		my $selection = $this->{selection};
-		for my $id (sort keys %$repos)
+		for my $path (sort keys %$repos)
 		{
 			my $doit = $how == $ACTION_DO_ALL;
-			$doit = 1 if $selection->{$id};	# $ACTION_DO_SELECTED
-			return if $doit && !$this->doActionRepo($how,$repos->{$id});
+			$doit = 1 if $selection->{$path};	# $ACTION_DO_SELECTED
+			return if $doit && !$this->doActionRepo($how,$repos->{$path});
 
 			# we currently wait for the callback to delete
 			# unused repos, but we know they went away
@@ -1069,17 +1071,17 @@ sub onRightDown
 		return;
 	}
 
-	display($dbg_cmd,1,"buildMenu repo($repo->{id}) fn(".($item?$item->{fn}:'').")");
+	display($dbg_cmd,1,"buildMenu repo($repo->{path}) fn(".($item?$item->{fn}:'').")");
 
 	my $menu = Wx::Menu->new();
-	foreach my $id ($ID_REVERT_CHANGES..$ID_OPEN_IN_NOTEPAD)
+	foreach my $ctrl_id ($ID_REVERT_CHANGES..$ID_OPEN_IN_NOTEPAD)
 	{
-		my $desc = $menu_desc->{$id};
+		my $desc = $menu_desc->{$ctrl_id};
 		my ($text,$hint) = @$desc;
-		if ($id != $ID_REVERT_CHANGES || !$this->{is_staged})
+		if ($ctrl_id != $ID_REVERT_CHANGES || !$this->{is_staged})
 		{
-			$menu->Append($id,$text,$hint,wxITEM_NORMAL);
-			$menu->AppendSeparator() if $id == $ID_REVERT_CHANGES;
+			$menu->Append($ctrl_id,$text,$hint,wxITEM_NORMAL);
+			$menu->AppendSeparator() if $ctrl_id == $ID_REVERT_CHANGES;
 		}
 	}
 	$this->PopupMenu($menu,[-1,-1]);
@@ -1094,10 +1096,10 @@ sub onItemMenu
 
 	my $repo = $this->{found_repo};
 	my $item = $this->{found_item};
-	my $id = $repo->{id};
+	my $path = $repo->{path};
 	my $fn = $item->{fn};
 	my $selection = $this->{selection};
-	my $repo_sel = $this->{selection}->{$id};
+	my $repo_sel = $this->{selection}->{$path};
 	my $selected = $repo_sel ? $repo_sel->{$fn} : 0;
 	$selected ||= 0;
 	my $multiple = 0;
@@ -1106,7 +1108,7 @@ sub onItemMenu
 		scalar(keys %$repo_sel) > 1 ||
 		scalar(keys %$selection) > 1;
 
-	display($dbg_cmd,0,"onItemMenu($this->{name},$command_id) repo($id) fn($fn) selected($selected) multiple($multiple)");
+	display($dbg_cmd,0,"onItemMenu($this->{name},$command_id) repo($path) fn($fn) selected($selected) multiple($multiple)");
 
 	if ($command_id == $ID_SHOW_EXPLORER)
 	{
@@ -1133,9 +1135,8 @@ sub onItemMenu
 		{
 			for my $id (sort keys %$selection)
 			{
-				my $repo = $this->{repos}->{$id};
-				my $path = $repo->{path};
-				my $repo_sel = $this->{selection}->{$id};
+				my $repo = $this->{repos}->{$path};
+				my $repo_sel = $this->{selection}->{$path};
 				for my $fn (sort keys %$repo_sel)
 				{
 					push @$filenames,"\"$path/$fn\"";;
@@ -1174,11 +1175,11 @@ sub onItemMenu
 			my $count_repos = 0;
 			my $count_files = 0;
 			my $count_deletes = 0;
-			for my $id (sort keys %$selection)
+			for my $path (sort keys %$selection)
 			{
 				$count_repos++;
-				my $repo = $this->{repos}->{$id};
-				my $repo_sel = $this->{selection}->{$id};
+				my $repo = $this->{repos}->{$path};
+				my $repo_sel = $this->{selection}->{$path};
 				for my $fn (keys %$repo_sel)
 				{
 					$count_files++;
@@ -1196,11 +1197,11 @@ sub onItemMenu
 
 			# second pass to actually do it
 
-			for my $id (sort keys %$selection)
+			for my $path (sort keys %$selection)
 			{
 				my $paths = [];
-				my $repo = $this->{repos}->{$id};
-				my $repo_sel = $this->{selection}->{$id};
+				my $repo = $this->{repos}->{$path};
+				my $repo_sel = $this->{selection}->{$path};
 				for my $fn (keys %$repo_sel)
 				{
 					push @$paths,$fn;
