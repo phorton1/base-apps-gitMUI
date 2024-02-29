@@ -78,7 +78,7 @@ sub onRepoMenu
 
 	if ($command_id == $ID_OPEN_DETAILS)
 	{
-		getAppFrame->createPane($ID_REPOS_WINDOW,undef,{repo_id=>$repo->{id}});
+		getAppFrame->createPane($ID_REPOS_WINDOW,undef,{repo_path=>$repo->{path}});
 	}
 	elsif ($command_id == $ID_OPEN_EXPLORER)
 	{

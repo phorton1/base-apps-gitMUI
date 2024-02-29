@@ -26,7 +26,7 @@ use base qw(Wx::Window);
 
 
 my $dbg_life = 0;
-my $dbg_notify = 1;
+my $dbg_notify = 0;
 my $dbg_cmds = 0;
 
 
@@ -134,13 +134,13 @@ sub onButton
 sub notifyRepoSelected
 {
 	my ($this,$repo) = @_;
-	my $id = $repo ? $repo->{id} : '';
-	display($dbg_notify,0,"reposWindowRight::notifyItemSelected($id) called");
+	display($dbg_notify,0,"reposWindowRight::notifyItemSelected($repo->{path}=$repo->{id} called");
 
+	my $path = $repo ? $repo->{path} : '';
 	my $text_ctrl = $this->{text_ctrl};
 	$text_ctrl->clearContent();
 
-	if (!$id)
+	if (!$path)
 	{
 		if ($this->{repo})
 		{
@@ -155,11 +155,14 @@ sub notifyRepoSelected
 		$text_ctrl->setRepoContext($repo);
 		$repo->toTextCtrl($text_ctrl);
 		historyToTextCtrl($text_ctrl,$repo,0);
-
 	}
 
 	$text_ctrl->Refresh();
-	$this->{repo_name}->SetLabel($id);
+	my $kind =
+		$repo->{parent_repo} ? "SUBMODULE " :
+		@{$repo->{used_in}} ? "MAIN_MODULE " : '';
+
+	$this->{repo_name}->SetLabel($kind.$path);
 }
 
 

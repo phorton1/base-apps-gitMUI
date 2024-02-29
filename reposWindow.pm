@@ -84,7 +84,7 @@ sub new
     $vert_splitter->SplitVertically($left,$right,300);
 
 	$this->doLayout();
-	$left->selectRepo($data->{repo_id}) if $data->{repo_id};
+	$left->selectRepo($data->{repo_path}) if $data->{repo_path};
 
     EVT_SIZE($this,\&onSize);
 	EVT_SPLITTER_SASH_POS_CHANGED($this, $ID_SPLITTER_VERT, \&onSashPosChanged);
@@ -104,8 +104,8 @@ sub setPaneData
 	if ($data && ref($data))
 	{
 		mergeHash($this->{data},$data);
-		my $repo_id = $data->{repo_id};
-		$this->{left}->selectRepo($repo_id) if $repo_id;
+		my $repo_path = $data->{repo_path};
+		$this->{left}->selectRepo($repo_path) if $repo_path;
 	}
 }
 
@@ -177,7 +177,7 @@ sub getDataForIniFile
 	my $data = {};
 
 	$data->{left_width} = $this->{left_width};
-	$data->{repo_id} = $this->{left}->{selected_id};
+	$data->{repo_path} = $this->{left}->{selected_path};
 
 	return $data;
 }

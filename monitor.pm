@@ -53,10 +53,22 @@
 # The (probable) main downside to using Win32::ChangeNotify is that
 # it *may* "lock" the directories against renaming or moving, and
 # will fail if directores ARE moved or renamed. However, it is assumed
-# that the worst case, in either scheme, is that the UI program has
-# some way of turning everything off, removing the cache, retarting.
+# that the worst case, in either scheme, is that the UI program is
+# stopped and restarted.
 #
-# Those are details yet to be implemented.
+# SUBMODULES
+#
+# The monitor works with submodules, but not optimally. A submodule
+# will be represented in the repo_list as an additional repos in
+# addition to the parent repo.  The submodule will NOT be excluded
+# from the monitor for the parent repo, nor will it, by itself,
+# trigger the 'exclude subfolders' scheme.
+#
+# Therefore the parent will receive superflous notify events when
+# files in the submodule are modified.  As mentioned, this will be
+# sub-optimal, but *should not* cause any problems, so this
+# implementation is unchanged by the introduction of submodules
+# into my repositories.
 
 
 package apps::gitUI::monitor;

@@ -47,11 +47,31 @@ sub setRepoUI { $repo_ui = shift; }
 #---------------------------
 # ctor
 #---------------------------
+# Before the introduction of submodules, there was a one-to-one
+# correspondence between the path of a repo and it's id on github.
+# When constructing a repo for a submodule, the ctor takes three
+# additional parameters:
+#
+#	the parent_repo
+#	the relative path of the submodule within the parent
+#	the path to the (master) copy of the submodule (for the github id)
+#
+# The presence of {parent_repo} or {rel_path} indicates it is a submodule.
+# submodules add the following to OTHER repos in parseRepos"
+#
+#		parent repo - gets {submodules} with the submodule's paths
+#		master_module - gets {used_in} with all submodule paths that denormalize it
+#
+# For MY submodules, the branch is always 'master'.
+#
+# Submodules inherit their parents 'private' bits, which
+# must be declared BEFORE the SUBMODULE statement, and
+# are always assumed to be 'mine'.
 
 
 sub new
 {
-	my ($class, $num, $path, $branch, $section_path, $section_name) = @_;
+	my ($class, $num, $path, $branch, $section_path, $section_name, $parent_repo, $rel_path, $submodule_path) = @_;
 	$branch ||= 'master';
 	$section_name ||= $section_path;
 
@@ -63,8 +83,13 @@ sub new
 
 		num 	=> $num,
 		path 	=> $path,
-		id      => repoPathToId($path),
+		id      => repoPathToId($submodule_path || $path),
 		branch	=> $branch,
+
+		parent_repo => $parent_repo,
+		rel_path	=> $rel_path,
+		submodules  => shared_clone([]),
+		used_in		=> shared_clone([]),
 
 		section_path => $section_path,
 		section_name => $section_name,
@@ -72,7 +97,8 @@ sub new
 		# parsed fields
 
 		mine     => 1,						# if !FORKED && !NOT_MINE in file
-		private  => 0,						# if PRIVATE in file
+		private  => $parent_repo ? $parent_repo->{private} : 0,
+											# if PRIVATE in file or inherited for submdules
 		forked   => 0,						# if FORKED [optional_blah] in file
 		parent   => '',						# "Forked from ..." or "Copied from ..."
 		descrip  => '',						# description from github
@@ -213,7 +239,27 @@ sub pathWithinSection
 #------------------------------------------
 # check git/.config files
 #------------------------------------------
-
+# Submodules are handled slightly differently.
+# The .git/config file is located in the parent repo at
+#
+#	{parent_path}/.git/modules/{rel_path}/config
+#
+# And, of course, the url in the [remote] section
+# maps to/gives the id of the master module.
+#
+# There are other files we *could* check for submodules:
+#
+#	{parent_path}/.gitmodules
+#
+#		[submodule "copy_sub1"]
+#			path = copy_sub1
+#			url = https://github.com/phorton1/junk-test_repo-test_sub1
+#
+#	{parent_patah}/{rel_path}/.git (is a file)
+#
+#		 gitdir: ../.git/modules/copy_sub1
+#
+# but we don't.
 
 sub checkGitConfig
 	# For every repo, validate that
@@ -237,14 +283,23 @@ sub checkGitConfig
 		return 0;
 	}
 
+	my $rel_path = $this->{rel_path};
+	my $parent_repo = $this->{parent_repo};
     my $git_config_file = "$path/.git/config";
+
+	if ($parent_repo)
+	{
+		$git_config_file =
+			"$parent_repo->{path}/.git/modules/".
+			$this->{rel_path}."/config";
+	}
+
     my $text = getTextFile($git_config_file);
 	if (!$text)
 	{
-		$this->repoError("checkGitConfig($path) no text in .git/config");
+		$this->repoError("checkGitConfig($path) no text in $git_config_file");
 		return 0;
 	}
-
 
 	my $branch;
 	my $errors = 0;
@@ -335,24 +390,31 @@ sub checkGitConfig
 			}
 
 			# the .git extension on the url is optional
+			# for submodules we map github id (from the url) to a
+			# repo path and make sure it exists.
 
 			else
 			{
 				$url =~ s/\.git$//;
-				if ($url ne repoPathToId($path))
+
+				if ($this->{parent_repo})
+				{
+					my $sub_path = repoIdToPath($url);
+					# no warnings 'once';
+					if (!apps::gitUI::repos::getRepoById($url))
+					{
+						$errors++;
+						$this->repoError("checkGitConfig($path) could not find master module for remote url: $url==$sub_path");
+					}
+				}
+
+				elsif ($url ne $this->{id})
 				{
 					$errors++;
-					$this->repoError("checkGitConfig($path) incorrect remot url: $url != ".repoPathToId($path));
+					$this->repoError("checkGitConfig($path) incorrect remote url: $url != $this->{id}");
 				}
 			}
 		}
-
-		# submodule handling
-		#
-		#	git_repositories.txt gets SUBMODULE local_path  remote_path
-		#		that maps a local sub-repo (i.e. /copy_sub1 from /junk/test_repo2, to a known
-		#		'master' github repositoriy (i.e. /junk/test_repo1/test_sub1)
-
 	}
 
 	if (!$has_remote_origin)
@@ -384,15 +446,24 @@ sub checkGitConfig
 
 sub contentLine
 {
-	my ($this,$text_ctrl,$bold,$key) = @_;
+	my ($this,$text_ctrl,$bold,$key,$extra_key) = @_;
+	my $label = $extra_key || $key;
+
 	my $value = $this->{$key} || '';
 	return if !defined($value) || $value eq '';
 
+	$value = $value->{path} if $key eq 'parent_repo';
+	$value = repoIdToPath($value)
+		if $extra_key && $extra_key eq 'main_module';
+
 	my $context;
-	$context = { repo_path => $value } if $key eq 'path';
+	$context = { repo_path => $value } if
+		$key eq 'path' ||
+		$key eq 'parent_repo' ||
+		($extra_key && $extra_key eq 'main_module');
 
 	my $line = $text_ctrl->addLine();
-	$text_ctrl->addPart($line, 0, $color_black, pad($key,12)." = " );
+	$text_ctrl->addPart($line, 0, $color_black, pad($label,12)." = " );
 	$text_ctrl->addPart($line, $bold, $color_blue, $value, $context );
 }
 
@@ -402,18 +473,24 @@ sub contentArray
 	my ($this,$text_ctrl,$bold,$key,$color) = @_;
 	$color ||= $color_blue;
 	my $array = $this->{$key};
-	return '' if !@$array;
+	return '' if !$array || !@$array;
 
 	$text_ctrl->addSingleLine($bold, $color_black, $key);
 	for my $item (@$array)
 	{
+		my $value = $item;
+
 		my $context;
-		$context = { repo=>$this, file=>$item } if $key eq 'docs';
-		$context = { repo_path => $item } if $key eq 'uses' || $key eq 'used_by';
+		$context = { repo=>$this, file=>$value } if $key eq 'docs';
+		$context = { repo_path => $value } if
+			$key eq 'uses' ||
+			$key eq 'used_by' ||
+			$key eq 'submodules' ||
+			$key eq 'used_in';
 
 		my $line = $text_ctrl->addLine();
 		$text_ctrl->addPart($line, 0, $color_black, pad('',10));
-		$text_ctrl->addPart($line, $bold, $color, $item, $context);
+		$text_ctrl->addPart($line, $bold, $color, $value, $context);
 	}
 }
 
@@ -426,6 +503,10 @@ sub toTextCtrl
 	$text_ctrl->addLine();
 
 	$this->contentLine($text_ctrl,1,'path');
+	$this->contentLine($text_ctrl,1,'id');
+	$this->contentLine($text_ctrl,1,'id','main_module') if $this->{parent_repo};
+	$this->contentLine($text_ctrl,1,'parent_repo');
+	$this->contentLine($text_ctrl,1,'rel_path');
 	$this->contentLine($text_ctrl,0,'num');
 	$this->contentLine($text_ctrl,0,'branch');
 	$this->contentLine($text_ctrl,0,'section_name');
@@ -436,6 +517,9 @@ sub toTextCtrl
 	$this->contentLine($text_ctrl,0,'parent');
 	$this->contentLine($text_ctrl,0,'descrip');
 	$this->contentLine($text_ctrl,0,'page_header');
+
+	$this->contentArray($text_ctrl,0,'submodules');
+	$this->contentArray($text_ctrl,0,'used_in');
 
 	$this->contentArray($text_ctrl,0,'docs');
 	$this->contentArray($text_ctrl,0,'uses');

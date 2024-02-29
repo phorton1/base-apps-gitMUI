@@ -328,8 +328,11 @@ sub doGitHub
 
 	for my $repo (@$repo_list)
 	{
+		# submodules (rel_path} are allowed to exist without
+		# an explicit repo on git hub.  This whole thing is messy
+
 		$repo->repoError("repo($repo->{id} not found on github!")
-			if !$repo->{found_on_github};
+			if !$repo->{rel_path} && !$repo->{found_on_github};
 	}
 
 }   #   getGitHubRepos()

@@ -44,6 +44,8 @@ my $dbg_draw = 1;
 	# -1 to show drag rectangles
 my $dbg_mouse = 1;
 	# -1 to show moves
+my $dbg_click = 1;
+	# debug what happens when you click on a link
 my $dbg_refresh = 1;
 	# -1 to show drag rectangles
 my $dbg_word = 1;
@@ -1017,7 +1019,7 @@ sub mouseOver
 			}
 			else
 			{
-				$status = "repo: $repo->{id}";
+				$status = "repo: $repo->{id} = $repo->{path}";
 			}
 		}
 	}
@@ -1034,9 +1036,10 @@ sub mouseClick
 	my ($this,$hit)  = @_;
 
 	my $show_part = $hit->{part};
-	display($dbg_mouse,0,"mouseClick($show_part->{text})");
+	display($dbg_click,0,"mouseClick($show_part->{text})");
 
 	my ($repo,$path) = getHitContext($hit);
+	display($dbg_click,1,"getHitContext repo=".($repo?$repo->{path}:'undef')." path="._def($path));
 
 	# decide the best thing to do on a left click
 	# path = md,gif,png,jpg,jpeg,pdf - shell
@@ -1056,13 +1059,21 @@ sub mouseClick
 	}
 	elsif ($repo)
 	{
+		# when we click on 'used_in' submodules in master module list
+		# it wants to go to gitUI because the linked submodule has the
+		# same id as this repository.  We just need to change to paths
+
 		my $repo_context = $this->{repo_context};
+		display($dbg_click,1,"repo_context=".($repo_context?$repo_context->{path}:'undef'));
+
 		my $is_this_repo = $repo_context &&
-			$repo->{id} eq $repo_context->{id};
+			$repo->{path} eq $repo_context->{path} ? 1 : 0;
+
+		display($dbg_click,1,"repo is_this_repo($is_this_repo)");
 
 		$is_this_repo ?
 			execNoShell('git gui',$repo->{path}) :
-			$this->{frame}->createPane($ID_REPOS_WINDOW,undef,{repo_id=>$repo->{id}});
+			$this->{frame}->createPane($ID_REPOS_WINDOW,undef,{repo_path=>$repo->{path}});
 	}
 	elsif ($path)
 	{

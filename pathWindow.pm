@@ -55,20 +55,20 @@ sub new
 }
 
 
-sub repoFromId
+sub repoFromIdNum
 {
-	my ($id) = @_;
+	my ($id_num) = @_;
 	my $repo_list = getRepoList();
-	return $repo_list->[$id  - $BASE_ID];
+	return $repo_list->[$id_num  - $BASE_ID];
 }
 
 
-sub repoPathFromId
+sub repoPathFromIdNum
 {
-	my ($id) = @_;
+	my ($id_num) = @_;
 	my $repo_list = getRepoList();
 	# display(0,0,"repoPathFromId($id) num=".scalar(@$repo_list));
-	return $repo_list->[$id  - $BASE_ID]->{path};
+	return $repo_list->[$id_num  - $BASE_ID]->{path};
 }
 
 
@@ -77,8 +77,10 @@ sub onEnterLink
 	my ($ctrl,$event) = @_;
 	my $event_id = $event->GetId();
 	my $this = $ctrl->GetParent();
-	my $path = repoPathFromId($event_id);
-	$this->{frame}->SetStatusText($path);
+	my $repo = repoFromIdNum($event_id);
+	my $show = "$repo->{path} = $repo->{id}";
+	my $path = repoPathFromIdNum($event_id);
+	$this->{frame}->SetStatusText($show);
 	my $font = Wx::Font->new($this->GetFont());
 	$font->SetWeight (wxFONTWEIGHT_BOLD );
 	$ctrl->SetFont($font);
@@ -101,10 +103,10 @@ sub onLeftDown
 	my ($ctrl,$event) = @_;
 	my $event_id = $event->GetId();
 	my $this = $ctrl->GetParent();
-	my $repo = repoFromId($event_id);
-	my $id = $repo->{id};
-	display($dbg_win,0,"onLeftDown($event_id,$id)");
-	$this->{frame}->createPane($ID_REPOS_WINDOW,undef,{repo_id=>$id});
+	my $repo = repoFromIdNum($event_id);
+	my $path = $repo->{path};
+	display($dbg_win,0,"onLeftDown($event_id,$path)");
+	$this->{frame}->createPane($ID_REPOS_WINDOW,undef,{repo_path=>$path});
 	# execNoShell('git gui',$path);
 }
 
@@ -114,7 +116,7 @@ sub onRightDown
 	my ($ctrl,$event) = @_;
 	my $event_id = $event->GetId();
 	my $this = $ctrl->GetParent();
-	my $repo = repoFromId($event_id);
+	my $repo = repoFromIdNum($event_id);
 	display($dbg_win,0,"onRightDown($event_id,$repo->{path}");
 	$this->popupRepoMenu($repo);
 
@@ -229,14 +231,14 @@ sub populate
 				addSectionCtrl($ctrl_section,$ctrl,$section->{name});
 			}
 
-			my $id = $repo->{num} + $BASE_ID;
+			my $id_num = $repo->{num} + $BASE_ID;
 			my $display_name = $repo->pathWithinSection();
-			display($dbg_pop,1,"hyperLink($id,$display_name)");
+			display($dbg_pop,1,"hyperLink($id_num,$display_name)");
 
 			my $color = linkDisplayColor($repo);
 			my $ctrl = apps::gitUI::myHyperlink->new(
 				$this,
-				$id,
+				$id_num,
 				$display_name,
 				[0,0],
 				[$COLUMN_WIDTH-2,16],
@@ -267,7 +269,7 @@ sub notifyRepoChanged
 			my $id = $ctrl->GetId();
 			if ($id > 0)
 			{
-				my $found_repo = repoFromId($id);
+				my $found_repo = repoFromIdNum($id);
 				if ($repo->{path} eq $found_repo->{path})
 				{
 					my $color = linkDisplayColor($repo);

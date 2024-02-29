@@ -38,6 +38,7 @@ BEGIN
 		getRepoHash
 		getRepoList
 		getRepoById
+		getRepoByPath
 
 		canPushRepos
 		setCanPush
@@ -55,6 +56,13 @@ my $repos_can_push = shared_clone({});
 
 sub getRepoHash		{ return $repo_hash; }
 sub getRepoList		{ return $repo_list; }
+
+
+sub getRepoByPath
+{
+	my ($path) = @_;
+	return $repo_hash->{$path};
+}
 
 
 sub getRepoById
@@ -115,10 +123,28 @@ sub parseRepos
 			$line =~ s/^\s+//;
 			$line =~ s/\s+$//;
 
+			if ($line =~ /SUBMODULE\t(.*)\t(.*)$/)
+			{
+				my ($rel_path,$sub_path) = ($1,$2);
+				my $path = makePath($repo->{path},$rel_path);
+				repoWarning(undef,0,1,"SUBMODULE($repo_num,$rel_path,$sub_path)");
+				my $sub_module = apps::gitUI::repo->new(
+					$repo_num++,
+					$path,
+					'master',
+					$section_path,
+					$section_name,
+					$repo,
+					$rel_path,
+					$sub_path);
+				push @$repo_list,$sub_module;
+				$repo_hash->{$path} = $sub_module;
+			}
+
 			# get section path RE and optional name if different
 			# SECTION and path-branch delimiter is TAB!!
 
-			if ($line =~ /^SECTION\t/i)
+			elsif ($line =~ /^SECTION\t/i)
 			{
 				my @parts = split(/\t/,$line);
 				$section_path = $parts[1];
@@ -137,7 +163,7 @@ sub parseRepos
 				if (!$TEST_JUNK_ONLY || $path =~ /junk/)
 				{
 					repoDisplay($dbg_parse+1,1,"repo($repo_num,$path,$branch,$section_path,$section_name)");
-					$repo = apps::gitUI::repo->new($repo_num++,$path,$branch,$section_path,,$section_name);
+					$repo = apps::gitUI::repo->new($repo_num++,$path,$branch,$section_path,$section_name);
 
 					push @$repo_list,$repo;
 					$repo_hash->{$path} = $repo;
@@ -228,7 +254,10 @@ sub parseRepos
         return;
     }
 
-	# set used_by
+	# set used_by list
+	# for submodules, set
+	#		{submodules} list of paths on parent
+	#		{used_in} list of paths on master module
 
 	for my $repo (@$repo_list)
 	{
@@ -242,6 +271,24 @@ sub parseRepos
 			else
 			{
 				push @{$used_repo->{used_by}},$repo->{path};
+			}
+		}
+
+		my $parent_repo = $repo->{parent_repo};
+		if ($repo->{parent_repo})
+		{
+			repoDisplay($dbg_parse,1,"submodule repo($repo->{path}");
+			repoDisplay($dbg_parse,2,"added to parent($parent_repo->{path}} submodules");
+			push @{$parent_repo->{submodules}},$repo->{path};
+			my $master_repo = getRepoById($repo->{id});
+			if (!$master_repo)
+			{
+				repoError("Could not find master module($repo->{id}) for submodule($repo->{path}");
+			}
+			else
+			{
+				repoDisplay($dbg_parse,2,"added to master_repo($master_repo->{path}} used_in");
+				push @{$master_repo->{used_in}},$repo->{path};
 			}
 		}
 	}

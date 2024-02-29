@@ -35,7 +35,7 @@ my $dbg_life = 0;
 my $dbg_pop = 1;
 my $dbg_layout = 1;
 my $dbg_notify = 1;
-my $dbg_sel = 0;
+my $dbg_sel = -2;
 
 
 
@@ -63,8 +63,8 @@ sub new
 	$this->{parent} = $parent;
 	$this->{frame} = $parent->{frame};
 	$this->{ctrls} = [];
-	$this->{ctrls_by_id} = {};
-	$this->{selected_id} = '';
+	$this->{ctrls_by_path} = {};
+	$this->{selected_path} = '';
 	$this->{bold_font} = $this->GetFont();
 	$this->{bold_font}->SetWeight(wxFONTWEIGHT_BOLD);
 
@@ -99,9 +99,9 @@ sub onEnterLink
 	my $this = $ctrl->GetParent();
 	my $ctrl_id = $event->GetId();
 	my $repo = repoFromCtrlId($ctrl_id);
-	my $path = $repo->{path};
+	my $show = "$repo->{path} = $repo->{id}";
 
-	$this->{frame}->SetStatusText($path);
+	$this->{frame}->SetStatusText($show);
 	$ctrl->SetFont($this->{bold_font});
 	$ctrl->Refresh();
 	$event->Skip();
@@ -118,7 +118,7 @@ sub onLeaveLink
 
 	$this->{frame}->SetStatusText('');
 	$ctrl->SetFont($this->GetFont())
-		if $repo->{id} ne $this->{selected_id};
+		if $repo->{path} ne $this->{selected_path};
 	$ctrl->Refresh();
 	$event->Skip();
 }
@@ -137,27 +137,26 @@ sub onRightDown
 
 sub selectRepo
 {
-	my ($this,$id) = @_;
-	display($dbg_sel,0,"selectRepo($id)");
+	my ($this,$path) = @_;
+	display($dbg_sel,0,"selectRepo($path)");
 
-	my $ctrl = $this->{ctrls_by_id}->{$id};
-	return !error("Could not find ctrl($id)")
+	my $ctrl = $this->{ctrls_by_path}->{$path};
+	return !error("Could not find ctrl($path)")
 		if !$ctrl;
-	my $repo = getRepoById($id);
-	return !error("Could not find repo($id)")
+	my $repo = getRepoByPath($path);
+	return !error("Could not find repo($path)")
 		if !$repo;
 
-	my $selected_id = $this->{selected_id};
-	if ($selected_id && $selected_id ne $id)
+	my $selected_path = $this->{selected_path};
+	if ($selected_path && $selected_path ne $path)
 	{
-		my $prev_sel = $this->{ctrls_by_id}->{$selected_id};
+		my $prev_sel = $this->{ctrls_by_path}->{$selected_path};
 		$prev_sel->SetBackgroundColour($color_white);
 		$prev_sel->SetFont($this->GetFont());
 		$prev_sel->Refresh();
 	}
 
-	my $path = $repo->{path};
-	$this->{selected_id} = $id;
+	$this->{selected_path} = $path;
 	$ctrl->SetBackgroundColour($color_medium_grey);
 	$ctrl->SetFont($this->{bold_font});
 	$ctrl->Update();
@@ -189,7 +188,8 @@ sub selectRepo
 		$this->Update();
 	}
 
-	$this->{frame}->SetStatusText($path);
+	display($dbg_sel+1,1,"finishing select($path)=$repo->{id}");
+	$this->{frame}->SetStatusText("$path == $repo->{id}");
 	$this->{parent}->{right}->notifyRepoSelected($repo);
 
 }
@@ -202,7 +202,7 @@ sub onLeftDown
 	my $this = $ctrl->GetParent();
 	my $ctrl_id = $event->GetId();
 	my $repo = repoFromCtrlId($ctrl_id);
-	$this->selectRepo($repo->{id});
+	$this->selectRepo($repo->{path});
 	$event->Skip();
 }
 
@@ -256,7 +256,7 @@ sub populate
 	my $sections = groupReposBySection();
 	$this->DestroyChildren();
 	$this->{ctrls} = [];
-	$this->{ctrls_by_id} = {};
+	$this->{ctrls_by_path} = {};
 
 	my $ypos = 5;
 
@@ -277,20 +277,20 @@ sub populate
 				$ypos += $LINE_HEIGHT;
 			}
 
-			my $id = $repo->{num} + $BASE_ID;
+			my $id_num = $repo->{num} + $BASE_ID;
 			my $display_name = $repo->pathWithinSection();
-			display($dbg_pop,1,"hyperLink($id,$display_name)");
+			display($dbg_pop,1,"hyperLink($id_num,$display_name)");
 
 			my $color = linkDisplayColor($repo);
 			my $ctrl = apps::gitUI::myHyperlink->new(
 				$this,
-				$id,
+				$id_num,
 				$display_name,
 				[5,$ypos],
 				[-1,-1],
 				$color);
 			push @{$this->{ctrls}},$ctrl;
-			$this->{ctrls_by_id}->{$repo->{id}} = $ctrl;
+			$this->{ctrls_by_path}->{$repo->{path}} = $ctrl;
 			$ypos += $LINE_HEIGHT;
 
 			$section_started = 1;
