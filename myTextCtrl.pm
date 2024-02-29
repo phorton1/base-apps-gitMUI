@@ -75,6 +75,7 @@ sub new
 {
     my ($class,$parent) = @_;
 	display($dbg_ctrl,0,"new myTextCtrl()");
+		# $parent) frame="._def($parent->{frame}));
 
     my $this = $class->SUPER::new($parent);	# ,-1,[0,0],[100,100],wxVSCROLL | wxHSCROLL);
 	bless $this,$class;

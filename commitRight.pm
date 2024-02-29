@@ -56,7 +56,8 @@ my $COMMIT_MSG_HEIGHT = $DEFAULT_COMMAND_AREA_HEIGHT - 10;
 sub new
 {
     my ($class,$parent,$main_splitter) = @_;
-	display($dbg_life,0,"new commitRight()");
+	display($dbg_life,0,"new commitRight()");  #
+		$parent,$main_splitter) frame="._def($parent->{frame}));
     my $this = $class->SUPER::new($main_splitter);
     $this->{parent} = $parent;
 	$this->{frame} = $parent->{frame};
@@ -67,10 +68,18 @@ sub new
 
 	my $right_splitter  = $this->{right_splitter}  = Wx::SplitterWindow->new($this, $ID_RIGHT_SPLITTER, [0, 0]);
 	$right_splitter->SetMinimumPaneSize($DEFAULT_COMMAND_AREA_HEIGHT);
+	# $right_splitter->{frame} = $this->{frame};
+	# if I wanted to be consistent
+	warning(0,0,"right_splitter->frame="._def($right_splitter->{frame}));
 
 	my $top_panel = $this->{top_panel} = Wx::Panel->new($right_splitter);
 	my $bottom_panel = $this->{bottom_panel} = Wx::Panel->new($right_splitter);
 
+	$top_panel->{frame} = $this->{frame};
+		# needed to pass to myTextCtrl for $frame->SetStatusText() calls
+
+	# $bottom_panel->{frame} = $this->{frame};
+	# if I wanted to be consistent
 	$top_panel->SetBackgroundColour($color_yellow);
 	$bottom_panel->SetBackgroundColour($color_light_grey);
 
