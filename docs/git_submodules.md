@@ -187,3 +187,116 @@ repo.
 In a way, the SUBMODULE is just a way of specifying
 an additional repo in the system, where the path
 is not cannonical.
+
+
+
+## USING SUBMODULES
+
+Cloning a repository that contains submodules is done automatically
+if you pass --recursive on the command line:
+
+	git clone --recursive https://github.com/phorton1/junk-test_repo2 some_other_name
+
+
+After cloning a new submodules you *may* (likely) need to
+checkout the 'master' branch before proceeding, possibly from the
+directory:
+
+	git checkout master
+
+
+Updating a repository that has submodules that are out of date, i.e.
+after committing and pushing the /junk/test_repo1/test_sub1 repo,
+the copy in test_repo2 can be updated by chdir /junk/test_repo2
+and running:
+
+	git submodule update --recursive --remote
+
+
+
+## MANAGING CHANGES IN MULTIPLE REPOS
+
+The rubber meets the road.
+
+Submodules highlight the problem, but the issue of multiple changes
+to the same repo from different copies existed already in my work
+with rPi versus the Windows machine.
+
+Each repo can (pretty) easily determine the number of changes it is
+behind, or ahead, of the remote with the git commands command
+
+	git remote update
+	git status -b --porcelain'))
+
+Git status returns an easily parsed message that looks like this:
+(note the bracket needs to be escaped for MD file):
+
+	master...origin/master \[ahead 1, behind 1]
+	?? untracked_file
+	_M modified file
+
+### not BEHIND
+
+As long as the local copy is not behind the remote,
+commits make sense, at least for THIS local copy,
+and a push will work.  Every commit will put you
+one more 'ahead' of the remote, and the push will
+make them the same.
+
+
+### BEHIND and not AHEAD - STASH
+
+Likewise, if behind != 0, and there are no local commits
+(ahead==0) then  it is possible to update the local repo
+from the remote using one of the git commands.
+
+If there are local unstaged or staged changes, the process
+can proceed as long as a 'stash' is done on the local first.
+It is possible to then use that 'stash' against the new
+repo to generate a new list of unstaged changes (I think).
+
+### BEHIND AND AHEAD
+
+The real problem arises when the local repository is both
+behind, and ahead of the remote.  In otherwords, there are
+local unpushed commits, and remote commits that need to be
+merged.
+
+I am not sure of all of the details, but I *think* an update
+(fetch and automatic merge) can be done when the changes are
+not on the same files.
+
+But a PUSH will fail as the local repo is not starting at
+the same commit as the remote repo, and it PUSH will tell
+you that:
+
+	ERROR - cannot push because a reference that you are trying
+	to update on the remote contains commits that are not present
+	locally.
+
+This is a complicated situation that requires a merge, and
+one I have not learned enough about.
+
+### Initial Helper Implementation
+
+To begin with I am going to try to implement a 'Status' button
+in the repo info window that will add AHEAD and BEHIND fields
+to the repo and redisplay it.
+
+This *may* be done via new methods in repoGit, making use of
+Git::Raw, or it may be implemented via backtick commands as is
+currently don in Pub::ServiceUpdate.pm.
+
+
+
+
+
+
+
+
+
+
+
+
+
+--------- end of readme ------------
