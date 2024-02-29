@@ -94,6 +94,11 @@ sub new
 		section_path => $section_path,
 		section_name => $section_name,
 
+		# status fields
+
+		ahead	=> 0,
+		behind  => 127,
+
 		# parsed fields
 
 		mine     => 1,						# if !FORKED && !NOT_MINE in file
@@ -495,6 +500,18 @@ sub contentArray
 }
 
 
+sub addTextForNum
+{
+	my ($this,$text,$field_name,$show_field) = @_;
+	my $num = $this->{$field_name};
+	if ($num)
+	{
+		$text .= ' ' if $text;
+		$text .= "$show_field($num)";
+	}
+	return $text;
+}
+
 sub addTextForHashNum
 {
 	my ($this,$text,$field_name,$show_field) = @_;
@@ -524,6 +541,9 @@ sub toTextCtrl
 	$short_status = $this->addTextForHashNum($short_status,'unstaged_changes',"UNSTAGED");
 	$short_status = $this->addTextForHashNum($short_status,'staged_changes',"STAGED");
 	$short_status = $this->addTextForHashNum($short_status,'remote_changes',"REMOTE");
+	$short_status = $this->addTextForNum($short_status,'ahead',"AHEAD");
+	$short_status = $this->addTextForNum($short_status,'behind',"AHEAD");
+
 	if ($short_status)
 	{
 		$short_status = pad('status',12)." = ".$short_status;
