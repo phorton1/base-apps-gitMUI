@@ -495,6 +495,21 @@ sub contentArray
 }
 
 
+sub addTextForHashNum
+{
+	my ($this,$text,$field_name,$show_field) = @_;
+	my $hash = $this->{$field_name};
+	my $num = keys %$hash;
+	if ($num)
+	{
+		$text .= ' ' if $text;
+		$text .= "$show_field($num)";
+	}
+	return $text;
+}
+
+
+
 sub toTextCtrl
 {
 	my ($this,$text_ctrl) = @_;
@@ -504,6 +519,18 @@ sub toTextCtrl
 
 	$this->contentLine($text_ctrl,1,'path');
 	$this->contentLine($text_ctrl,1,'id');
+
+	my $short_status = '';
+	$short_status = $this->addTextForHashNum($short_status,'unstaged_changes',"UNSTAGED");
+	$short_status = $this->addTextForHashNum($short_status,'staged_changes',"STAGED");
+	$short_status = $this->addTextForHashNum($short_status,'remote_changes',"REMOTE");
+	if ($short_status)
+	{
+		$short_status = pad('status',12)." = ".$short_status;
+		$text_ctrl->addSingleLine(1, $color_black, $short_status);
+		$text_ctrl->addLine();
+	}
+
 	$this->contentLine($text_ctrl,1,'id','main_module') if $this->{parent_repo};
 	$this->contentLine($text_ctrl,1,'parent_repo');
 	$this->contentLine($text_ctrl,1,'rel_path');
