@@ -56,8 +56,8 @@ my $COMMIT_MSG_HEIGHT = $DEFAULT_COMMAND_AREA_HEIGHT - 10;
 sub new
 {
     my ($class,$parent,$main_splitter) = @_;
-	display($dbg_life,0,"new commitRight()");  #
-		$parent,$main_splitter) frame="._def($parent->{frame}));
+	display($dbg_life,0,"new commitRight()");
+		# $parent,$main_splitter) frame="._def($parent->{frame}));
     my $this = $class->SUPER::new($main_splitter);
     $this->{parent} = $parent;
 	$this->{frame} = $parent->{frame};
