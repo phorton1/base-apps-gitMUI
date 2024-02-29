@@ -14,7 +14,8 @@ use Wx::Event qw(
 	EVT_SIZE
 	EVT_LEFT_DOWN
 	EVT_BUTTON
-	EVT_UPDATE_UI_RANGE );
+	EVT_UPDATE_UI_RANGE
+	EVT_SPLITTER_SASH_POS_CHANGED );
 use apps::gitUI::utils;
 use apps::gitUI::repos;
 use apps::gitUI::myTextCtrl;
@@ -27,6 +28,7 @@ use base qw(Wx::Window);
 
 
 my $dbg_life = 0;
+my $dbg_layout = 1;
 my $dbg_notify = 1;
 my $dbg_cmds = 0;
 
@@ -37,43 +39,52 @@ BEGIN {
 	);
 }
 
+my $ID_RIGHT_SPLITTER = 9292;
+
 my $PANE_TOP = 25;
 my $FILENAME_LEFT = 150;
 my $NOTE_LEFT = 400;
-my $COMMAND_AREA_HEIGHT   = 120;
+my $DEFAULT_COMMAND_AREA_HEIGHT   = 120;
+
 
 my $COMMIT_MSG_TOP = 5;
 my $COMMIT_MSG_LEFT  = 80;
-my $COMMIT_MSG_HEIGHT = $COMMAND_AREA_HEIGHT - 10;
+my $COMMIT_MSG_HEIGHT = $DEFAULT_COMMAND_AREA_HEIGHT - 10;
 
 sub new
 {
-    my ($class,$parent,$splitter) = @_;
+    my ($class,$parent,$main_splitter) = @_;
 	display($dbg_life,0,"new commitRight()");
-    my $this = $class->SUPER::new($splitter);
+    my $this = $class->SUPER::new($main_splitter);
     $this->{parent} = $parent;
 	$this->{frame} = $parent->{frame};
 
 	$this->{diff_repo} = '';
 	$this->{diff_item} = '';
+	$this->{bottom_height} = $DEFAULT_COMMAND_AREA_HEIGHT;
 
-	$this->SetBackgroundColour($color_yellow);
+	my $right_splitter  = $this->{right_splitter}  = Wx::SplitterWindow->new($this, $ID_RIGHT_SPLITTER, [0, 0]);
+	$right_splitter->SetMinimumPaneSize($DEFAULT_COMMAND_AREA_HEIGHT);
 
-	$this->{what_ctrl} = Wx::StaticText->new($this,-1,'',[5,5],[$FILENAME_LEFT-10,20]);
-	my $hyperlink = $this->{hyperlink} = apps::gitUI::myHyperlink->new($this,-1,'',[$FILENAME_LEFT,5]);
-	$this->{note_ctrl} = Wx::StaticText->new($this,-1,'',[$NOTE_LEFT,5]);
-	$this->{diff_ctrl} = apps::gitUI::myTextCtrl->new($this);
+	my $top_panel = $this->{top_panel} = Wx::Panel->new($right_splitter);
+	my $bottom_panel = $this->{bottom_panel} = Wx::Panel->new($right_splitter);
 
-	my $panel = $this->{panel} = Wx::Panel->new($this);
-	$panel->SetBackgroundColour($color_light_grey);
+	$top_panel->SetBackgroundColour($color_yellow);
+	$bottom_panel->SetBackgroundColour($color_light_grey);
 
-	Wx::Button->new($panel,$ID_COMMAND_RESCAN,'Rescan',		[5,5],	[65,20]);
-	Wx::Button->new($panel,$COMMAND_COMMIT,'Commit',		[5,30],	[65,20]);
-	Wx::Button->new($panel,$ID_COMMAND_PUSH_ALL,'PushAll',	[5,55],	[65,20]);
-	Wx::Button->new($panel,$ID_PUSH_WINDOW,'PushSel',		[5,80],	[65,20]);
+	$this->{what_ctrl} = Wx::StaticText->new($top_panel,-1,'',[5,5],[$FILENAME_LEFT-10,20]);
+	my $hyperlink = $this->{hyperlink} = apps::gitUI::myHyperlink->new($top_panel,-1,'',[$FILENAME_LEFT,5]);
+	my $diff_ctrl = $this->{diff_ctrl} = apps::gitUI::myTextCtrl->new($top_panel);
 
-	$this->{commit_msg} = Wx::TextCtrl->new($panel, -1, '', [$COMMIT_MSG_LEFT,$COMMIT_MSG_TOP],[-1,-1],
+	Wx::Button->new($bottom_panel,$ID_COMMAND_RESCAN,'Rescan',		[5,5],	[65,20]);
+	Wx::Button->new($bottom_panel,$COMMAND_COMMIT,'Commit',			[5,30],	[65,20]);
+	Wx::Button->new($bottom_panel,$ID_COMMAND_PUSH_ALL,'PushAll',	[5,55],	[65,20]);
+	Wx::Button->new($bottom_panel,$ID_PUSH_WINDOW,'PushSel',		[5,80],	[65,20]);
+
+	$this->{commit_msg} = Wx::TextCtrl->new($bottom_panel, -1, '', [$COMMIT_MSG_LEFT,$COMMIT_MSG_TOP],[-1,-1],
 		wxTE_MULTILINE | wxHSCROLL );
+
+    $right_splitter->SplitHorizontally($top_panel,$bottom_panel,300);
 
 	$this->doLayout();
 	EVT_SIZE($this, \&onSize);
@@ -85,9 +96,13 @@ sub new
 
 	EVT_UPDATE_UI_RANGE($this, $ID_PUSH_WINDOW, $COMMAND_COMMIT, \&onUpdateUI);
 		# note range from Resources.pm
+	EVT_SPLITTER_SASH_POS_CHANGED($this, $ID_RIGHT_SPLITTER, \&onSashPosChanged);
+
     return $this;
 }
 
+
+my $started = 0;
 
 sub doLayout
 {
@@ -95,16 +110,27 @@ sub doLayout
 	my $sz = $this->GetSize();
     my $width = $sz->GetWidth();
     my $height = $sz->GetHeight();
-	my $panel_start = $height-$COMMAND_AREA_HEIGHT;
+	my $bottom_height = $this->{bottom_height};
+	my $top_height = $height - $bottom_height;
 
-    $this->{diff_ctrl}->SetSize([$width,$panel_start-$PANE_TOP]);
+	display($dbg_layout,0,"doLayout() width($width) height($height) bottom_height($bottom_height) top_height($top_height)");
+
+	$this->{right_splitter}->SetSize([$width,$height]);
+
+	$this->{top_panel}->SetSize([$width,$top_height]);
+	# $this->{top_panel}->Move(0,0);
+
+    $this->{diff_ctrl}->SetSize([$width,$top_height-$PANE_TOP]);
 	$this->{diff_ctrl}->Move(0,$PANE_TOP);
-	$this->{panel}->SetSize([$width,$COMMAND_AREA_HEIGHT]);
-	$this->{panel}->Move(0,$panel_start);
+
+	$this->{bottom_panel}->SetSize([$width,$DEFAULT_COMMAND_AREA_HEIGHT]);
+	# $this->{bottom_panel}->Move(0,$top_height);
+
+	$this->{right_splitter}->SetSashPosition($top_height);
 
 	my $msg_width = $width-$COMMIT_MSG_LEFT;
 	$msg_width = 30 if $msg_width < 30;
-	$this->{commit_msg}->SetSize([$msg_width,$COMMIT_MSG_HEIGHT]);
+	$this->{commit_msg}->SetSize([$msg_width,$bottom_height-10]);
 
 	$this->Refresh();
 }
@@ -115,6 +141,22 @@ sub onSize
     my ($this,$event) = @_;
 	$this->doLayout();
     $event->Skip();
+}
+
+sub onSashPosChanged
+{
+	my ($this,$event) = @_;
+	my $id = $event->GetId();
+	my $pos = $event->GetSashPosition();
+
+	my $sz = $this->GetSize();
+    my $width = $sz->GetWidth();
+    my $height = $sz->GetHeight();
+
+	$this->{bottom_height} = $height - $pos;
+	display($dbg_layout,0,"onSashPosChanged() pos($pos) height($width) bottom_height($this->{bottom_height})");
+
+	$this->doLayout();
 }
 
 
