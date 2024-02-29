@@ -22,17 +22,11 @@ BEGIN
 		$ID_PATH_WINDOW
 		$ID_REPOS_WINDOW
 		$ID_COMMIT_WINDOW
-		$ID_PUSH_WINDOW
-		$ID_TAG_WINDOW
+		$ID_STATUS_WINDOW
 
 		$ID_COMMAND_RESCAN
 		$ID_COMMAND_REBUILD_CACHE
 		$ID_COMMAND_PUSH_ALL
-
-		$COMMAND_ADD
-		$COMMAND_COMMIT
-		$COMMAND_PUSH
-		$COMMAND_TAG
 	),
 
 	@Pub::WX::Resources::EXPORT );
@@ -47,8 +41,11 @@ our (
 	$ID_PATH_WINDOW,
 	$ID_COMMIT_WINDOW,
 	$ID_REPOS_WINDOW,
-	$ID_PUSH_WINDOW,
-	$ID_TAG_WINDOW,
+	$ID_STATUS_WINDOW,
+
+	# ideas for windows that allow you to do things to selected repositories
+	# 	$ID_PUSH_WINDOW,
+	# 	$ID_TAG_WINDOW,
 
 	# UI Commands handled by appFrame::onCommand
 
@@ -56,11 +53,11 @@ our (
 	$ID_COMMAND_REBUILD_CACHE,
 	$ID_COMMAND_PUSH_ALL,
 
-	# specific commands handled by appFrame::doGitCommand()
-
-	$COMMAND_PUSH,			# push selected
-	$COMMAND_COMMIT,		# commit all
-	$COMMAND_TAG,			# tag selected
+	# specific commands handled for idea windows
+	#
+	# $COMMAND_PUSH,			# push selected
+	# $COMMAND_COMMIT,		# commit all
+	# $COMMAND_TAG,			# tag selected
 
 )= (10000..11000);
 
@@ -73,8 +70,7 @@ mergeHash($resources->{command_data},{
 	$ID_PATH_WINDOW			=> ['Paths',	'View all repositories by path grouped by sections'],
 	$ID_COMMIT_WINDOW       => ['Commit',	'A gitUI like window that allows staging, commit, and push' ],
 	$ID_REPOS_WINDOW		=> ['Repos',	'List of Repos with Details' ],
-	$ID_PUSH_WINDOW			=> ['Push',		'Push selected repositories' ],
-	$ID_TAG_WINDOW 			=> ['Tag',		'Apply Tags to selected repositories' ],
+	$ID_STATUS_WINDOW		=> ['Status',	'DOES PULLS! A tabular report of Repos showing their status vis-a-vis github' ],
 
 	$ID_COMMAND_RESCAN			=> ['Rescan',		'Re-initialize repository information'],
 	$ID_COMMAND_REBUILD_CACHE	=> ['RebuildCache',	'Re-build the cache from github'],
@@ -98,18 +94,16 @@ unshift @{$resources->{view_menu}},(
 	$ID_PATH_WINDOW,
 	$ID_REPOS_WINDOW,
 	$ID_COMMIT_WINDOW,
+	$ID_STATUS_WINDOW,
 	$ID_SEPARATOR,
 );
 
 
 my @actions_menu = (
+	$ID_COMMAND_PUSH_ALL,
+    $ID_SEPARATOR,
 	$ID_COMMAND_RESCAN,
 	$ID_COMMAND_REBUILD_CACHE,
-
-    $ID_SEPARATOR,
-	$ID_TAG_WINDOW,
-	$ID_PUSH_WINDOW,
-	$ID_COMMAND_PUSH_ALL,		# only one actually implemented
 );
 
 

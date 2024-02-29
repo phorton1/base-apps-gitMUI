@@ -92,19 +92,12 @@ sub doPushCommand
 	my $repo_list = getRepoList();
 	for my $repo (@$repo_list)
 	{
-		my $can_push 	= $repo->canPush();
-		my $selected 	= $repo->{selected};
-		$repo->{selected} = 0;
-			# switch 'selected' to invariant for 'doit'
-
-		my $doit = 0;
-		$doit = 1 if $can_push && (
-			$command_id == $ID_COMMAND_PUSH_ALL || (
-			$command_id == $COMMAND_PUSH && $selected ));
-
-		if ($doit)
+		$repo->{do_push} = 0;
+			# temporary variable to capture state of can_push
+			# at moment command invoked
+		if ($repo->canPush())
 		{
-			$repo->{selected} = 1;
+			$repo->{do_push} = 1;
 			$this->{num_actions}++;
 		}
 	}
@@ -161,22 +154,12 @@ sub doThreadedPush
 	my $act_num = 0;
 	for my $repo (@$repo_list)
 	{
-		if ($repo->{selected})
+		if ($repo->{do_push})
 		{
 			$this->sendThreadEvent({
 				main_name   => $repo->{path},
 				sub_name    => $this->{command_verb} });
-
-			# other commands possible:
-			# 	$rslt = gitCommit($repo,$data)
-			# 		if $command_id == $COMMAND_COMMIT;
-			# 	$rslt = gitTag($repo,$data)
-			# 		if $command_id == $COMMAND_TAG;
-
-			$rslt = gitPush($repo,$this,\&push_callback)
-				if $command_id == $COMMAND_PUSH ||
-				    $command_id == $ID_COMMAND_PUSH_ALL;
-
+			$rslt = gitPush($repo,$this,\&push_callback);
 			last if $command_aborted || !$rslt;
 
 			$act_num++;

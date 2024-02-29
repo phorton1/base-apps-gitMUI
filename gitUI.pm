@@ -97,9 +97,9 @@ sub new
     $this->CreateStatusBar();
 	$this->SetMinSize([100,100]);
 
-	EVT_MENU_RANGE($this, $ID_PATH_WINDOW, $ID_TAG_WINDOW, \&onOpenWindowById);
+	EVT_MENU_RANGE($this, $ID_PATH_WINDOW, $ID_STATUS_WINDOW, \&onOpenWindowById);
 	EVT_MENU_RANGE($this, $ID_COMMAND_RESCAN, $ID_COMMAND_PUSH_ALL, \&onCommand);
-	EVT_UPDATE_UI_RANGE($this, $ID_PUSH_WINDOW, $ID_COMMAND_PUSH_ALL, \&onUpdateUI);
+	EVT_UPDATE_UI_RANGE($this, $ID_COMMAND_RESCAN, $ID_COMMAND_PUSH_ALL, \&onUpdateUI);
 
 	EVT_COMMAND($this, -1, $THREAD_EVENT, \&onThreadEvent );
 	EVT_COMMAND($this, -1, $MONITOR_EVENT, \&onMonitorEvent );
@@ -197,11 +197,7 @@ sub onUpdateUI
 	my ($this,$event) = @_;
 	my $id = $event->GetId();
 	my $enable = 1;
-	if ($id == $ID_PUSH_WINDOW ||
-		$id == $ID_COMMAND_PUSH_ALL)
-	{
-		$enable = 0 if !canPushRepos();
-	}
+	$enable = 0 if $id == $ID_COMMAND_PUSH_ALL && !canPushRepos();
 	$event->Enable($enable);
 }
 

@@ -54,6 +54,35 @@ first repo listed within a section has the same path as
 the SECTION, the link becomes the clickable link to the
 repo, serving both as the SECTION HEADER and the repo link.
 
+## SUBMODULE rel_path  main_module_path
+
+This verb defines a submodule within a repo.
+The rel_path is the path relative to the repo, and
+the main_module_path is the repo for the 'main'
+repository, which is usually an ignored sub-repo
+in another repository.
+
+This verb will CREATE a new 'submodule repo'.
+The submodule repo have the following:
+
+- path - the path will be the absoluate path
+  of the submodule, which will be within the
+  parent repo's path.
+- id - the id of the repo will be that of the
+  main submodule, i.e. where it goes to github
+  to check for source changes.
+- parent_repo - will be set as a pointer to
+  the actual parent repo object
+- rel_path - will be stored on the object.
+
+By convention, the presence of {parent_repo} is
+used to indicate a submodule repo.  In addition,
+the path of the submodule repo will be pushed onto
+lists in the parent repo and the main module repo:
+
+- parent -repo - {submodules} list has submodule path
+- main_module repo - {used_in} gets the submodule path
+
 
 ## Other VERBS at this time
 
@@ -120,7 +149,53 @@ as a reminder of where i got it
 TODO: This needs to get built into the eventual tabular display.
 
 
+## New Status Window, Repo Status in general
 
+I want a tabular display of all the repos, and the errors,
+notes, warnings, as well as the sizes and the total space
+consumed on github, more or less as now exists in the
+git_repos.bat/pm program, in a single display window
+within gitUI.  I would then eliminate the bat/pm programs
+
+- git_changes.pm/bat
+- git_repos.pm/bat
+
+Apart from duplicating code, all **git_repos** does is
+modifies the list of recent repos for slightly easier use
+of the regular gitGUI program, a feature I hardly use anymore,
+and one that could be incorporated into my gitUI program
+if so desired.
+
+Now that Submodules have been implemented, there should be
+an easy way to check if they are normalized across all usages,
+and or to normalize them.   This is a subset of the general
+issue, noted when working on the rPi versus Windows machine,
+of identifying repos that need to be updated (pulled) from
+github.  This capability follows the 'update_system' and
+'update_system_stash' functions recently added to Pub::
+ServiceUpdate and HTTP::ServerBase, that is used in Artisan,
+the Inventory application, and myIOTServer.
+
+I envision a new repoGit updateStatus() method that works
+on a repo and adds various fields to it:
+
+	status_time : when a status was last run
+	commits_ahead and commits_behind : compared to github
+
+along with at least displaying the big three, prominetly
+in the info window
+
+	HAS_UNSTAGED_CHANGES
+	HAS_STAGED_CHANGE
+	CAN_PUSH
+
+and/or having additional colors, or some other artifacts for links
+that present these (all links to repos should get the utils::color)
+consisttently throughout the UI.
+
+It may be easier to impleent this after I have a practical
+example of submodules, a task I have yet to undertake,
+starting with /src/Arduino/libraries/myIOT/data.
 
 
 

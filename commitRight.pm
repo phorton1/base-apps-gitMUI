@@ -14,7 +14,7 @@ use Wx::Event qw(
 	EVT_SIZE
 	EVT_LEFT_DOWN
 	EVT_BUTTON
-	EVT_UPDATE_UI_RANGE
+	EVT_UPDATE_UI
 	EVT_SPLITTER_SASH_POS_CHANGED );
 use apps::gitUI::utils;
 use apps::gitUI::repos;
@@ -40,6 +40,8 @@ BEGIN {
 }
 
 my $ID_RIGHT_SPLITTER = 9292;
+my $COMMAND_COMMIT = 9293;
+
 
 my $PANE_TOP = 25;
 my $FILENAME_LEFT = 150;
@@ -79,7 +81,6 @@ sub new
 	Wx::Button->new($bottom_panel,$ID_COMMAND_RESCAN,'Rescan',		[5,5],	[65,20]);
 	Wx::Button->new($bottom_panel,$COMMAND_COMMIT,'Commit',			[5,30],	[65,20]);
 	Wx::Button->new($bottom_panel,$ID_COMMAND_PUSH_ALL,'PushAll',	[5,55],	[65,20]);
-	Wx::Button->new($bottom_panel,$ID_PUSH_WINDOW,'PushSel',		[5,80],	[65,20]);
 
 	$this->{commit_msg} = Wx::TextCtrl->new($bottom_panel, -1, '', [$COMMIT_MSG_LEFT,$COMMIT_MSG_TOP],[-1,-1],
 		wxTE_MULTILINE | wxHSCROLL );
@@ -87,15 +88,13 @@ sub new
     $right_splitter->SplitHorizontally($top_panel,$bottom_panel,300);
 
 	$this->doLayout();
+
 	EVT_SIZE($this, \&onSize);
-	# EVT_LEFT_DOWN($hyperlink, \&onLink);
 	EVT_BUTTON($this, $ID_COMMAND_RESCAN, \&onButton);
 	EVT_BUTTON($this, $COMMAND_COMMIT, \&onButton);
 	EVT_BUTTON($this, $ID_COMMAND_PUSH_ALL, \&onButton);
-	EVT_BUTTON($this, $ID_PUSH_WINDOW, \&onButton);
-
-	EVT_UPDATE_UI_RANGE($this, $ID_PUSH_WINDOW, $COMMAND_COMMIT, \&onUpdateUI);
-		# note range from Resources.pm
+	EVT_UPDATE_UI($this, $COMMAND_COMMIT, \&onUpdateUI);
+	EVT_UPDATE_UI($this, $ID_COMMAND_PUSH_ALL, \&onUpdateUI);
 	EVT_SPLITTER_SASH_POS_CHANGED($this, $ID_RIGHT_SPLITTER, \&onSashPosChanged);
 
     return $this;
@@ -166,7 +165,6 @@ sub onUpdateUI
 	my ($this,$event) = @_;
 	my $id = $event->GetId();
 	my $enable = 1;
-	$enable = 0 if $id == $ID_PUSH_WINDOW && !canPushRepos();
 	$enable = 0 if $id == $ID_COMMAND_PUSH_ALL && !canPushRepos();
 	$enable = 0 if $id == $COMMAND_COMMIT && (
 		!$this->{parent}->canCommit() ||
@@ -182,10 +180,6 @@ sub onButton
 	display($dbg_cmds,0,"commitRight::onButton($id)");
 
 	my $frame = $this->{frame};
-	if ($id == $ID_PUSH_WINDOW)
-	{
-		$frame->createPane($ID_PUSH_WINDOW,$this->{book});
-	}
 	if ($id == $ID_COMMAND_RESCAN)
 	{
 		$frame->onCommand($event);
