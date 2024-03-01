@@ -13,6 +13,7 @@ use threads::shared;
 use Time::HiRes qw(sleep);
 use Git::Raw;
 use Pub::Utils;
+use Pub::Prefs;
 use apps::gitUI::repos;
 use apps::gitUI::utils;
 
@@ -50,10 +51,6 @@ BEGIN
 }
 
 
-my $CREDENTIAL_FILENAME = '/dat/Private/git/git_credentials.txt';
-
-my $git_user:shared = '';
-my $git_api_token:shared = '';
 my $credential_error:shared = 0;
 
 my $push_cb;
@@ -597,39 +594,13 @@ sub gitTag
 # gitPush
 #-------------------------------------------------------
 
-sub getCredentials
-{
-	return 0 if $credential_error;
-	return 1 if $git_user;
-	my $text = getTextFile($CREDENTIAL_FILENAME);
-	if (!$text)
-	{
-		error("No text in $CREDENTIAL_FILENAME");
-		$credential_error = 1;
-		return 0;
-	}
-	($git_user,$git_api_token) = split(/\n/,$text);
-	$git_user ||= '';
-	$git_user =~ s/^\s+|\s$//g;
-	$git_api_token ||= '';
-	$git_api_token =~ s/^\s+|\s$//g;
-
-	if (!$git_user || !$git_api_token)
-	{
-		error("Could not get git_user("._def($git_user).") or git_token("._def($git_api_token).")");
-		$credential_error = 1;
-		return 0;
-	}
-	display($dbg_creds,0,"got git_user($git_user) git_token($git_api_token)");
-	return 1;
-}
-
 
 sub cb_credentials
 {
 	my ($url) = @_;
 	display($dbg_creds,0,"cb_credentials($url)");
-	return '' if !getCredentials();
+	my $git_user = getPref('GIT_USER');
+	my $git_api_token = getPref('GIT_API_TOKEN');
 	my $credentials = Git::Raw::Cred->userpass($git_user,$git_api_token);
 	return !error("Could not create git credentials")
 		if !$credentials;

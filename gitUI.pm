@@ -286,7 +286,7 @@ use Pub::WX::AppConfig;
 use apps::gitUI::utils;
 use base 'Wx::App';
 
-$ini_file = "$data_dir/gitUI.ini";
+$ini_file = "$temp_dir/gitUI.ini";
 
 
 $USE_SHARED_LOCK_SEM = 1;

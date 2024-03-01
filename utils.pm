@@ -39,6 +39,13 @@ use strict;
 use warnings;
 use Wx qw(:everything);
 use Pub::Utils;
+use Pub::Prefs;
+
+my $dbg_ids = 1;
+
+our $TEST_JUNK_ONLY = 0;
+	# limits visible repos to /junk
+
 
 $temp_dir = "/base_data/temp/gitUI";
 $data_dir = "/base_data/data/gitUI";
@@ -47,12 +54,7 @@ $data_dir = "/base_data/data/gitUI";
 my_mkdir $temp_dir if !-d $temp_dir;
 my_mkdir $data_dir if !-d $data_dir;
 
-
-my $dbg_ids = 1;
-
-
-our $TEST_JUNK_ONLY = 0;
-	# limits visible repos to /junk
+Pub::Prefs::initPrefs("$data_dir/gitUI.prefs",{},"/base_data/_ssl/PubCryptKey.txt");
 
 
 BEGIN
