@@ -104,6 +104,15 @@ and running:
 
 	git submodule update --recursive --remote
 
+	NOTE THIS DOES NOT MOVE THE LOCAL SUBMODULE TO
+	the remote master's head. It merely fetches it,
+	allowing you to then do a "git pull" or "git rebase"
+	that updates the head. EVEN THOUGH you will still get
+	a delta in the parent project, it would be futile to
+	'commit' that delta until after the local submodule
+	is brought up to the remote head.
+
+
 On the rPi, which alreaady had a myIOT project, after my built-in
 ServiceUpdate, it had the submodule, but an empty directy. ServiceUpdate.pm,
 of course, did not handle the submodule update. I had to the submodule
@@ -202,6 +211,123 @@ This *may* be done via new methods in repoGit, making use of
 Git::Raw, or it may be implemented via backtick commands as is
 currently don in Pub::ServiceUpdate.pm.
 
+
+--------------------------------------------------------------------------
+
+
+## CONTINING STATUS/CHANGES analysis
+
+OK, so its really complicated.
+
+Here's the current test case:
+
+- make a change to readme.md in /theClock3 data
+- commit and push that change from gitGUI in /theClock3/data
+- commit and push the parent 'data' change
+
+Even that was a bit like pulling teeth.  In fact, had it
+been real work I would have lost my changes, something having
+to do with not having the 'master' branch checked out,
+and not being able to 'fast-forward' in the push.  Then
+I pressed some buttons, trying to get it normalized, and
+I ended up 'merging' my changes away, which, uhm, I guess
+were lost on some HEAD that no longer exists.
+
+In any case, now the myIOT/data_master, and all of the
+other submodules, are out of date with respect to github.
+Once again, I would like to try to identify that WITHOUT
+doing a fetch or update on the other guys.  Therefore
+I am going to experiment some more with github events,
+getting the SHA of the commit and comparing it to the
+(unchanged and unchanging) information available locally.
+
+BTW, the monitor for myIOT/data was not created correctly.
+
+Here are the SHA's I could dig up, either by looking at git
+files, or by calling the 'repoHistory'
+
+/theClock3/data	- the source of the change - has an SHA of:
+
+	2f3c4becfd6e1a46c2887a009c3e7cb7be6d46ca
+
+As gotten from gitGUI's history, and is also the 'full SHA' for
+the last commit to /myIOT/data_master on github.
+
+	C:\src\Arduino\theClock3\.git\modules\data\refs\heads\master
+	C:\src\Arduino\theClock3\.git\modules\data\refs\remotes\origin\master
+	C:\src\Arduino\theClock3\.git\modules\data\FETCH_HEAD as the sha followed by:
+		branch 'master' of https://github.com/phorton1/Arduino-libraries-myIOT-data_master
+	C:\src\Arduino\theClock3\.git\modules\data\logs\HEAD  as the last commit of 5 in the file
+	C:\src\Arduino\theClock3\.git\modules\data\logs\refs\heads\master  as the last commit of 3 in the file
+	C:\src\Arduino\theClock3\.git\modules\data\logs\refs\remotes\origin\master  as the last commit of 2 in the file
+
+
+I am not sure how confident I am that the way I get a repo's history is 'better'
+than looking directly in git files.  It would certainly require a 'fetch' to
+see whats on the server.  Let's see what comes up in the events file.
+
+The SHA shows up in a current 'event' json file under a commit.
+
+The other projects are
+
+/myIOT/data_master
+/myIOT/data
+/myIOT/examples/testData/data
+/theClock/data
+/bilgeAlarm/data
+/myIOT/site/myIOT
+
+
+## Using repoHistory (or variant of it)
+
+There are (upto) four different commits of interest in the local
+repository:
+
+	HEAD = $head_id
+	refs/heads/$branch = $master_id
+	refs/remotes/origin/HEAD ==
+	refs/remotes/origin/$branch = $remote_id
+
+We will need to know all the commits in-between the newest, and the oldest, of these,
+or, in otherwords, work backwards through the history until we have satisfied gotten all
+of the appropiate commits.
+
+All repos will have a common ancestor in the remote.
+On the remote HEAD will always equal $branch because I always push to the default repo.
+
+The idea is to 'base' the entire system when I know it is all up-to-date, and set
+the ETag for subsequent events.  Then keep track of any pushes to the remote which
+then become available to all submodules (all repos).
+
+
+
+
+
+
+
+There should be events that line up with the remotes/origin/HEAD
+
+
+
+I guess the facts I am most interested in are:
+
+- what is the SHA of the last 'sync' with the remote (the remote/master head)
+- what is the SHA of the current local master/head
+  - and is it different than the remote/master head?
+  - and if so, how many local commits are we AHEAD by
+
+From the event history, if maintained rigourously, I could see
+a list of remote commits made by other machines/modules. Once
+again initializing such a cache would easiest be done from the
+history when I know all pushes are done and everything is up
+to date.  This is a bit of stuff to put on my repos.
+
+	master_head:
+	remote_head:
+	num_local_commits:
+
+	remote_commits: [] an array of things built by
+	event monitoring.
 
 
 
