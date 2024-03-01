@@ -193,6 +193,7 @@ sub gitHistoryText
 		my $summary  = $branch_text.$tag_text.$spacer.$commit->{summary};
 
 		$text .=
+			_plim($commit->{id},42).
 			_plim($commit->{time},20).
 			_plim($commit->{author},$max_name)." ".
 			$summary.
@@ -224,6 +225,7 @@ sub historyToTextCtrl
 
 		my $line = $text_ctrl->addLine();
 		$text_ctrl->addPart($line,0,$color_black,
+			_plim($commit->{id},42).
 			_plim($commit->{time},20).
 			_plim($commit->{author},$max_name)." ");
 		$text_ctrl->addPart($line,1,$color_orange,$branch_text)
