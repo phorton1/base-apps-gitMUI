@@ -192,6 +192,14 @@ is not cannonical.
 
 ## USING SUBMODULES
 
+Adding a submodule to an existing project. For example, to add
+the /src/Arduino/libraries/myIOT/data submodule to the myIOT/examples
+folder, after removing and commiting the removal of the old data folder,
+
+	cd /src/Arduino/libraries/myIOT
+	git submodule add https://github.com/phorton1/Arduino-libraries-myIOT-data_master data
+	git submodule add https://github.com/phorton1/Arduino-libraries-myIOT-data_master examples/testDevice/data
+
 Cloning a repository that contains submodules is done automatically
 if you pass --recursive on the command line:
 

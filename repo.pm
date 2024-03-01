@@ -223,12 +223,17 @@ sub canPush
 
 
 sub pathWithinSection
+	# for display only
 {
 	my ($this) = @_;
 	my $MAX_DISPLAY_PATH = 28;
 		# not including elipses
 
-	my $path = $this->{path};
+	# submodules show ++ name
+	my $path = $this->{parent_repo} ?
+		"++ $this->{rel_path}" :
+		$this->{path};
+
 	my $re = $this->{section_path};
 	$re =~ s/\//\\\//g;
 	$path =~ s/^$re//;

@@ -127,7 +127,7 @@ sub parseRepos
 			{
 				my ($rel_path,$sub_path) = ($1,$2);
 				my $path = makePath($repo->{path},$rel_path);
-				repoWarning(undef,0,1,"SUBMODULE($repo_num,$rel_path,$sub_path)");
+				repoWarning(undef,0,1,"SUBMODULE($repo_num, $repo->{path}) = $rel_path ==> $sub_path");
 				my $sub_module = apps::gitUI::repo->new(
 					$repo_num++,
 					$path,
@@ -283,7 +283,7 @@ sub parseRepos
 			my $master_repo = getRepoById($repo->{id});
 			if (!$master_repo)
 			{
-				repoError("Could not find master module($repo->{id}) for submodule($repo->{path}");
+				repoError(undef,"Could not find master module($repo->{id}) for submodule($repo->{path}");
 			}
 			else
 			{
