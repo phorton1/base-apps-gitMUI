@@ -387,13 +387,15 @@ sub updateHeadCommits()
 
 	# time how long it takes to get all repos histories
 
-	my $repo_list = getRepoList();
-	for my $repo (@$repo_list)
+	if (0)
 	{
-		my $history = gitHistory($repo,1);
+		my $repo_list = getRepoList();
+		for my $repo (@$repo_list)
+		{
+			my $history = gitHistory($repo,1);
+		}
+		repoWarning(undef,0,0,"got all histories");
 	}
-
-	repoWarning(undef,0,0,"got all histories");
 
 	my $git_user = getPref('GIT_USER');
 	my $events = gitHubRequest('events',"users/$git_user/events",$use_cache);	 #$use_cache);
