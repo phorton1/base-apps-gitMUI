@@ -30,7 +30,7 @@ my $USE_TEST_CACHE = 0;
 my $dbg_github = 0;
 	# 0 = show major validation steps
 	# -1 = show validation details
-my $dbg_request = 1;
+my $dbg_request = 0;
 	# 0 = show gitHubRequest() calls
 	# -1 = show gitHubRequest() details
 
@@ -58,7 +58,7 @@ sub gitHubRequest
 	# and will be appended to the location as '&page=$$ppage' and
 	# the cachefile as '_$$page'.
 {
-    my ($what,$location,$use_cache,$ppage) = @_;
+    my ($what,$location,$use_cache,$ppage,$petag) = @_;
 	$use_cache ||= 0;
 
 	my $use_page = $ppage ? $$ppage : '';
@@ -101,6 +101,14 @@ sub gitHubRequest
 		$request->content_type('application/json');
 		$request->authorization_basic($git_user,$git_api_token);
 
+		if ($petag && $$petag)
+		{
+			display(0,1,"setting etag headers");
+			$request->header('If-None-Match' => $$petag);
+			# $request->header('X-Poll-Interval' => 60);
+		}
+
+
 		# unused REQUEST CONTENT
 		# my $request_data = '';
 		# my $json = encode_json($request_data);
@@ -111,6 +119,13 @@ sub gitHubRequest
 		my $my_ua = new LWP::UserAgent (agent => 'Mozilla/5.0', cookie_jar =>{});
 		$my_ua->ssl_opts( SSL_ca_file => Mozilla::CA::SSL_ca_file() );
 		$my_ua->ssl_opts( verify_hostname => 1 );
+
+		if ($what eq 'events')
+		{
+			my $req_headers = $request->headers_as_string()."\n";
+			print "REQUEST_HEADERS=$req_headers";
+		}
+
 		my $response = $my_ua->request($request);
 
 		if (!$response)
@@ -120,8 +135,17 @@ sub gitHubRequest
 		else
 		{
 			my $status_line = $response->status_line();
+			my $etag = $response->headers()->header('Etag') || '';
+			$$petag = $etag if $etag;
+
+
 			repoDisplay($dbg_request+1,1,"response = $status_line");
-			if ($status_line !~ /200/)
+			if ($what eq 'events' && $status_line =~ /304/)
+			{
+				repoDisplay(0,1,"returning [] for 304 for events");
+				return [];
+			}
+			elsif ($status_line !~ /200/)
 			{
 				repoError(undef,"gitHubRequest($location) bad_status: $status_line");
 			}
@@ -133,7 +157,7 @@ sub gitHubRequest
 				if ($what eq 'events')
 				{
 					my $headers = $response->headers_as_string()."\n";
-					# print "HEADERS=$headers";
+					print "RESPONSE_HEADERS=$headers";
 					printVarToFile(1,"$temp_dir/$what.headers.txt",$headers,1);
 				}
 
@@ -338,7 +362,7 @@ sub doGitHub
 
 	# get the head commits and determine if we are at behind by at least 1
 
-	updateHeadCommits($use_cache);
+	# updateHeadCommits($use_cache);
 
 
 
@@ -350,6 +374,10 @@ sub doGitHub
 #-----------------------------------------------
 # updateHeadCommits
 #-----------------------------------------------
+
+my $DO_ALL = 1;
+
+
 # We care about X-Poll-Interval and ETag headers.
 #
 # We should not make an events request more often than X-Poll-Interfaal seconds
@@ -395,34 +423,315 @@ sub updateHeadCommits()
 			my $history = gitHistory($repo,1);
 		}
 		repoWarning(undef,0,0,"got all histories");
+		return;
 	}
 
 	my $git_user = getPref('GIT_USER');
-	my $events = gitHubRequest('events',"users/$git_user/events",$use_cache);	 #$use_cache);
+	my $events = gitHubRequest('events',"users/$git_user/events",0); #$use_cache);
 	return if !$events;
 	for my $event (@$events)
 	{
-		my $time = $event->{created_at} || '';
-		my $github_repo = $event->{repo} || '';
-		my $repo_id = $github_repo->{name} || '';
-		$repo_id =~ s/^$git_user\///;
+		oneEvent($event);
+	}
+}
 
-		my $payload = $event->{payload} || '';
-		my $before = $payload ? $payload->{before} || '' : '';
+sub oneEvent
+{
+	my ($event) = @_;
 
-		my $repo = getRepoById($repo_id) || '';
-		my $repo_path = $repo ? $repo->{path} : '';
-		repoDisplay(0,0,"commits for repo($repo_id=$repo_path) at $time before=$before");
+	my $git_user = getPref('GIT_USER');
 
-		my $commits = $payload ? $payload->{commits} : '';
-		if ($commits && @$commits)
+	my $time = $event->{created_at} || '';
+	my $github_repo = $event->{repo} || '';
+	my $repo_id = $github_repo->{name} || '';
+	$repo_id =~ s/^$git_user\///;
+
+	my $payload = $event->{payload} || '';
+	my $before = $payload ? $payload->{before} || '' : '';
+	my $head = $payload ? $payload->{head} || '' : '';
+
+	my $repo = getRepoById($repo_id) || '';
+	my $repo_path = $repo ? $repo->{path} : '';
+
+	return if !$DO_ALL && $repo_path !~ /\/data$|\/data_master$/;
+
+	repoError(undef,"Could not find repo($repo_id)") if !$repo_path;
+
+	repoDisplay(0,0,"commits for repo($repo_id=$repo_path) at $time");
+	repoDisplay(0,1,"head=$head") if $head;
+	repoDisplay(0,1,"before=$before") if $before;
+
+	if ($repo)
+	{
+		warning(0,1,"before=repo->{remote_id}")
+			if ($before eq $repo->{remote_id});
+	}
+
+	my $commits = $payload ? $payload->{commits} : '';
+	if ($commits && @$commits)
+	{
+		for my $commit (@$commits)
 		{
-			for my $commit (@$commits)
+			my $sha = $commit->{sha} || '';
+			my $msg = $commit->{message} || '';
+			repoDisplay(0,2,pad($sha,42)._lim($msg,60));
+		}
+	}
+}
+
+
+
+
+use Git::Raw;
+
+
+sub addHistoryFields
+	# opening a repo is relatively quick
+{
+	my ($repo) = @_;
+	my $path = $repo->{path};
+	my $branch = $repo->{branch};
+	display(0,0,"addHistoryFields($path) branch=$branch");
+
+	if (0)
+	{
+		gitChanges($repo);
+		my $unstaged_changes = keys %{$repo->{unstaged_changes}};
+		my $staged_changes = keys %{$repo->{staged_changes}};
+		my $remote_changes = keys %{$repo->{remote_changes}};
+		display(0,1,"unstaged($unstaged_changes) staged($staged_changes) remote($remote_changes)");
+	}
+
+	my $git_repo = Git::Raw::Repository->open($path);
+	my $detached = $git_repo->is_head_detached();
+	error("DETACHED HEAD") if $detached;
+
+	# I typically get three branches from my repos:
+	#
+	#	branch(refs/heads/$branch)=e7aa555ed30e050ef81782723cf5d0753789ae6e
+	#	branch(refs/remotes/origin/HEAD)=e7aa555ed30e050ef81782723cf5d0753789ae6e
+	#	branch(refs/remotes/origin/$branch=e7aa555ed30e050ef81782723cf5d0753789ae6e
+	#
+	# because I always check into the default branch on gitup
+	# refs/remotes/origin/HEAD should always == refs/remotes/origin/$branch,
+	# even if they are both out of date on the local machine.
+	#
+	# The only time refs/heads/$branch should be different than refs/remotes/origin/$branch
+	# is when I have made a commit locally and not pushed it (local is AHEAD), or if I am in the
+	# middle of updating a submodule (i.e. I have fetched, but not yet pulled or rebased
+	# (local is BEHIND).
+
+	if (0)
+	{
+		my @branch_refs = $git_repo->branches( 'all' );
+		for my $branch_ref (@branch_refs)
+		{
+			my $commit = $branch_ref->target();
+			$commit = $commit->peel('commit')
+				if ref($commit) =~ /Git::Raw::Reference/;
+			my $branch_name = $branch_ref->name();
+			display(0,1,"branch($branch_name)=$commit");
+		}
+	}
+
+	# I am so struggling to understand this.
+	#
+	# If local HEAD != refs/heads/$branch it basically means that I have commits that
+	# are not to the repo's specified $branch, and something is out of whack.  Very
+	# rarely I *might* have to deal with multiple branches, but by and large I ONLY
+	# use the default branch of my repos.
+
+	# I guess what I am trying to do is keep track of the history and analyze needed
+	# merges, in terms of unstaged_changes, AHEAD and BEHIND, without having to do
+	# a fetch, or modify anything in my local repositories.
+
+	# However, this amounts to me building, and caching, the entire history of
+	# every repo.  If I KNOW that the system is completely stable, then I COULD,
+	# I suppose, and then mark that with an ETag (that I pass back to the event
+	# to only get changes AFTER that).
+
+	# the whole notion of determining AHEAD and BEHIND relies on having a common
+	# starting position, and then monitoring events to add pushes to the remote.
+	# I have to remember how to get refs
+
+	my $head_commit = Git::Raw::Reference->lookup("HEAD", $git_repo)->peel('commit') || '';
+	display(0,1,"head_id="._def($head_commit));
+
+	my $master_commit = Git::Raw::Reference->lookup("refs/heads/$branch", $git_repo)->peel('commit') || '';
+	display(0,1,"master_id="._def($master_commit));
+
+	my $remote_commit = Git::Raw::Reference->lookup("remotes/origin/$branch", $git_repo)->peel('commit') || '';
+	display(0,1,"remote_id="._def($remote_commit));
+
+	my $head_id = "$head_commit";
+	my $master_id = "$master_commit";
+	my $remote_id = "$remote_commit";
+
+	$repo->{head_id} = $head_id;
+	$repo->{master_id} = $master_id;
+	$repo->{remote_id} = $remote_id;
+
+	if (0)
+	{
+		error("repository($path) has uncommited changes")
+			if $head_id ne $master_id;
+		error("repository($path) has unpushed commits")
+			if $master_id ne $remote_id;
+	}
+
+	my ($head_id_found,
+		$master_id_found,
+		$remote_id_found) = (0,0,0);
+
+	my $log = $git_repo->walker();
+	# $log->sorting(["time","reverse"]);
+	$log->push($head_commit);
+
+	my $com = $log->next();
+
+	while ($com && (
+		!$head_id_found ||
+		!$master_id_found ||
+		!$remote_id_found ))
+	{
+		my $id = $com->id();
+		my $summary = $com->summary();
+		my $time = timeToStr($com->time());
+		my $msg = '';
+
+		$head_id_found ||= addFound(\$msg,$id,$head_id,'HEAD');
+		$master_id_found ||= addFound(\$msg,$id,$master_id,'MASTER');
+		$remote_id_found ||= addFound(\$msg,$id,$remote_id,'REMOTE');
+
+		display(0,2,"$time ".pad($msg,20)."$id == "._lim($summary,20));
+
+		$repo->{history} ||= shared_clone([]);
+		push @{$repo->{history}},shared_clone({
+			id => $id,
+			summary => $summary,
+			time => $time,
+			msg => $msg,
+		});
+
+		$com = $log->next();
+	}
+
+
+
+	# my $refspec_str = "refs/heads/$branch";
+	# my $refspec = Git::Raw::RefSpec->parse($refspec_str,0);
+	# display(0,1,"refspec=$refspec");
+
+	# my $history = gitHistory($repo,1);
+}
+
+
+sub addFound
+{
+	my ($ptext,$id,$comp,$what) = @_;
+	if ($id eq $comp)
+	{
+		$$ptext .= ' ' if $$ptext;
+		$$ptext .= $what;
+		return 1;
+	}
+	return 0;
+}
+
+
+
+
+
+
+
+sub addAllHistoryFields
+{
+	repoDisplay(0,0,"addAllHistoryFields()");
+	my $repo_list = getRepoList();
+	for my $repo (@$repo_list)
+	{
+		addHistoryFields($repo)
+			if $DO_ALL || $repo->{path} =~ /\/data$|\/data_master$|\/site\/myIOT$/;
+	}
+	repoDisplay(0,0,"addAllHistoryFields() finished");
+	return;
+}
+
+
+
+sub checkSubmodules
+{
+	repoDisplay(0,0,"checkSubmodules()");
+	my $repo_list = getRepoList();
+	for my $repo (@$repo_list)
+	{
+		if (@{$repo->{used_in}})
+		{
+			next if !$DO_ALL && $repo->{path} !~ /\/data$|\/data_master$/;
+			repoDisplay(0,1,"checking used_in for $repo->{path}");
+			for my $sub_path (@{$repo->{used_in}})
 			{
-				my $sha = $commit->{sha} || '';
-				my $msg = $commit->{message} || '';
-				repoDisplay($repo || undef, 0,1,pad($sha,42)._lim($msg,60));
+
+				my $sub_repo = getRepoByPath($sub_path);
+				return repoError($repo,"Could not find used_in($sub_path)")
+					if !$sub_repo;
+				repoDisplay(0,2,"used in $sub_path");
+				error("sub_repo master_id "._def($sub_repo->{master_id})." <> "._def($repo->{master_id}))
+					if $sub_repo->{master_id} ne $repo->{master_id};
 			}
+		}
+	}
+	repoDisplay(0,0,"addAllHistoryFields() finished");
+	return;
+}
+
+
+
+#----------------------------------------------
+# test main (for sanity)
+#----------------------------------------------
+
+sub initEventMonitor
+{
+	display(0,0,"initEventMonitor()");
+	my $git_user = getPref('GIT_USER');
+	my $etag = '';
+	my $events = gitHubRequest('events',"users/$git_user/events",0,undef,\$etag);
+	display(0,1,"etag=$etag");
+	return $etag;
+}
+
+sub checkEvents
+{
+	my ($petag) = @_;
+	display(0,0,"checkEvents($$petag)");
+	my $git_user = getPref('GIT_USER');
+	my $events = gitHubRequest('events',"users/$git_user/events",0,undef,$petag);
+	display(0,1,"new etag=$$petag");
+	return 0 if !$events;
+	for my $event (@$events)
+	{
+		oneEvent($event);
+	}
+	return 1;
+}
+
+
+
+
+if (1)
+{
+	if (parseRepos())
+	{
+		addAllHistoryFields();
+		# checkSubmodules();
+		# updateHeadCommits();
+
+		my $etag = initEventMonitor();
+		while (1)
+		{
+			sleep(65);
+			last if !checkEvents(\$etag);
 		}
 	}
 }

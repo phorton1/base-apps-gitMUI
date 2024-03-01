@@ -89,6 +89,7 @@ our $MONITOR_NOTIFY_EVERY_CHANGE = 1;
 my $dbg_thread = 0;
 	# monitor thread lifecycle
 my $dbg_mon = 1;
+	# TODO: /Arduino/libraries/myIOT/data is not getting a monitor
 	# monitor creation of monitors
 my $dbg_cb = 1;
 	# debug callbacks and events
