@@ -8,6 +8,7 @@ use warnings;
 use threads;
 use threads::shared;
 use JSON;
+use Git::Raw;
 use Data::Dumper;
 use HTTP::Request;
 use LWP::UserAgent;
@@ -51,12 +52,27 @@ BEGIN
 # github access
 #----------------------------------------------------
 # Using paged requests requires an all or none approach
-# to deleting cachefiles.
+# to deleting cachefiles.  $use_cache should be set to
+# zero for $what == 'events'.
 
 sub gitHubRequest
 	# if $ppage is specified it will contain the page number to get
 	# and will be appended to the location as '&page=$$ppage' and
 	# the cachefile as '_$$page'.
+	#
+	# $petag is an input-output variable for $what == 'events'.
+	#
+	# if $petag is provided, a 'If-None-Match' header will be
+	# added to the request as per the github event api standard,
+	# to only return content if there are new pushes (events)
+	# since we last got the ETag header.
+	#
+	# if $petag and the response contains an ETag header, the
+	# value of the etag (with included quotes) will be returned
+	# in $$petag.
+	#
+	# if $petag and we receive a 304 (not modified) response,
+	# this method returns [] indicating there were no new events.
 {
     my ($what,$location,$use_cache,$ppage,$petag) = @_;
 	$use_cache ||= 0;
@@ -108,7 +124,6 @@ sub gitHubRequest
 			# $request->header('X-Poll-Interval' => 60);
 		}
 
-
 		# unused REQUEST CONTENT
 		# my $request_data = '';
 		# my $json = encode_json($request_data);
@@ -120,7 +135,7 @@ sub gitHubRequest
 		$my_ua->ssl_opts( SSL_ca_file => Mozilla::CA::SSL_ca_file() );
 		$my_ua->ssl_opts( verify_hostname => 1 );
 
-		if ($what eq 'events')
+		if (0 && $what eq 'events')
 		{
 			my $req_headers = $request->headers_as_string()."\n";
 			print "REQUEST_HEADERS=$req_headers";
@@ -137,7 +152,6 @@ sub gitHubRequest
 			my $status_line = $response->status_line();
 			my $etag = $response->headers()->header('Etag') || '';
 			$$petag = $etag if $etag;
-
 
 			repoDisplay($dbg_request+1,1,"response = $status_line");
 			if ($what eq 'events' && $status_line =~ /304/)
@@ -157,14 +171,15 @@ sub gitHubRequest
 				if ($what eq 'events')
 				{
 					my $headers = $response->headers_as_string()."\n";
-					print "RESPONSE_HEADERS=$headers";
+					print "RESPONSE_HEADERS=$headers" if 0;
 					printVarToFile(1,"$temp_dir/$what.headers.txt",$headers,1);
 				}
 
 				if ($ppage)
 				{
 					my $link = $response->headers()->header('Link') || '';
-					# Link: <https://api.github.com/user/repos?per_page=50&page=2>; rel="next", <https://api.github.com/user/repos?per_page=50&page=2>; rel="last"
+					# Link: <https://api.github.com/user/repos?per_page=50&page=2>; rel="next",
+					#	    <https://api.github.com/user/repos?per_page=50&page=2>; rel="last"
 					# repoDisplay(0,0,"link=$link");
 					if ($link =~ /&page=(\d+)>; rel="next"/)
 					{
@@ -184,7 +199,8 @@ sub gitHubRequest
 				elsif ($response->headers()->header('Content-Type') !~ 'application/json')
 				{
 					printVarToFile(1,"$temp_dir/$what.error.txt",$content);
-					repoError(undef,"gitHubRequest($location) unexpected content type: $content_type; see $temp_dir/$what.error.txt");
+					repoError(undef,"gitHubRequest($location) unexpected content type: $content_type; ".
+							  "see $temp_dir/$what.error.txt");
 					$content = '';
 				}
 				else
@@ -254,17 +270,15 @@ sub doGitHub
 
 	for my $repo (@$repo_list)
 	{
-		$repo->{found_on_github} = 0;
+		# $repo->clearErrors();
 			# retain {errors} from parseRepos, which
 			# is always called just before doGithub()
 			# (they are always paired).
-			# $repo->clearErrors();
+		$repo->{found_on_github} = 0;
 		$repo->checkGitConfig();
-			# Currently only place checkGitConfig() is called
-			# ignore return value
+			# Of questionable value, this is currently the only place
+			# checkGitConfig() is called. We ignore any return value.
 	}
-
-
 
 	my $page = 0;
 	my $next_page = 1;
@@ -333,9 +347,8 @@ sub doGitHub
 
 				}   # $GET_GITHUB_PARENTS
 
-
 				# IF my description includes "Copied from blah [space],
-				# parent contents will be displayed (blah) as a reminder
+				# parent contents will display (blah) as a reminder
 				# of where i got it
 
 				elsif ($entry->{description} &&
@@ -353,215 +366,150 @@ sub doGitHub
 	for my $repo (@$repo_list)
 	{
 		# submodules (rel_path} are allowed to exist without
-		# an explicit repo on git hub.  This whole thing is messy
+		# an explicit repo on git hub.
 
 		$repo->repoError("repo($repo->{id} not found on github!")
 			if !$repo->{rel_path} && !$repo->{found_on_github};
+
+		# initial check for submodules out of date
+
+		checkSubmodules($repo);
 	}
-
-
-	# get the head commits and determine if we are at behind by at least 1
-
-	# updateHeadCommits($use_cache);
-
-
-
-}   #   getGitHubRepos()
+}   #   doGitHub()
 
 
 
 
 #-----------------------------------------------
-# updateHeadCommits
+# History, events, and change detection
 #-----------------------------------------------
+# The experimental methods in this section try to accomplish
+# several goals.
+#
+# We use the github events API on a thread to detect pushes
+# to github that might take place on other machines, or from
+# other submodules on the same machine, and if so, determine
+# whether the local repo is AHEAD and or BEHIND,
+# which, along with HAS_CHANGES, which is set if the repo has
+# any uncommitted (unstaged or staged) changes determines whether
+# we can automatically Update the repo(s) and if so, whether we
+# would need a Stash to do so.
+#
+# The system does not handle repos that require Merges, that
+# is, where commits to the same repo HEAD revision of a repo
+# have been made from two different machines, or submodules
+# on the same machine.
+#
+# We try to do all of this in a performant manner (i.e. quickly).
+#
+# The case of normalizing submodules locally can additionally
+# detect not only if there pushes have occured and Updates
+# are needed, but can detect denormalization due to uncommitted
+# changes and commits before they are pushed.
+#
+# CHANGE DETECTION WITHOUT FETCHING
+#
+# Proper detection and implementation of repo normalization
+# requires a somewhat complicated comparison of the two repo's histories,
+# finding the most recent common ancestor, and then counting the
+# commits after that for each repo, something that git is good
+# at, to the degree that you first 'fetch' the the (remote) repo
+# and then use standard git commands to identify and/or update-merge
+# the two repos.
+#
+# However, I want this process to work without making ANY changes
+# to the local machine. Once you do a Fetch you can find yourself
+# in a situation where you MUST merge two repos with disparate
+# changes, itself a complicated process that can backfire.
+#
+# What I am looking for is a way to determine if a repo is out
+# of date with respect to the remote, and if I can SAFELY
+# Fetch and Update it, possibly with a Stash, automatically.
+# Thus I want it to detect whether a Merge would be needed,
+# and to notify me about that.
+#
+# This can sort-of be done by gathering key commit identifiers,
+# SHA's, from the local repos, which can be done relatively
+# quickly, and then, by using a cache and github events,
+# compared to the remote (github) repository for change detection.
+#
+# KEY COMMIT ID'S
+#
+# For each I get the following commit ids:
+#
+#		head_id = HEAD - the commit the repo is at
+#		master_id = refs/heads/$branch - the most recent commit in the main branch
+#		remote_id = refs/remotes/origin/$branch - the last sync with github
+#
+# Invariants:
+#
+# 	Because I always check into the default branch on gitup
+# 	I don't need to additionally get the refs/remotes/origin/HEAD
+#	commit id, as it should always be the same as the
+#	refs/remotes/origin/$branch id, even if they both happen
+#	to be out of date on the local machine.
+#
+#	When my system is in a stable state, i.e. I am not in the middle
+#   of doing an Update (Fetch, possible Stash, and then Pull or Rebase),
+#   then head_id should always equal the master_id. That is to say that
+#   the HEAD commit should always be the same as the $branch commit
+#   in any repos.
+#
+#	This last one is furthered by the fact that my repos should NEVER
+#   have a Detached HEAD, that is a repo that is not checked out to the
+#   main $branch.  This can occur (early) in submodule development when
+#   cloning a new submodule, care must be taken to make sure that it is
+#	checked out to the main $branch.
+#
+# We can use the existing gitChanges() and the new head_id to quickly
+# determine when submodules are denormalized.  These id's will need to
+# be updated locally in gitPush() and gitComit() after the system is
+# initialized (scanned).
+#
+# GITHUB EVENTS
+#
+# The github event API will give us a list of the most recent pushes
+# to github, along with the repo paths and commit_ids in those pushes.
+# The event history goes back a maximum of 90 days.
+#
+# It is **safe** to assume that if a repo has not been pushed in
+# a long time, that I have the current version on the local machine,
+# i.e. BEHIND === 0
+#
+# At this point I need to switch to experimental code to continue.
+# It seems like, especially since I will be in a thread, that I
+# can analyze every push event and use the local git history to
+# determine the most recent common ancestor and the AHEAD and
+# BEHIND numbers.
 
 my $DO_ALL = 1;
 
+my $dbg_head_commits = 0;
+my $dbg_head_history = 0;
 
-# We care about X-Poll-Interval and ETag headers.
-#
-# We should not make an events request more often than X-Poll-Interfaal seconds
-#
-# By passing the ETag header back in, we will only get new events,
-# and will get a 304 response (not modified) if there are no new
-# events.
-#
-# We can use pages to get more than the default of 30 events at a time.
-#
-# To implement this somewhat correctly we need an ACTUAL CACHE file for
-# the repos or we might miss events.  In addition, we need to bootstrap
-# the cachefile the hard way, I think, with a fetch on every repo.
-#
-# With event tracking, we can determine that we are NOT BEHIND and
-# that we are AHEAD, without having to do a fetch, much less a fetch on
-# every repository.
-#
-# We know one other 'fact' that can help in initializing the cache file.
-# After a successful push-all, we can get the heads from git.   Or, for
-# that matter, we can use whatever technique we use to get the history to
-# initialize the repo.
-#
-# This scheme will implicitly assume that we are only using one branch,
-# as specified in git_repositories.txt.
-
-use apps::gitUI::repoHistory;
-
-
-sub updateHeadCommits()
+sub doRepoPath
 {
-	my ($use_cache) = @_;
-	$use_cache ||= 0;
-	repoWarning(undef,0,0,"updateHeadCommits($use_cache)");
-
-	# time how long it takes to get all repos histories
-
-	if (0)
-	{
-		my $repo_list = getRepoList();
-		for my $repo (@$repo_list)
-		{
-			my $history = gitHistory($repo,1);
-		}
-		repoWarning(undef,0,0,"got all histories");
-		return;
-	}
-
-	my $git_user = getPref('GIT_USER');
-	my $events = gitHubRequest('events',"users/$git_user/events",0); #$use_cache);
-	return if !$events;
-	for my $event (@$events)
-	{
-		oneEvent($event);
-	}
-}
-
-sub oneEvent
-{
-	my ($event) = @_;
-
-	my $git_user = getPref('GIT_USER');
-
-	my $time = $event->{created_at} || '';
-	my $github_repo = $event->{repo} || '';
-	my $repo_id = $github_repo->{name} || '';
-	$repo_id =~ s/^$git_user\///;
-
-	my $payload = $event->{payload} || '';
-	my $before = $payload ? $payload->{before} || '' : '';
-	my $head = $payload ? $payload->{head} || '' : '';
-
-	my $repo = getRepoById($repo_id) || '';
-	my $repo_path = $repo ? $repo->{path} : '';
-
-	return if !$DO_ALL && $repo_path !~ /\/data$|\/data_master$/;
-
-	repoError(undef,"Could not find repo($repo_id)") if !$repo_path;
-
-	repoDisplay(0,0,"commits for repo($repo_id=$repo_path) at $time");
-	repoDisplay(0,1,"head=$head") if $head;
-	repoDisplay(0,1,"before=$before") if $before;
-
-	if ($repo)
-	{
-		warning(0,1,"before=repo->{remote_id}")
-			if ($before eq $repo->{remote_id});
-	}
-
-	my $commits = $payload ? $payload->{commits} : '';
-	if ($commits && @$commits)
-	{
-		for my $commit (@$commits)
-		{
-			my $sha = $commit->{sha} || '';
-			my $msg = $commit->{message} || '';
-			repoDisplay(0,2,pad($sha,42)._lim($msg,60));
-		}
-	}
+	my ($path) = @_;
+	return 1 if $DO_ALL || $path =~ /\/data$|\/data_master$|\/site\/myIOT$/;
+	return 0;
 }
 
 
-
-
-use Git::Raw;
-
-
-sub addHistoryFields
-	# opening a repo is relatively quick
+sub addHeadCommits
 {
-	my ($repo) = @_;
-	my $path = $repo->{path};
+	my ($repo,$git_repo) = @_;
+	$git_repo ||= Git::Raw::Repository->open($repo->{path});
 	my $branch = $repo->{branch};
-	display(0,0,"addHistoryFields($path) branch=$branch");
-
-	if (0)
-	{
-		gitChanges($repo);
-		my $unstaged_changes = keys %{$repo->{unstaged_changes}};
-		my $staged_changes = keys %{$repo->{staged_changes}};
-		my $remote_changes = keys %{$repo->{remote_changes}};
-		display(0,1,"unstaged($unstaged_changes) staged($staged_changes) remote($remote_changes)");
-	}
-
-	my $git_repo = Git::Raw::Repository->open($path);
-	my $detached = $git_repo->is_head_detached();
-	error("DETACHED HEAD") if $detached;
-
-	# I typically get three branches from my repos:
-	#
-	#	branch(refs/heads/$branch)=e7aa555ed30e050ef81782723cf5d0753789ae6e
-	#	branch(refs/remotes/origin/HEAD)=e7aa555ed30e050ef81782723cf5d0753789ae6e
-	#	branch(refs/remotes/origin/$branch=e7aa555ed30e050ef81782723cf5d0753789ae6e
-	#
-	# because I always check into the default branch on gitup
-	# refs/remotes/origin/HEAD should always == refs/remotes/origin/$branch,
-	# even if they are both out of date on the local machine.
-	#
-	# The only time refs/heads/$branch should be different than refs/remotes/origin/$branch
-	# is when I have made a commit locally and not pushed it (local is AHEAD), or if I am in the
-	# middle of updating a submodule (i.e. I have fetched, but not yet pulled or rebased
-	# (local is BEHIND).
-
-	if (0)
-	{
-		my @branch_refs = $git_repo->branches( 'all' );
-		for my $branch_ref (@branch_refs)
-		{
-			my $commit = $branch_ref->target();
-			$commit = $commit->peel('commit')
-				if ref($commit) =~ /Git::Raw::Reference/;
-			my $branch_name = $branch_ref->name();
-			display(0,1,"branch($branch_name)=$commit");
-		}
-	}
-
-	# I am so struggling to understand this.
-	#
-	# If local HEAD != refs/heads/$branch it basically means that I have commits that
-	# are not to the repo's specified $branch, and something is out of whack.  Very
-	# rarely I *might* have to deal with multiple branches, but by and large I ONLY
-	# use the default branch of my repos.
-
-	# I guess what I am trying to do is keep track of the history and analyze needed
-	# merges, in terms of unstaged_changes, AHEAD and BEHIND, without having to do
-	# a fetch, or modify anything in my local repositories.
-
-	# However, this amounts to me building, and caching, the entire history of
-	# every repo.  If I KNOW that the system is completely stable, then I COULD,
-	# I suppose, and then mark that with an ETag (that I pass back to the event
-	# to only get changes AFTER that).
-
-	# the whole notion of determining AHEAD and BEHIND relies on having a common
-	# starting position, and then monitoring events to add pushes to the remote.
-	# I have to remember how to get refs
+	display($dbg_head_commits,0,"addHeadCommits($repo->{path})");
 
 	my $head_commit = Git::Raw::Reference->lookup("HEAD", $git_repo)->peel('commit') || '';
-	display(0,1,"head_id="._def($head_commit));
+	display($dbg_head_commits,1,"head_id="._def($head_commit));
 
 	my $master_commit = Git::Raw::Reference->lookup("refs/heads/$branch", $git_repo)->peel('commit') || '';
-	display(0,1,"master_id="._def($master_commit));
+	display($dbg_head_commits,1,"master_id="._def($master_commit));
 
 	my $remote_commit = Git::Raw::Reference->lookup("remotes/origin/$branch", $git_repo)->peel('commit') || '';
-	display(0,1,"remote_id="._def($remote_commit));
+	display($dbg_head_commits,1,"remote_id="._def($remote_commit));
 
 	my $head_id = "$head_commit";
 	my $master_id = "$master_commit";
@@ -571,13 +519,31 @@ sub addHistoryFields
 	$repo->{master_id} = $master_id;
 	$repo->{remote_id} = $remote_id;
 
-	if (0)
+	return $git_repo;
+}
+
+
+sub addHistoryFound
+{
+	my ($ptext,$id,$comp,$what) = @_;
+	if ($id eq $comp)
 	{
-		error("repository($path) has uncommited changes")
-			if $head_id ne $master_id;
-		error("repository($path) has unpushed commits")
-			if $master_id ne $remote_id;
+		$$ptext .= ' ' if $$ptext;
+		$$ptext .= $what;
+		return 1;
 	}
+	return 0;
+}
+
+
+sub addHeadHistory
+{
+	my ($repo,$git_repo) = @_;
+	my $branch = $repo->{branch};
+	$git_repo ||= Git::Raw::Repository->open($repo->{path});
+	display($dbg_head_history,0,"addHeadHistory($repo->{path})");
+
+	my $head_commit = Git::Raw::Reference->lookup("HEAD", $git_repo)->peel('commit') || '';
 
 	my ($head_id_found,
 		$master_id_found,
@@ -599,11 +565,11 @@ sub addHistoryFields
 		my $time = timeToStr($com->time());
 		my $msg = '';
 
-		$head_id_found ||= addFound(\$msg,$id,$head_id,'HEAD');
-		$master_id_found ||= addFound(\$msg,$id,$master_id,'MASTER');
-		$remote_id_found ||= addFound(\$msg,$id,$remote_id,'REMOTE');
+		$head_id_found ||= addHistoryFound(\$msg,$id,$repo->{head_id},'HEAD');
+		$master_id_found ||= addHistoryFound(\$msg,$id,$repo->{master_id},'MASTER');
+		$remote_id_found ||= addHistoryFound(\$msg,$id,$repo->{remote_id},'REMOTE');
 
-		display(0,2,"$time ".pad($msg,20)."$id == "._lim($summary,20));
+		display($dbg_head_history,2,"$time ".pad($msg,20)."$id == "._lim($summary,20));
 
 		$repo->{history} ||= shared_clone([]);
 		push @{$repo->{history}},shared_clone({
@@ -616,80 +582,83 @@ sub addHistoryFields
 		$com = $log->next();
 	}
 
-
-
-	# my $refspec_str = "refs/heads/$branch";
-	# my $refspec = Git::Raw::RefSpec->parse($refspec_str,0);
-	# display(0,1,"refspec=$refspec");
-
-	# my $history = gitHistory($repo,1);
+	return $git_repo
 }
-
-
-sub addFound
-{
-	my ($ptext,$id,$comp,$what) = @_;
-	if ($id eq $comp)
-	{
-		$$ptext .= ' ' if $$ptext;
-		$$ptext .= $what;
-		return 1;
-	}
-	return 0;
-}
-
-
-
-
-
-
-
-sub addAllHistoryFields
-{
-	repoDisplay(0,0,"addAllHistoryFields()");
-	my $repo_list = getRepoList();
-	for my $repo (@$repo_list)
-	{
-		addHistoryFields($repo)
-			if $DO_ALL || $repo->{path} =~ /\/data$|\/data_master$|\/site\/myIOT$/;
-	}
-	repoDisplay(0,0,"addAllHistoryFields() finished");
-	return;
-}
-
 
 
 sub checkSubmodules
+	# checks main module against the submodules it is 'used_in', if any
+	# at this time, called from doGitHub() at startup, there gitChanges()
+	# has not yet been called.
 {
-	repoDisplay(0,0,"checkSubmodules()");
-	my $repo_list = getRepoList();
-	for my $repo (@$repo_list)
+	my ($repo) = @_;
+	return if !$repo->{used_in};
+	repoDisplay(0,0,"checkSubmodules($repo->{path})");
+	for my $sub_path (@{$repo->{used_in}})
 	{
-		if (@{$repo->{used_in}})
-		{
-			next if !$DO_ALL && $repo->{path} !~ /\/data$|\/data_master$/;
-			repoDisplay(0,1,"checking used_in for $repo->{path}");
-			for my $sub_path (@{$repo->{used_in}})
-			{
+		my $sub_repo = getRepoByPath($sub_path);
+		return repoError($repo,"Could not find used_in($sub_path)")
+			if !$sub_repo;
 
-				my $sub_repo = getRepoByPath($sub_path);
-				return repoError($repo,"Could not find used_in($sub_path)")
-					if !$sub_repo;
-				repoDisplay(0,2,"used in $sub_path");
-				error("sub_repo master_id "._def($sub_repo->{master_id})." <> "._def($repo->{master_id}))
-					if $sub_repo->{master_id} ne $repo->{master_id};
-			}
+		repoDisplay(0,2,"used in $sub_path");
+
+		# instead of reporting this as an error, we push it directly
+		# onto the error lists of both repos.
+
+		if ($sub_repo->{master_id} ne $repo->{master_id})
+		{
+			my $msg = "SUB_MODULE($sub_repo->{master_id})) <> MASTER_MODULE($repo->{master_id})";
+			# repoError($repo,$msg);
+			push @{$repo->{errors}},$msg;
+			push @{$sub_repo->{errors}},$msg;
 		}
 	}
-	repoDisplay(0,0,"addAllHistoryFields() finished");
-	return;
 }
 
 
 
 #----------------------------------------------
-# test main (for sanity)
+# Event Thread
 #----------------------------------------------
+
+sub oneEvent
+{
+	my ($event) = @_;
+
+	my $git_user = getPref('GIT_USER');
+
+	my $time = $event->{created_at} || '';
+	my $github_repo = $event->{repo} || '';
+	my $repo_id = $github_repo->{name} || '';
+	$repo_id =~ s/^$git_user\///;
+
+	my $payload = $event->{payload} || '';
+	my $before = $payload ? $payload->{before} || '' : '';
+	my $head = $payload ? $payload->{head} || '' : '';
+
+	my $repo = getRepoById($repo_id) || '';
+	my $repo_path = $repo ? $repo->{path} : '';
+
+	return if !doRepoPath();
+
+	repoError(undef,"Could not find repo($repo_id)") if !$repo_path;
+
+	repoDisplay(0,0,"commits for repo($repo_id=$repo_path) at $time");
+	repoDisplay(0,1,"head=$head") if $head;
+	repoDisplay(0,1,"before=$before") if $before;
+
+	my $commits = $payload ? $payload->{commits} : '';
+	if ($commits && @$commits)
+	{
+		for my $commit (@$commits)
+		{
+			my $sha = $commit->{sha} || '';
+			my $msg = $commit->{message} || '';
+			repoDisplay(0,2,pad($sha,42)._lim($msg,60));
+		}
+	}
+}
+
 
 sub initEventMonitor
 {
@@ -719,22 +688,88 @@ sub checkEvents
 
 
 
-if (1)
+#----------------------------------------------
+# main
+#----------------------------------------------
+
+sub showChanges
+{
+	my ($repo) = @_;
+	gitChanges($repo);
+	my $unstaged_changes = keys %{$repo->{unstaged_changes}};
+	my $staged_changes = keys %{$repo->{staged_changes}};
+	my $remote_changes = keys %{$repo->{remote_changes}};
+	display(0,0,"unstaged($unstaged_changes) staged($staged_changes) remote($remote_changes)");
+}
+
+sub showBranches
+{
+	my ($git_repo) = @_;
+	my @branch_refs = $git_repo->branches( 'all' );
+	for my $branch_ref (@branch_refs)
+	{
+		my $commit = $branch_ref->target();
+		$commit = $commit->peel('commit')
+			if ref($commit) =~ /Git::Raw::Reference/;
+		my $branch_name = $branch_ref->name();
+		display(0,0,"branch($branch_name)=$commit");
+	}
+}
+
+
+
+if (0)
 {
 	if (parseRepos())
 	{
-		addAllHistoryFields();
-		# checkSubmodules();
-		# updateHeadCommits();
-
-		my $etag = initEventMonitor();
-		while (1)
+		my $repo_list = getRepoList();
+		for my $repo (@$repo_list)
 		{
-			sleep(65);
-			last if !checkEvents(\$etag);
+			next if !doRepoPath($repo->{path});
+			display(0,0,"repo($repo->{path})  branch=$repo->{branch}");
+
+			showChanges($repo) if 1;
+
+			my $git_repo = Git::Raw::Repository->open($repo->{path});
+			my $detached = $git_repo->is_head_detached();
+			repoError($repo,"DETACHED HEAD") if $detached;
+
+			showBranches($git_repo) if 1;
+			addHeadCommits($repo,$git_repo);
+			addHeadHistory($repo,$git_repo) if 1;;
+		}
+
+		if (1)
+		{
+			for my $repo (@$repo_list)
+			{
+				next if !doRepoPath($repo->{path});
+				checkSubmodules($repo);
+			}
+		}
+
+		if (0)
+		{
+			my $etag = initEventMonitor();
+			while (1)
+			{
+				sleep(65);
+				last if !checkEvents(\$etag);
+			}
 		}
 	}
 }
+
+
+
+
+
+
+
+
+
+
+
 
 
 

@@ -78,7 +78,13 @@ sub canPushRepos
 	return scalar(keys %$repos_can_push);
 }
 
+
 sub setCanPush
+	# There are definitely some issues with current diff
+	# change detection vis-a-vis submodules. I'm not sure
+	# that 'remote_changes' is the best indication of whether
+	# a repo can be pushed.  master_id != remote_id might
+	# be another, perhaps better, indicator. TODO WIP
 {
 	my ($repo) = @_;
 	my $num = keys %{$repo->{remote_changes}};
@@ -220,6 +226,7 @@ sub parseRepos
 				{
 					my $what = $1;
 					repoDisplay($dbg_parse+2,2,"$what $line");
+					$repo->{lc($what)} ||= shared_clone([]);
 					push @{$repo->{lc($what)}},$line;
 
 					my ($root) = split(/\s+/,$line);
@@ -231,6 +238,7 @@ sub parseRepos
 				{
 					my $what = $1;
 					repoDisplay($dbg_parse+2,2,"$what $line");
+					$repo->{lc($what)} ||= shared_clone([]);
 					push @{$repo->{lc($what)}},$line;
 					my ($path) = split(/\s+/,$line);
 					$repo->repoError("$what $path does not exist")
@@ -243,6 +251,7 @@ sub parseRepos
 				{
 					my $what = $1;
 					repoDisplay($dbg_parse+2,2,"$what $line");
+					$repo->{lc($what)} ||= shared_clone([]);
 					push @{$repo->{lc($what)}},$line;
 				}
 			}
@@ -254,31 +263,40 @@ sub parseRepos
         return;
     }
 
-	# set used_by list
-	# for submodules, set
+	# Call gitStart() to set head, master, and remote id's
+	# Set used_by list from USES modules
+	# For submodules, set
 	#		{submodules} list of paths on parent
 	#		{used_in} list of paths on master module
 
 	for my $repo (@$repo_list)
 	{
-		for my $uses (@{$repo->{uses}})
+		apps::gitUI::repoGit::gitStart($repo);
+
+		my $uses = $repo->{uses};
+		if ($uses)
 		{
-			my $used_repo = $repo_hash->{$uses};
-			if (!$used_repo)
+			for my $use (@$uses)
 			{
-				$repo->repoError("invalid USES: $uses");
-			}
-			else
-			{
-				push @{$used_repo->{used_by}},$repo->{path};
+				my $used_repo = $repo_hash->{$use};
+				if (!$used_repo)
+				{
+					$repo->repoError("invalid USES: $use");
+				}
+				else
+				{
+					$used_repo->{used_by} ||= shared_clone([]);
+					push @{$used_repo->{used_by}},$repo->{path};
+				}
 			}
 		}
 
 		my $parent_repo = $repo->{parent_repo};
-		if ($repo->{parent_repo})
+		if ($parent_repo)
 		{
 			repoDisplay($dbg_parse,1,"submodule repo($repo->{path}");
 			repoDisplay($dbg_parse,2,"added to parent($parent_repo->{path}} submodules");
+			$parent_repo->{submodules} ||= shared_clone([]);
 			push @{$parent_repo->{submodules}},$repo->{path};
 			my $master_repo = getRepoById($repo->{id});
 			if (!$master_repo)
@@ -288,6 +306,7 @@ sub parseRepos
 			else
 			{
 				repoDisplay($dbg_parse,2,"added to master_repo($master_repo->{path}} used_in");
+				$master_repo->{used_in} ||= shared_clone([]);
 				push @{$master_repo->{used_in}},$repo->{path};
 			}
 		}

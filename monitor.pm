@@ -182,7 +182,7 @@ sub createMonitor
 		my $mon = Win32::ChangeNotify->new($path,$include_subfolders,$WIN32_FILTER);
 		if (!$mon)
 		{
-			error("apps::gitUI::monitor::creeateMonitor() - Could not create monitor($path)");
+			error("apps::gitUI::monitor::createMonitor() - Could not create monitor($path)");
 			return 0;
 		}
 

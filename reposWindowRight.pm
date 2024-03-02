@@ -169,7 +169,7 @@ sub notifyRepoSelected
 
 	my $kind =
 		$repo->{parent_repo} ? "SUBMODULE " :
-		@{$repo->{used_in}} ? "MAIN_MODULE " : '';
+		$repo->{used_in} ? "MAIN_MODULE " : '';
 
 	$this->{repo_name}->SetLabel($kind.$path);
 }

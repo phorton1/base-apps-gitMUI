@@ -86,57 +86,76 @@ sub new
 		id      => repoPathToId($submodule_path || $path),
 		branch	=> $branch,
 
-		parent_repo => $parent_repo,
-		rel_path	=> $rel_path,
-		submodules  => shared_clone([]),
-		used_in		=> shared_clone([]),
-
 		section_path => $section_path,
 		section_name => $section_name,
 
-		# status fields
+		# TODO WIP status fields always exist
+		# currently set in reposGithub.pm but
+		# probably should be moved to repoGit()
+		# and called during parseRepos().
 
-		ahead	=> 0,
-		behind  => 127,
+		head_id 	=> '',
+		master_id 	=> '',
+		remote_id 	=> '',
+
+		ahead		=> 0,
+		behind  	=> 0,
 
 		# parsed fields
+		# PRIVATE is inherited for submdules
 
 		mine     => 1,						# if !FORKED && !NOT_MINE in file
 		private  => $parent_repo ? $parent_repo->{private} : 0,
-											# if PRIVATE in file or inherited for submdules
 		forked   => 0,						# if FORKED [optional_blah] in file
 		parent   => '',						# "Forked from ..." or "Copied from ..."
 		descrip  => '',						# description from github
 		size	 => 0,						# size in KB from github
-		page_header => 0,					# PAGE_HEADER for ordered documents
 
-		docs     => shared_clone([]),		# MD documents in particular order
-		uses 	 => shared_clone([]),		# a list of the repositories this repository USES
-		used_by  => shared_clone([]),		# list of repositorie sthat use this repository
+		# parsed fields added as necessary
+		#
+		# page_header => 0,					# PAGE_HEADER for ordered documents
+		# docs     => shared_clone([]),		# MD documents in particular order
+		# uses 	 => shared_clone([]),		# a list of the repositories this repository USES
+		# used_by  => shared_clone([]),		# list of repositorie sthat use this repository
+		# needs	 => shared_clone([]),       # a list of the abitrary dependencies this repository has
+		# friend   => shared_clone([]),       # a hash of repositories this repository relates to or can use
+		# group    => shared_clone([]),       # a list of arbitrary groups that this repository belongs to
 
-		needs	 => shared_clone([]),       # a list of the abitrary dependencies this repository has
-		friend   => shared_clone([]),       # a hash of repositories this repository relates to or can use
-		group    => shared_clone([]),       # a list of arbitrary groups that this repository belongs to
+		# these arrays always exist
 
 		errors   => shared_clone([]),
 		warnings => shared_clone([]),
 		notes 	 => shared_clone([]),
 
-		# entries
+		# change arrays always exist
 
 		unstaged_changes => shared_clone({}),	# changes pending Add
 		staged_changes   => shared_clone({}),	# changes pending Commit
 		remote_changes   => shared_clone({}),	# changes pending Push
 
-		# for tagSelected and pushSelected
+		# temporary fields added as necessary
+		# by various methods
 
-		selected => 0,
-
-		# for github.pm
-
-		found_on_github => 0,
+		# found_on_github => 0,
 
 	});
+
+
+	# optional fields
+
+	if ($parent_repo)
+	{
+		$this->{parent_repo} = $parent_repo;
+		$this->{rel_path}	 = $rel_path;
+		# $this->{submodules} = shared_clone([]);
+		# $this->{used_in}	  = shared_clone([]);
+	}
+
+	# added at runtime by various methods
+	#
+
+	#
+
 
 
 	bless $this,$class;
@@ -569,6 +588,15 @@ sub toTextCtrl
 	$this->contentLine($text_ctrl,0,'parent');
 	$this->contentLine($text_ctrl,0,'descrip');
 	$this->contentLine($text_ctrl,0,'page_header');
+
+	if (1)
+	{
+		$text_ctrl->addLine();
+		$this->contentLine($text_ctrl,1,'head_id');
+		$this->contentLine($text_ctrl,1,'master_id');
+		$this->contentLine($text_ctrl,1,'remote_id');
+		$this->contentArray($text_ctrl,0,'history');
+	}
 
 	$this->contentArray($text_ctrl,0,'submodules');
 	$this->contentArray($text_ctrl,0,'used_in');

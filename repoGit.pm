@@ -20,7 +20,7 @@ use apps::gitUI::utils;
 
 my $MAX_SHOW_CHANGES = 30;
 
-
+my $dbg_start = 1;
 my $dbg_chgs = 1;
 my $dbg_index = 1;
 my $dbg_revert = 1;
@@ -40,6 +40,7 @@ BEGIN
 {
  	use Exporter qw( import );
 	our @EXPORT = qw(
+		gitStart
 		gitChanges
 		gitIndex
 		gitRevert
@@ -106,6 +107,43 @@ sub getTree
 		if !$tree;
 
 	return $tree;
+}
+
+
+#--------------------------------------------
+# gitStart
+#--------------------------------------------
+# Sets the initial head_id, master_id, and remote_id members
+
+sub gitStart
+	# returns undef if any problems
+	# returns the $git_repo otherwise
+{
+	my ($repo,$git_repo) = @_;
+	my $branch = $repo->{branch};
+
+	display($dbg_start,0,"gitStart($repo->{path}) branch=$branch");
+	$git_repo ||= Git::Raw::Repository->open($repo->{path});
+	return gitError($repo,"Could not create git_repo") if !$git_repo;
+
+	my $head_commit = Git::Raw::Reference->lookup("HEAD", $git_repo)->peel('commit') || '';
+	display($dbg_start+1,1,"head_id="._def($head_commit));
+
+	my $master_commit = Git::Raw::Reference->lookup("refs/heads/$branch", $git_repo)->peel('commit') || '';
+	display($dbg_start+1,1,"master_id="._def($master_commit));
+
+	my $remote_commit = Git::Raw::Reference->lookup("remotes/origin/$branch", $git_repo)->peel('commit') || '';
+	display($dbg_start+1,1,"remote_id="._def($remote_commit));
+
+	my $head_id = "$head_commit";
+	my $master_id = "$master_commit";
+	my $remote_id = "$remote_commit";
+
+	$repo->{head_id} = $head_id;
+	$repo->{master_id} = $master_id;
+	$repo->{remote_id} = $remote_id;
+
+	return $git_repo;
 }
 
 
@@ -537,6 +575,9 @@ sub gitCommit
 	mergeHash($repo->{remote_changes},$repo->{staged_changes});
 	$repo->{staged_changes} = shared_clone({});
 	setCanPush($repo);
+
+	gitStart($repo,$git_repo);
+
 	apps::gitUI::Frame::monitor_callback({ repo=>$repo })
 		if getAppFrame();
 
@@ -728,6 +769,9 @@ sub gitPush
 	{
 		display($dbg_commit+1,1,"clearing $num remote_changes");
 		$repo->{remote_changes} = shared_clone({});
+
+		gitStart($repo,$git_repo);
+
 		setCanPush($repo);
 		apps::gitUI::Frame::monitor_callback({ repo=>$repo })
 			if getAppFrame();
