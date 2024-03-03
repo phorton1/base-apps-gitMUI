@@ -384,4 +384,133 @@ if (parseRepos())
 	}
 }
 
+
+
+
+
+
+
+
+
+			while ($running && !$stopping)
+			{
+			}
+			$last_run = time() if $running;
+		}
+		{
+
+		elsif
+
+
+
+	for m
+}
+
+
+sub initEventMonitor
+{
+	display(0,0,"initEventMonitor()");
+	my $git_user = getPref('GIT_USER');
+	my $etag = '';
+	my $events = gitHubRequest('events',"users/$git_user/events?per_page=100",0,undef,\$etag);
+	display(0,1,"initial etag=$etag");
+	return '' if !$etag;
+	return '' if !processEvents($events);
+	return $etag;
+}
+
+sub checkEvents
+{
+	my ($petag) = @_;
+	display(0,0,"checkEvents($$petag)");
+	my $git_user = getPref('GIT_USER');
+	my $events = gitHubRequest('events',"users/$git_user/events?per_page=30",0,undef,$petag);
+	display(0,1,"new etag=$$petag  events="._def($events));
+	return 0 if !$events;
+	return $events if !ref($events);
+		# return the 304 from gitHubRequest()
+	return 0 if !proceessEvents($events);
+	return 1;
+}
+
+
+
+
+
+
+
+
+sub getGitEvents
+{
+	display(0,0,"getGitEvents()");
+	setRepoUI(undef);
+	if (0)
+	{
+		while (!monitorStarted())
+		{
+			display(0,0,"wating for monitorStarted()");
+			sleep(1);
+		}
+		display(0,1,"the monitor has started");
+	}
+
+	my $git_user = getPref('GIT_USER');
+	my $etag = '';
+	display(0,1,"git_user=$git_user");
+	my $events = gitHubRequest('events',"users/$git_user/events?per_page=100",0,undef,\$etag);
+	display(0,1,"getGitEvents() got etag($etag) events="._def($events));
+	# while (1) { sleep(1); }
+	return $etag;
+}
+
+
+sub testCheckSubmodules
+	# checks main module against the submodules it is 'used_in', if any
+	# at this time, called from doGitHub() at startup, there gitChanges()
+	# has not yet been called.
+{
+	my ($repo) = @_;
+	return if !$repo->{used_in};
+	repoDisplay(0,0,"checkSubmodules($repo->{path})");
+	for my $sub_path (@{$repo->{used_in}})
+	{
+		my $sub_repo = getRepoByPath($sub_path);
+		return repoError($repo,"Could not find used_in($sub_path)")
+			if !$sub_repo;
+
+		repoDisplay(0,2,"used in $sub_path");
+
+		# instead of reporting this as an error, we push it directly
+		# onto the error lists of both repos.
+
+		if ($sub_repo->{master_id} ne $repo->{master_id})
+		{
+			my $msg = "SUB_MODULE($sub_repo->{master_id})) <> MASTER_MODULE($repo->{master_id})";
+			# repoError($repo,$msg);
+			push @{$repo->{errors}},$msg;
+			push @{$sub_repo->{errors}},$msg;
+		}
+	}
+}
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 1;

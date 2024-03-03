@@ -139,9 +139,16 @@ sub gitStart
 	my $master_id = "$master_commit";
 	my $remote_id = "$remote_commit";
 
-	$repo->{head_id} = $head_id;
-	$repo->{master_id} = $master_id;
-	$repo->{remote_id} = $remote_id;
+	$repo->{HEAD_ID} = $head_id;
+	$repo->{MASTER_ID} = $master_id;
+	$repo->{REMOTE_ID} = $remote_id;
+
+	# note invariants, but don't stop using this repo
+
+	repoError($repo,"DETACHED HEAD!!")
+		if $git_repo->is_head_detached();
+	repoError($repo,"HEAD_ID <> MASTER_ID!!")
+		if $head_id ne $master_id;
 
 	return $git_repo;
 }

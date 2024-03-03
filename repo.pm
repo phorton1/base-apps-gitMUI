@@ -94,11 +94,12 @@ sub new
 		# probably should be moved to repoGit()
 		# and called during parseRepos().
 
-		head_id 	=> '',
-		master_id 	=> '',
-		remote_id 	=> '',
+		HEAD_ID 	=> '',
+		MASTER_ID 	=> '',
+		REMOTE_ID 	=> '',
+		GITHUB_ID 	=> '',
 
-		ahead		=> 0,
+		AHEAD		=> 0,
 		behind  	=> 0,
 
 		# parsed fields
@@ -527,6 +528,7 @@ sub contentArray
 sub addTextForNum
 {
 	my ($this,$text,$field_name,$show_field) = @_;
+	$show_field ||= $field_name;
 	my $num = $this->{$field_name};
 	if ($num)
 	{
@@ -565,8 +567,8 @@ sub toTextCtrl
 	$short_status = $this->addTextForHashNum($short_status,'unstaged_changes',"UNSTAGED");
 	$short_status = $this->addTextForHashNum($short_status,'staged_changes',"STAGED");
 	$short_status = $this->addTextForHashNum($short_status,'remote_changes',"REMOTE");
-	$short_status = $this->addTextForNum($short_status,'ahead',"AHEAD");
-	$short_status = $this->addTextForNum($short_status,'behind',"AHEAD");
+	$short_status = $this->addTextForNum($short_status,'AHEAD');
+	$short_status = $this->addTextForNum($short_status,'BEHIND');
 
 	if ($short_status)
 	{
@@ -592,10 +594,11 @@ sub toTextCtrl
 	if (1)
 	{
 		$text_ctrl->addLine();
-		$this->contentLine($text_ctrl,1,'head_id');
-		$this->contentLine($text_ctrl,1,'master_id');
-		$this->contentLine($text_ctrl,1,'remote_id');
-		$this->contentArray($text_ctrl,0,'history');
+		$this->contentLine($text_ctrl,1,'HEAD_ID');
+		$this->contentLine($text_ctrl,1,'MASTER_ID');
+		$this->contentLine($text_ctrl,1,'REMOTE_ID');
+		$this->contentArray($text_ctrl,0,'local_commits');
+			# TODO this is an array of object with sha, msg, and time
 	}
 
 	$this->contentArray($text_ctrl,0,'submodules');

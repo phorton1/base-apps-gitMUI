@@ -25,6 +25,7 @@ use Pub::WX::Dialogs;
 use apps::gitUI::repo;
 use apps::gitUI::repos;
 use apps::gitUI::reposGithub;
+use apps::gitUI::repoStatus;
 use apps::gitUI::utils;
 use apps::gitUI::Resources;
 use apps::gitUI::command;
@@ -104,6 +105,7 @@ sub new
 	EVT_COMMAND($this, -1, $MONITOR_EVENT, \&onMonitorEvent );
 
 	return if !monitorInit(\&monitor_callback);
+	return if !repoStatusInit(\&monitor_callback);
 
 	return $this;
 }

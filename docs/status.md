@@ -23,7 +23,7 @@ added to, and maintained, for every repo in repoGit().
 A new module, gitStatus.pm has been created.
 It contains the updateStatus thread.
 
-There is a preference, GITHUB_EVENT_INTERVAL, which *should* be
+There is a preference, GITHUB_UPDATE_INTERVAL, which *should* be
 set to 0 or a minimum of 60, that will cause the thread to watch
 for changes to github events, and/or to check the integrity of
 local subodules.
