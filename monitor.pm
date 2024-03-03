@@ -82,9 +82,15 @@ use apps::gitUI::repos;
 use apps::gitUI::repoGit;
 use Pub::Utils;
 
+
+
 our $MONITOR_NOTIFY_EVERY_CHANGE = 1;
 	# whether to call back on every change for
 	# showing instantaneous diff updates in commitListCtrl
+my $DELAY_MONITOR_STARTUP = 0;
+	# Set this to number of seconds to delay monitor thread
+	# actually starting, to see what happens to other threads
+	# and program functions.
 
 my $dbg_thread = 0;
 	# monitor thread lifecycle
@@ -102,6 +108,12 @@ our $MON_CB_TYPE_REPO = 1;
 BEGIN {
     use Exporter qw( import );
 	our @EXPORT = qw (
+
+		monitorInit
+		monitorStart
+		monitorStop
+		monitorStarted
+
 		$MON_CB_TYPE_STATUS
 		$MON_CB_TYPE_REPO
 
@@ -127,7 +139,12 @@ my $WIN32_FILTER =
 my $thread;
 my $the_callback;
 my %monitors;
-	# NOT SHARED BUT BUILT BY THE THREAD!
+	# NOT SHARED, yet BUILT BY THE THREAD!
+
+my $running:shared = 0;
+my $started:shared = 0;
+my $stopping:shared = 0;
+my $paused:shared = 0;
 
 
 #------------------------------------------------------
@@ -283,26 +300,32 @@ sub run
 	# rather we tell it to stop and it clears the monitor list, and
 	# rebuilds it on started
 {
-	my ($this) = @_;
 	display($dbg_thread,0,"monitor::run()");
+
+	if ($DELAY_MONITOR_STARTUP)		# to see startup before any events occur
+	{
+		warning(0,0,"Delaying monitor startup by $DELAY_MONITOR_STARTUP seconds");
+		sleep($DELAY_MONITOR_STARTUP);
+	}
 
 	my $rslt = 1;
 	while (1)
 	{
 		display($dbg_thread+1,0,"thread top");
 
-		if ($this->{stopping})
+		if ($stopping)
 		{
 			display($dbg_thread,0,"thread {stopping}");
 			%monitors = ();
-			$this->{stopping} = 0;
-			$this->{running} = 0;
+			$stopping = 0;
+			$running = 0;
+			$started = 0;
+			$paused = 0;
 		}
-		elsif ($this->{running})
+		elsif ($running)
 		{
-			if (!$this->{started})		# ==> $CHECK_CHANGES_ON_INIT
+			if (!$started)		# ==> $CHECK_CHANGES_ON_INIT
 			{
-
 				display($dbg_thread,0,"thread {starting}");
 				&$the_callback({ status =>"starting" });
 				my $repo_list = getRepoList();
@@ -326,12 +349,12 @@ sub run
 
 				if (defined($rslt))
 				{
-					$this->{started} = 1;
+					$started = 1;
 					display($dbg_thread,0,"thread {started}");
 					&$the_callback({ status =>"started" }) ;
 				}
 			}
-			elsif (!$this->{paused})
+			elsif (!$paused)
 			{
 				my $repo_hash = getRepoHash();
 				for my $path (sort keys %monitors)
@@ -376,9 +399,15 @@ sub run
 
 			if (!defined($rslt))
 			{
-				$this->{running} = 0;
+				%monitors = ();
+				$stopping = 0;
+				$running = 0;
+				$started = 0;
+				$paused = 0;
+
 				warning($dbg_thread,0,"STOPPING MONITOR DUE TO ERROR!!");
 				&$the_callback({ status =>"STOPPING MONITOR DUE TO ERROR!!" });
+
 				sleep(10)
 			}
 
@@ -391,58 +420,63 @@ sub run
 }
 
 
+#--------------------------------------
+# API
+#--------------------------------------
 
-sub new
+
+sub monitorStarted
 {
-	my ($class,$callback) = @_;
-	display($dbg_mon,0,"new()");
+	return $started;
+}
+
+
+sub monitorInit
+{
+	my ($callback) = @_;
+	display($dbg_mon,0,"monitorInit()");
 	return !error("callback not specified")
 		if !$callback;
 	$the_callback = $callback,
-	my $this = shared_clone({
-		started => 0,
-		running => 0,
-		stopping => 0,
-		paused => 0 });
-	bless $this,$class;
-	return $this;
+	return monitorStart();
 }
 
 
 
-sub start
+sub monitorStart
 {
-	my ($this) = @_;
 	display($dbg_mon,0,"monitor::start()");
-	return !error("already running")
-		if $this->{running};
 
-	$this->{started} = 0;
-	$this->{stopping} = 0;
-	$this->{paused} = 0;
+	return !error("already running")
+		if $running;
+
+	$started = 0;
+	$stopping = 0;
+	$paused = 0;
 
 	if (!$thread)
 	{
 		display($dbg_mon,0,"starting thread");
-		$thread = threads->create(\&run,$this);
+		$thread = threads->create(\&run);
 		$thread->detach();
 		display($dbg_mon,0,"thread started");
 	}
 
-	$this->{running} = 1;
-	display($dbg_mon,0,"monitor started");
+	$running = 1;
+	display($dbg_mon,0,"monitor::start() returning");
 	return 1;
 }
 
 
-sub stop
+sub monitorStop
 {
-	my ($this) = @_;
 	display($dbg_mon,0,"monitor::stop()");
-	$this->{stopping} = 1;
-	while ($this->{running})
+	return error("monitor not running")
+		if !$running;
+	$stopping = 1;
+	while ($running)
 	{
-		display($dbg_mon,0,"waiting for thread to stop ...");
+		display($dbg_mon,0,"waiting for monitor thread to stop ...");
 		sleep(0.2);
 	}
 	display($dbg_thread,0,"monitor stopped()");

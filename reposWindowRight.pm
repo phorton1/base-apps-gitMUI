@@ -26,7 +26,7 @@ use base qw(Wx::Window);
 
 
 my $dbg_life = 0;
-my $dbg_notify = 0;
+my $dbg_notify = 1;
 my $dbg_cmds = 0;
 
 

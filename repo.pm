@@ -215,7 +215,7 @@ sub repoNote
 }
 
 
-sub hasChanges
+sub unused_hasChanges
 {
 	my ($this) = @_;
 	return

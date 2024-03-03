@@ -313,25 +313,16 @@ sub notifyRepoChanged
 	# detects a change to a repo
 {
 	my ($this,$repo) = @_;
-	display($dbg_notify,0,"notifyRepoChanged($repo->{path})");
-	for my $ctrl_section (@{$this->{ctrl_sections}})
-	{
-		for my $ctrl (@{$ctrl_section->{ctrls}})
-		{
-			my $id = $ctrl->GetId();
-			if ($id > 0)
-			{
-				my $found_repo = repoFromId($id);
-				if ($repo->{path} eq $found_repo->{path})
-				{
-					my $color = linkDisplayColor($repo);
-					$ctrl->SetForegroundColour($color);
-					$ctrl->Refresh();
-					return;
-				}
-			}
-		}
-	}
+	my $path = $repo->{path};
+	display($dbg_notify,0,"$this notifyRepoChanged($path)");
+	my $ctrl = $this->{ctrls_by_path}->{$path};
+	return error("Could not find ctrl($path)") if !$ctrl;
+	my $color = linkDisplayColor($repo);
+	$ctrl->SetForegroundColour($color);
+	$ctrl->Refresh();
+	$this->Refresh();
+	$this->{parent}->{right}->notifyRepoSelected($repo)
+		if $path eq $this->{selected_path};
 }
 
 

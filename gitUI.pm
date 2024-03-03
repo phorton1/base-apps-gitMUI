@@ -38,6 +38,7 @@ use base qw(Pub::WX::Frame);
 
 $TEST_JUNK_ONLY = 0;
 
+
 my $dbg_frame = 0;
 	# lifecycle
 my $dbg_cmd = 0;
@@ -45,13 +46,11 @@ my $dbg_cmd = 0;
 my $dbg_mon = 1;
 	# monitor callback
 
-
-
-my $monitor;
 my $MONITOR_EVENT:shared = Wx::NewEventType;
 
-# use Win32::OLE;
-# Win32::OLE::prhSetThreadNum(1);
+
+use Win32::OLE;
+Win32::OLE::prhSetThreadNum(1);
 	# I found this old fix in my own build, under /src/wx/Win32_OLE.
 	# This prevents threads from crashing on return (i.e. in HTTPServer
 	# 	connections) by setting a flag into my version of Win32::OLE
@@ -104,9 +103,7 @@ sub new
 	EVT_COMMAND($this, -1, $THREAD_EVENT, \&onThreadEvent );
 	EVT_COMMAND($this, -1, $MONITOR_EVENT, \&onMonitorEvent );
 
-	$monitor = apps::gitUI::monitor->new(\&monitor_callback);
-	return if !$monitor;
-	return if !$monitor->start();
+	return if !monitorInit(\&monitor_callback);
 
 	return $this;
 }
@@ -172,7 +169,7 @@ sub onCommand
 	elsif ($id == $ID_COMMAND_RESCAN ||
 		   $id == $ID_COMMAND_REBUILD_CACHE)
 	{
-		$monitor->stop();
+		monitorStop();
 
 		my $dlg = apps::gitUI::dialogDisplay->new($this,'gitUI display');
 		setRepoUI($dlg);
@@ -187,7 +184,7 @@ sub onCommand
 		{
 			$pane->populate() if $pane->can('populate');
 		}
-		$monitor->start();
+		monitorStart();
 	}
 
 }

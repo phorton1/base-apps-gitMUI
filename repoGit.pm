@@ -172,6 +172,12 @@ sub gitChanges
 	return if !defined($rslt);
 	$changes_changed += $rslt;
 
+	# update the main refs if anything changes
+	# perhaps due to commits made in regular gitGUI program
+	# it's fast.
+
+	gitStart($repo,$git_repo);
+
 	display($dbg_chgs,0,"gitChanges($repo->{path}) returning $changes_changed");
 	return $changes_changed;
 }
