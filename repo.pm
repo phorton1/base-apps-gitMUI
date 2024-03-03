@@ -476,21 +476,21 @@ sub checkGitConfig
 
 sub contentLine
 {
-	my ($this,$text_ctrl,$bold,$key,$extra_key) = @_;
-	my $label = $extra_key || $key;
+	my ($this,$text_ctrl,$bold,$key,$use_label) = @_;
+	my $label = $use_label || $key;
 
 	my $value = $this->{$key} || '';
 	return if !defined($value) || $value eq '';
 
 	$value = $value->{path} if $key eq 'parent_repo';
 	$value = repoIdToPath($value)
-		if $extra_key && $extra_key eq 'main_module';
+		if $key eq 'MAIN_MODULE';
 
 	my $context;
 	$context = { repo_path => $value } if
 		$key eq 'path' ||
 		$key eq 'parent_repo' ||
-		($extra_key && $extra_key eq 'main_module');
+		$key eq 'MAIN_MODULE';
 
 	my $line = $text_ctrl->addLine();
 	$text_ctrl->addPart($line, 0, $color_black, pad($label,12)." = " );
@@ -500,12 +500,16 @@ sub contentLine
 
 sub contentArray
 {
-	my ($this,$text_ctrl,$bold,$key,$color) = @_;
+	my ($this,$text_ctrl,$bold,$key,$ucase,$color) = @_;
+	$ucase ||= 0;
 	$color ||= $color_blue;
+
+	my $label = $key;
+	$label = uc($label) if $ucase;
 	my $array = $this->{$key};
 	return '' if !$array || !@$array;
 
-	$text_ctrl->addSingleLine($bold, $color_black, $key);
+	$text_ctrl->addSingleLine($bold, $color_black, $label);
 	for my $item (@$array)
 	{
 		my $value = $item;
@@ -519,10 +523,48 @@ sub contentArray
 			$key eq 'used_in';
 
 		my $line = $text_ctrl->addLine();
-		$text_ctrl->addPart($line, 0, $color_black, pad('',10));
+		$text_ctrl->addPart($line, 0, $color_black, pad('',4));
 		$text_ctrl->addPart($line, $bold, $color, $value, $context);
 	}
 }
+
+
+
+sub contentCommits
+{
+	my ($this,$text_ctrl,$key) = @_;
+	my $array = $this->{$key};
+	return '' if !$array || !@$array;
+
+	$text_ctrl->addSingleLine(0, $color_black, uc($key));
+
+	for my $commit (@$array)
+	{
+		my $sha = $commit->{sha};
+		my $msg = $commit->{msg};
+		my $time = $commit->{time};
+
+		my @branches = ();
+		push @branches,"HEAD" if $sha eq $this->{HEAD_ID};
+		push @branches,"MASTER" if $sha eq $this->{MASTER_ID};
+		push @branches,"REMOTE" if $sha eq $this->{REMOTE_ID};
+		push @branches,"GITHUB" if $sha eq $this->{GITHUB_ID};
+
+		my $branch_text = @branches ? "[".join(",",@branches)."] " : '';
+
+		my $line = $text_ctrl->addLine();
+		$text_ctrl->addPart($line,0,$color_blue,
+			pad("",4).
+			_lim($sha,8)." ".
+			timeToStr($time)." " );
+		$text_ctrl->addPart($line,1,$color_orange,$branch_text)
+			if $branch_text;
+		$text_ctrl->addPart($line,0,$color_black,_plim($msg,80));
+	}
+
+	$text_ctrl->addLine();
+}
+
 
 
 sub addTextForNum
@@ -560,8 +602,11 @@ sub toTextCtrl
 
 	$text_ctrl->addLine();
 
+	# $this->contentLine($text_ctrl,0,'num');
 	$this->contentLine($text_ctrl,1,'path');
 	$this->contentLine($text_ctrl,1,'id');
+	$this->contentLine($text_ctrl,0,'branch');
+	$this->contentLine($text_ctrl,1,'private');
 
 	my $short_status = '';
 	$short_status = $this->addTextForHashNum($short_status,'unstaged_changes',"UNSTAGED");
@@ -572,51 +617,70 @@ sub toTextCtrl
 
 	if ($short_status)
 	{
+		# mimic the 'link' colors for 'canPush',
+
+		my $color = linkDisplayColor($this);
 		$short_status = pad('status',12)." = ".$short_status;
-		$text_ctrl->addSingleLine(1, $color_black, $short_status);
-		$text_ctrl->addLine();
+		$text_ctrl->addSingleLine(1, $color, $short_status);
 	}
 
-	$this->contentLine($text_ctrl,1,'id','main_module') if $this->{parent_repo};
-	$this->contentLine($text_ctrl,1,'parent_repo');
-	$this->contentLine($text_ctrl,1,'rel_path');
-	$this->contentLine($text_ctrl,0,'num');
-	$this->contentLine($text_ctrl,0,'branch');
 	$this->contentLine($text_ctrl,0,'section_name');
 	$this->contentLine($text_ctrl,0,'section_path');
-	$this->contentLine($text_ctrl,1,'private');
 	$this->contentLine($text_ctrl,1,'mine');
 	$this->contentLine($text_ctrl,0,'forked');
 	$this->contentLine($text_ctrl,0,'parent');
 	$this->contentLine($text_ctrl,0,'descrip');
 	$this->contentLine($text_ctrl,0,'page_header');
 
-	if (1)
+	if ($this->{parent_repo})
 	{
 		$text_ctrl->addLine();
-		$this->contentLine($text_ctrl,1,'HEAD_ID');
-		$this->contentLine($text_ctrl,1,'MASTER_ID');
-		$this->contentLine($text_ctrl,1,'REMOTE_ID');
-		$this->contentArray($text_ctrl,0,'local_commits');
-			# TODO this is an array of object with sha, msg, and time
+		$this->contentLine($text_ctrl,1,'id','MAIN_MODULE');
+		$this->contentLine($text_ctrl,1,'parent_repo');
+		$this->contentLine($text_ctrl,1,'rel_path');
+	}
+	elsif ($this->{submodules} || $this->{used_in})
+	{
+		$text_ctrl->addLine();
+		$this->contentArray($text_ctrl,0,'submodules',1);
+		$this->contentArray($text_ctrl,0,'used_in',1);
 	}
 
-	$this->contentArray($text_ctrl,0,'submodules');
-	$this->contentArray($text_ctrl,0,'used_in');
 
-	$this->contentArray($text_ctrl,0,'docs');
-	$this->contentArray($text_ctrl,0,'uses');
-	$this->contentArray($text_ctrl,0,'used_by');
+	if (@{$this->{errors}} ||
+		@{$this->{warnings}} ||
+		@{$this->{notes}})
+	{
+		$text_ctrl->addLine();
+		$this->contentArray($text_ctrl,1,'errors',0,$color_red);
+		$this->contentArray($text_ctrl,1,'warnings',0,$color_yellow);
+		$this->contentArray($text_ctrl,0,'notes');
+	}
 
-	$this->contentArray($text_ctrl,0,'needs');
-	$this->contentArray($text_ctrl,0,'friend');
-	$this->contentArray($text_ctrl,0,'group')
-	;
-	$this->contentArray($text_ctrl,1,'errors',$color_red);
-	$this->contentArray($text_ctrl,1,'warnings',$color_yellow);
-	$this->contentArray($text_ctrl,0,'notes');
+	if ($this->{docs} ||
+		$this->{usss} ||
+		$this->{used_by} ||
+		$this->{needs} ||
+		$this->{friend} ||
+		$this->{group} )
+	{
+		$text_ctrl->addLine();
+		$this->contentArray($text_ctrl,0,'docs');
+		$this->contentArray($text_ctrl,0,'uses');
+		$this->contentArray($text_ctrl,0,'used_by');
+		$this->contentArray($text_ctrl,0,'needs');
+		$this->contentArray($text_ctrl,0,'friend');
+		$this->contentArray($text_ctrl,0,'group');
+	}
 
 	$text_ctrl->addLine();
+	$this->contentLine($text_ctrl,1,'HEAD_ID');
+	$this->contentLine($text_ctrl,1,'MASTER_ID');
+	$this->contentLine($text_ctrl,1,'REMOTE_ID');
+
+	$text_ctrl->addLine();
+	$this->contentCommits($text_ctrl,'local_commits');
+	$this->contentCommits($text_ctrl,'remote_commits');
 }
 
 

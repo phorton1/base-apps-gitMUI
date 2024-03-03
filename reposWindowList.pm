@@ -78,7 +78,6 @@ sub new
 	$this->SetBackgroundColour($color_white);
 	$this->populate();
 
-
 	EVT_SIZE($this, \&onSize);
 	return $this;
 

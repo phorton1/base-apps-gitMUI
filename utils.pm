@@ -211,7 +211,7 @@ our $font_bold = Wx::Font->new(9,wxFONTFAMILY_DEFAULT,wxFONTSTYLE_NORMAL,wxFONTW
 
 our $color_black 	     = Wx::Colour->new(0x00, 0x00, 0x00);
 our $color_red     	     = Wx::Colour->new(0xE0, 0x00, 0x00);		# commit: deletes, link: errors, dialog: repoError
-our $color_green   	     = Wx::Colour->new(0x00, 0x90, 0x00);		# commit: staged M's, link: public
+our $color_green   	     = Wx::Colour->new(0x00, 0x60, 0x00);		# commit: staged M's, link: public
 our $color_blue    	     = Wx::Colour->new(0x00, 0x00, 0xC0);		# commit: icons and repo line, link: private
 our $color_cyan          = Wx::Colour->new(0x00, 0xC0, 0xC0);		# link: staged changes
 our $color_magenta       = Wx::Colour->new(0xC0, 0x00, 0xC0);		# link: remote_changes
@@ -233,10 +233,10 @@ sub linkDisplayColor
 {
 	my ($repo) = @_;
 	return
-		@{$repo->{errors}} ? $color_red :
+		@{$repo->{errors}} || $repo->{BEHIND} ? $color_red :
+		keys %{$repo->{remote_changes}} || $repo->{AHEAD} ? $color_magenta :
 		keys %{$repo->{unstaged_changes}} ? $color_orange :
-		keys %{$repo->{staged_changes}} ? $color_cyan :
-		keys %{$repo->{remote_changes}} ? $color_magenta :
+		keys %{$repo->{staged_changes}} ? $color_dark_cyan :
 		$repo->{private} ? $color_blue :
 		$color_green;
 }

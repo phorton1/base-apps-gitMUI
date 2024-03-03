@@ -150,6 +150,63 @@ sub gitStart
 	repoError($repo,"HEAD_ID <> MASTER_ID!!")
 		if $head_id ne $master_id;
 
+	# rebuild/add local_commits and AHEAD
+
+	if (1)
+	{
+		delete $repo->{local_commits};
+
+		my ($head_id_found,
+			$master_id_found,
+			$remote_id_found) = (0,0,0);
+
+		my $log = $git_repo->walker();
+		# $log->sorting(["time","reverse"]);
+		$log->push($head_commit);
+
+		my $com = $log->next();
+		my $ahead = 0;
+
+		while ($com && (
+			!$head_id_found ||
+			!$master_id_found ||
+			!$remote_id_found ))
+		{
+			my $sha = $com->id();
+			my $msg = $com->summary();
+			my $time = $com->time();
+			my $extra = '';
+
+			$head_id_found = 1 if $sha eq $head_id;
+			$master_id_found = 1 if $sha eq $master_id;
+			$remote_id_found = 1 if $sha eq $remote_id;
+
+			# these are from newest to oldest
+
+			my $ahead_str = '';
+			if ($master_id_found && !$remote_id_found)
+			{
+				$ahead++;
+				$ahead_str = "AHEAD($ahead) ";
+			}
+
+			display($dbg_start+1,1,pad($ahead_str,10)."$time ".pad($extra,30)._lim($sha,8)." "._lim($msg,20));
+
+			$repo->{local_commits} ||= shared_clone([]);
+			push @{$repo->{local_commits}},shared_clone({
+				sha => $sha,
+				msg => $msg,
+				time => $time,
+			});
+
+			$com = $log->next();
+		}
+
+		warning($dbg_start,1,"repo($repo->{path}) is AHEAD($ahead)")
+			if $ahead;
+		$repo->{AHEAD} = $ahead;
+	}
+
 	return $git_repo;
 }
 
@@ -590,6 +647,7 @@ sub gitCommit
 	setCanPush($repo);
 
 	gitStart($repo,$git_repo);
+	$repo->{AHEAD}++;
 
 	apps::gitUI::Frame::monitor_callback({ repo=>$repo })
 		if getAppFrame();
@@ -784,6 +842,8 @@ sub gitPush
 		$repo->{remote_changes} = shared_clone({});
 
 		gitStart($repo,$git_repo);
+		$repo->{AHEAD} = 0;
+		$repo->{BEHIND} = 0;
 
 		setCanPush($repo);
 		apps::gitUI::Frame::monitor_callback({ repo=>$repo })

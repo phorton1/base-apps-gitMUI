@@ -196,7 +196,7 @@ sub gitHistoryText
 			_plim($commit->{id},42).
 			_plim($commit->{time},20).
 			_plim($commit->{author},$max_name)." ".
-			$summary.
+			_plim($summary,80).
 			"\n";
 	}
 	return $text;
@@ -224,15 +224,16 @@ sub historyToTextCtrl
 		my $spacer = $branch_text || $tag_text ? " " : '';
 
 		my $line = $text_ctrl->addLine();
-		$text_ctrl->addPart($line,0,$color_black,
-			_plim($commit->{id},42).
+		$text_ctrl->addPart($line,0,$color_blue,
+			pad("",4).
+			_lim($commit->{id},8)." ".
 			_plim($commit->{time},20).
 			_plim($commit->{author},$max_name)." ");
 		$text_ctrl->addPart($line,1,$color_orange,$branch_text)
 			if $branch_text;
 		$text_ctrl->addPart($line,1,$color_green,$tag_text)
 			if $tag_text;
-		$text_ctrl->addPart($line,0,$color_blue,$spacer.$commit->{summary});
+		$text_ctrl->addPart($line,0,$color_black,$spacer.$commit->{summary});
 	}
 }
 

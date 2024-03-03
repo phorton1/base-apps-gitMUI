@@ -279,7 +279,7 @@ sub checkChanged
 	if (!$eq)
 	{
 		$$pchanged = 1;
-		display($dbg_notify,0,"changed($field) on repo($repo->{path})",0,$UTILS_COLOR_CYAN);
+		display($dbg_notify,0,"changed($field) from $save_val to $val on repo($repo->{path})",0,$UTILS_COLOR_CYAN);
 	}
 }
 
@@ -317,8 +317,8 @@ sub updateStatusAll
 	for my $repo (@$repo_list)
 	{
 		my $git_repo = gitStart($repo);
+			# adds local_commits and sets AHEAD
 		return 0 if !$git_repo;
-		return 0 if !_addLocalCommits($repo,$git_repo);
 		return 0 if $stopping;
 	}
 
@@ -328,86 +328,6 @@ sub updateStatusAll
 	}
 
 	return 1;
-}
-
-
-
-
-sub _addLocalCommitFound
-{
-	my ($ptext,$sha,$repo,$field) = @_;
-	if ($sha eq $repo->{$field})
-	{
-		$$ptext .= ' ' if $$ptext;
-		$$ptext .= $field;
-		return 1;
-	}
-	return 0;
-}
-
-
-sub _addLocalCommits
-{
-	my ($repo,$git_repo) = @_;
-	my $branch = $repo->{branch};
-	$git_repo ||= Git::Raw::Repository->open($repo->{path});
-	return !error("Could not open git_repo($repo->{path})")
-		if !$git_repo;
-
-	display($dbg_local_commits,0,"_addLocalCommits($repo->{path})");
-
-	my $head_commit = Git::Raw::Reference->lookup("HEAD", $git_repo)->peel('commit') || '';
-
-	my ($head_id_found,
-		$master_id_found,
-		$remote_id_found) = (0,0,0);
-
-	my $log = $git_repo->walker();
-	# $log->sorting(["time","reverse"]);
-	$log->push($head_commit);
-
-	my $com = $log->next();
-	my $ahead = 0;
-
-	while ($com && (
-		!$head_id_found ||
-		!$master_id_found ||
-		!$remote_id_found ))
-	{
-		my $sha = $com->id();
-		my $msg = $com->summary();
-		my $time = timeToStr($com->time());
-		my $extra = '';
-
-		$head_id_found ||= _addLocalCommitFound(\$extra,$sha,$repo,'HEAD_ID');
-		$master_id_found ||= _addLocalCommitFound(\$extra,$sha,$repo,'MASTER_ID');
-		$remote_id_found ||= _addLocalCommitFound(\$extra,$sha,$repo,'REMOTE_ID');
-
-		# these are from newest to oldest
-
-		my $ahead_str = '';
-		if ($master_id_found && !$remote_id_found)
-		{
-			$ahead++;
-			$ahead_str = "AHEAD($ahead) ";
-		}
-
-		display($dbg_local_commits+1,1,pad($ahead_str,10)."$time ".pad($extra,30)._lim($sha,8)." "._lim($msg,20));
-
-		$repo->{local_commits} ||= shared_clone([]);
-		push @{$repo->{local_commits}},shared_clone({
-			sha => $sha,
-			msg => $msg,
-		});
-
-		$com = $log->next();
-	}
-
-
-	warning($dbg_thread,1,"repo($repo->{path}) is AHEAD($ahead)")
-		if $ahead;
-	$repo->{AHEAD} = $ahead;
-	return $git_repo
 }
 
 

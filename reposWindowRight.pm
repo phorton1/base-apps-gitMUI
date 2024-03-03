@@ -37,11 +37,16 @@ BEGIN {
 }
 
 my $PANE_TOP = 30;
-my $NAME_LEFT = 45;
-my $BUTTON_OFFSET = 90;
+my $TITLE_LEFT_MARGIN = 6;
+my $TITLE_WIDTH = 60;
+my $BUTTON_SPACE = 10;
+
 
 my (
 	$COMMAND_STATUS,
+	$COMMAND_UPDATE,
+	$COMMAND_PUSH,
+
 	# $COMMAND_SCAN_DOCS,
 	# $COMMAND_UPDATE_DOCS,
 ) = (17000..17999);
@@ -59,14 +64,18 @@ sub new
 
 	$this->SetBackgroundColour($color_cyan);
 
-	$this->{title_ctrl} = Wx::StaticText->new($this,-1,'Repo:',[5,5],[$NAME_LEFT-10,20]);
-	my $repo_name = $this->{repo_name} = apps::gitUI::myHyperlink->new($this,-1,'',[$NAME_LEFT,5]);
+	$this->{title_ctrl} = Wx::StaticText->new($this,-1,'Repo:',[5,5],[$TITLE_LEFT_MARGIN-10,20]);
+	my $repo_name = $this->{repo_name} = apps::gitUI::myHyperlink->new($this,-1,'',[$TITLE_LEFT_MARGIN + $TITLE_WIDTH,5]);
 	$this->{text_ctrl} = apps::gitUI::myTextCtrl->new($this);
 
+	# Buttons added from right to left
+
 	$this->{buttons} = [
-		Wx::Button->new($this,$COMMAND_STATUS,'Update Remote Status',		[0,5],	[120,20]),
-		# Wx::Button->new($this,$COMMAND_SCAN_DOCS,'Scan Docs',		[0,5],	[80,20]),
-		# Wx::Button->new($this,$COMMAND_UPDATE_DOCS,'Update Docs',	[90,5],	[80,20]),
+		Wx::Button->new($this,$COMMAND_STATUS,'Refresh Status',		[0,5],	[80,20]),
+		Wx::Button->new($this,$COMMAND_UPDATE,'Update',				[0,5],	[60,20]),
+		Wx::Button->new($this,$COMMAND_PUSH,'Push',					[0,5],	[60,20]),
+		Wx::Button->new($this,-1,'Scan Docs',	[0,5],	[80,20]),
+		Wx::Button->new($this,-1,'Update Docs',	[0,5],	[80,20]),
 	];
 
 
@@ -92,12 +101,16 @@ sub doLayout
     $this->{text_ctrl}->SetSize([$width,$height-$PANE_TOP]);
 	$this->{text_ctrl}->Move(0,$PANE_TOP);
 
+	my $button_xpos = $width - $BUTTON_SPACE;
 	my $buttons = $this->{buttons};
-	my $buttons_xpos = $width - (@$buttons * $BUTTON_OFFSET) - 10;
 	for my $button (@$buttons)
 	{
-		$button->Move($buttons_xpos,5);
-		$buttons_xpos += $BUTTON_OFFSET;
+		my $bsz = $button->GetSize();
+		my $bwidth = $bsz->GetWidth();
+		$button_xpos -= $bwidth;
+
+		$button->Move($button_xpos,5);
+		$button_xpos -= $BUTTON_SPACE;
 	}
 	$this->Refresh();
 }
@@ -155,6 +168,7 @@ sub notifyRepoSelected
 		{
 			$this->{repo} = '';
 			$this->{repo_name}->SetLabel('');
+			$this->{title_ctrl}->SetLabel('');
 			$text_ctrl->Refresh();
 		}
 		return;
@@ -172,6 +186,7 @@ sub notifyRepoSelected
 		$repo->{used_in} ? "MAIN_MODULE " : '';
 
 	$this->{repo_name}->SetLabel($kind.$path);
+	$this->{title_ctrl}->SetLabel("Repo[$repo->{num}]");
 }
 
 
