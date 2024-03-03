@@ -100,7 +100,7 @@ sub new
 		GITHUB_ID 	=> '',
 
 		AHEAD		=> 0,
-		behind  	=> 0,
+		BEHIND  	=> 0,
 
 		# parsed fields
 		# PRIVATE is inherited for submdules
