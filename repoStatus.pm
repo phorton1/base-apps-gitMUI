@@ -439,10 +439,6 @@ sub oneRepoEvent
 		my $msg = $commit->{message} || '';
 		$msg =~ s/\n/ /g;
 		$msg =~ s/\t/ /g;
-		push @{$repo->{remote_commits}},shared_clone({
-			sha => $sha,
-			msg => $msg,
-			time => $time });
 
 		my $behind_str = '';
 		if ($sha eq $repo->{REMOTE_ID})
@@ -454,6 +450,14 @@ sub oneRepoEvent
 			$repo->{BEHIND}++;
 			$behind_str = "BEHIND($repo->{BEHIND})";
 		}
+
+		# only push events starting with the found remote ID
+		# we don't need to see, although we debug, the others.
+
+		push @{$repo->{remote_commits}},shared_clone({
+			sha => $sha,
+			msg => $msg,
+			time => $time }) if $repo->{found_REMOTE_ID_on_github};
 
 		display($dbg_events,2,pad($behind_str,10)._lim($sha,8)._lim($msg,40));
 	}

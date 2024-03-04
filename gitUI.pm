@@ -209,8 +209,6 @@ sub onUpdateUI
 	$enable = 1 if $id == $ID_COMMAND_REBUILD_CACHE && monitorStarted();
 	$enable = 1 if $id == $ID_COMMAND_PUSH_ALL && canPushRepos();
 	$enable = 1 if $id == $ID_COMMAND_PULL_ALL && canPullRepos();
-	$enable = 1 if $id == $ID_COMMAND_PUSH_SELECTED && canPushSelectedRepos();
-	$enable = 1 if $id == $ID_COMMAND_PULL_SELECTED && canPullSelectedRepos();
 
 	$event->Enable($enable);
 }
