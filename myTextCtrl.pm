@@ -907,7 +907,6 @@ sub onMouse
 		# in order to NOT lose the selection, one has to right
 		# click in the window.
 
-
 	$this->{scroll_inc} = 0;
 
 	my $dbg = $lclick || $rclick || $dragging ? 0 : 1;
@@ -928,7 +927,6 @@ sub onMouse
 		$this->refreshDrag() if $this->{drag_end};
 		init_drag();
 	}
-
 
 	if ($rclick)
 	{
@@ -957,7 +955,6 @@ sub onMouse
 			$this->{drag_start} = [$ux,$uy];
 		}
 	}
-
 	elsif ($this->{drag_start} && $dragging)
 	{
 		$this->refreshDrag([$ux,$uy]);
@@ -968,12 +965,17 @@ sub onMouse
 		$this->mouseOver($hit);
 	}
 
+	# eat the event if it's a click, so that
+	# the window changes appropriate if a link
+	# to the reposWindow is clicked from the commitWindow
+
+	my $do_skip = 1;
 	if ($hit && $lclick)
 	{
 		$this->mouseClick($hit);
+		$do_skip = 0;
 	}
-
-	$event->Skip();
+	$event->Skip() if $do_skip;
 		# needed or else wont get key events
 }
 
@@ -993,36 +995,41 @@ sub mouseOver
 	}
 
 	my $status = '';
+
 	if ($hit)
 	{
 		display_rect($dbg_mouse,1,"refreshing hit",$hit->{rect});
 		$this->refreshScrolled($hit->{rect});
 		$hit->{part}->{hit} = $hit;
-		my $context = $hit->{part}->{context};
-    	if ($context->{path})
-		{
-			$status = "path: $context->{path}";
-		}
-		elsif ($context->{filename})
-		{
-			$status = "filename: $context->{filename}";
-		}
-		elsif ($context->{repo_path})
-		{
-			$status = "repo_path: $context->{repo_path}";
-		}
-		elsif ($context->{repo})
-		{
-			my $repo = $context->{repo};
-			if ($context->{file})
-			{
-				$status = "repo_file: $repo->{path}$context->{file}";
-			}
-			else
-			{
-				$status = "repo: $repo->{id} = $repo->{path}";
-			}
-		}
+		$status = $this->getClickFunction($hit,0);
+
+		# OLD
+		#
+		# my $context = $hit->{part}->{context};
+    	# if ($context->{path})
+		# {
+		# 	$status = "path: $context->{path}";
+		# }
+		# elsif ($context->{filename})
+		# {
+		# 	$status = "filename: $context->{filename}";
+		# }
+		# elsif ($context->{repo_path})
+		# {
+		# 	$status = "repo_path: $context->{repo_path}";
+		# }
+		# elsif ($context->{repo})
+		# {
+		# 	my $repo = $context->{repo};
+		# 	if ($context->{file})
+		# 	{
+		# 		$status = "repo_file: $repo->{path}$context->{file}";
+		# 	}
+		# 	else
+		# 	{
+		# 		$status = "repo: $repo->{id} = $repo->{path}";
+		# 	}
+		# }
 	}
 
 	$this->{hit} = $hit;
@@ -1035,12 +1042,45 @@ sub mouseOver
 sub mouseClick
 {
 	my ($this,$hit)  = @_;
-
 	my $show_part = $hit->{part};
 	display($dbg_click,0,"mouseClick($show_part->{text})");
 
+	my $path = $this->getClickFunction($hit,1);
+	if ($path =~ s/^SYSTEM //)
+	{
+		chdir $path;
+		system(1,"\"$path\"");
+	}
+	elsif ($path =~ s/^KOMODO //)
+	{
+		my $command = $komodo_exe." \"$path\"";
+		execNoShell($command);
+	}
+	elsif ($path =~ s/^GITUI //)
+	{
+		execNoShell('git gui',$path);
+	}
+	elsif ($path =~ s/^INFO //)
+	{
+		$this->{frame}->createPane($ID_REPOS_WINDOW,undef,{repo_path=>$path});
+	}
+	elsif ($path =~ s/^EXPLORE //)
+	{
+		execExplorer($path);
+	}
+	else
+	{
+		error("unknown clickFunction($path)");
+	}
+}
+
+
+sub getClickFunction
+{
+	my ($this,$hit,$is_click) = @_;
 	my ($repo,$path) = getHitContext($hit);
-	display($dbg_click,1,"getHitContext repo=".($repo?$repo->{path}:'undef')." path="._def($path));
+	display($dbg_click,1,"getClickFunction repo=".($repo?$repo->{path}:'undef')." path="._def($path))
+		if $is_click;
 
 	# decide the best thing to do on a left click
 	# path = md,gif,png,jpg,jpeg,pdf - shell
@@ -1050,13 +1090,11 @@ sub mouseClick
 
 	if ($path =~ /\.(md|gif|png|jpg|jpeg|pdf)$/)
 	{
-		chdir $path;
-		system(1,"\"$path\"");
+		return "SYSTEM $path";
 	}
 	elsif ($path =~ /\.(txt|pm|pl|ino|cpp|c|h|hpp)$/)
 	{
-		my $command = $komodo_exe." \"$path\"";
-		execNoShell($command);
+		return "KOMODO $path";
 	}
 	elsif ($repo)
 	{
@@ -1065,23 +1103,35 @@ sub mouseClick
 		# same id as this repository.  We just need to change to paths
 
 		my $repo_context = $this->{repo_context};
-		display($dbg_click,1,"repo_context=".($repo_context?$repo_context->{path}:'undef'));
+		display($dbg_click,1,"repo_context=".($repo_context?$repo_context->{path}:'undef'))
+			if $is_click;
 
 		my $is_this_repo = $repo_context &&
 			$repo->{path} eq $repo_context->{path} ? 1 : 0;
 
-		display($dbg_click,1,"repo is_this_repo($is_this_repo)");
+		display($dbg_click,1,"repo is_this_repo($is_this_repo)")
+			if $is_click;
 
-		$is_this_repo ?
-			execNoShell('git gui',$repo->{path}) :
-			$this->{frame}->createPane($ID_REPOS_WINDOW,undef,{repo_path=>$repo->{path}});
+		# navigation clicks on the myTextCtrl in the commitRight window
+		# require that we do not call event->Skip() from the click event
+		# in order to activate the reposWindow.
+
+		return $is_this_repo ?
+			"GITUI $repo->{path}" :
+			"INFO $repo->{path}";
 	}
 	elsif ($path)
 	{
-		execExplorer($path);
+		return "EXPLORE $path";
 	}
 
+	# Just in case:
+
+	return "no function for hit context repo($repo) path($path)!!";
+
 }
+
+
 
 
 sub getHitContext

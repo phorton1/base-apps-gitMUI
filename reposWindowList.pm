@@ -139,6 +139,10 @@ sub selectRepo
 	my ($this,$path) = @_;
 	display($dbg_sel,0,"selectRepo($path)");
 
+	# $this->{parent}->SetFocus();
+		# switch to the reposWindow if called
+		# from another window
+
 	my $ctrl = $this->{ctrls_by_path}->{$path};
 	return !error("Could not find ctrl($path)")
 		if !$ctrl;
