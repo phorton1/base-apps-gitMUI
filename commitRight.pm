@@ -173,11 +173,12 @@ sub onUpdateUI
 {
 	my ($this,$event) = @_;
 	my $id = $event->GetId();
-	my $enable = 1;
-	$enable = 0 if $id == $ID_COMMAND_PUSH_ALL && !canPushRepos();
-	$enable = 0 if $id == $COMMAND_COMMIT && (
-		!$this->{parent}->canCommit() ||
-		!$this->{commit_msg}->GetValue());
+	my $enable = 0;
+	$enable = 1 if $id == $ID_COMMAND_PUSH_ALL && canPushRepos();
+	$enable = 1 if $id == $ID_COMMAND_RESCAN && monitorStarted();
+	$enable = 1 if $id == $COMMAND_COMMIT && (
+		$this->{parent}->canCommit() ||
+		$this->{commit_msg}->GetValue());
 	$event->Enable($enable);
 }
 
@@ -189,13 +190,10 @@ sub onButton
 	display($dbg_cmds,0,"commitRight::onButton($id)");
 
 	my $frame = $this->{frame};
-	if ($id == $ID_COMMAND_RESCAN)
+	if ($id == $ID_COMMAND_RESCAN ||
+		$id == $ID_COMMAND_PUSH_ALL)
 	{
 		$frame->onCommand($event);
-	}
-	if ($id == $ID_COMMAND_PUSH_ALL)
-	{
-		$frame->doThreadedCommand($id);
 	}
 	if ($id == $COMMAND_COMMIT)
 	{

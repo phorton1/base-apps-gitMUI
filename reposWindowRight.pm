@@ -14,12 +14,13 @@ use Wx::Event qw(
 	EVT_SIZE
 	EVT_LEFT_DOWN
 	EVT_BUTTON
-	EVT_UPDATE_UI_RANGE );
+	EVT_UPDATE_UI );
 use Pub::Utils;
 use apps::gitUI::utils;
 use apps::gitUI::repos;
 use apps::gitUI::repoStatus;
 use apps::gitUI::repoHistory;
+use apps::gitUI::monitor;
 use apps::gitUI::myTextCtrl;
 use apps::gitUI::myHyperlink;
 use apps::gitUI::Resources;
@@ -43,15 +44,6 @@ my $TITLE_WIDTH = 60;
 my $BUTTON_SPACE = 10;
 
 
-my (
-	$COMMAND_REFRESH_STATUS,
-	$COMMAND_PUSH_ONE,
-	$COMMAND_PULL_ONE,
-
-	# $COMMAND_SCAN_DOCS,
-	# $COMMAND_UPDATE_DOCS,
-) = (17000..17999);
-
 
 sub new
 {
@@ -72,22 +64,22 @@ sub new
 	# Buttons added from right to left
 
 	$this->{buttons} = [
-		Wx::Button->new($this,$COMMAND_REFRESH_STATUS,	'Refresh Status',	[0,5],	[85,20]),
-		Wx::Button->new($this,$COMMAND_PUSH_ONE,		'Push',				[0,5],	[75,20]),
-		Wx::Button->new($this,$COMMAND_PULL_ONE,		'Pull',				[0,5],	[60,20]),
+		Wx::Button->new($this,$ID_COMMAND_REFRESH_STATUS,	'Refresh Status',	[0,5],	[85,20]),
+		Wx::Button->new($this,$ID_COMMAND_PUSH_SELECTED,	'Push',				[0,5],	[75,20]),
+		Wx::Button->new($this,$ID_COMMAND_PUSH_SELECTED,	'Pull',				[0,5],	[60,20]),
 		# Wx::Button->new($this,-1,						'Scan Docs',		[0,5],	[80,20]),
 		# Wx::Button->new($this,-1,						'Update Docs',		[0,5],	[80,20]),
 	];
 
-
 	$this->doLayout();
 
 	EVT_SIZE($this, \&onSize);
-
-	EVT_BUTTON($this, $COMMAND_REFRESH_STATUS, 	\&onButton);
-	EVT_BUTTON($this, $COMMAND_PUSH_ONE,		\&onButton);
-	EVT_BUTTON($this, $COMMAND_PULL_ONE, 		\&onButton);
-	EVT_UPDATE_UI_RANGE($this, $COMMAND_REFRESH_STATUS, $COMMAND_PULL_ONE, \&onUpdateUI);
+	EVT_BUTTON($this, $ID_COMMAND_REFRESH_STATUS, 	\&onButton);
+	EVT_BUTTON($this, $ID_COMMAND_PUSH_SELECTED,	\&onButton);
+	EVT_BUTTON($this, $ID_COMMAND_PULL_SELECTED, 	\&onButton);
+	EVT_UPDATE_UI($this, $ID_COMMAND_REFRESH_STATUS,\&onUpdateUI);
+	EVT_UPDATE_UI($this, $ID_COMMAND_PUSH_SELECTED,	\&onUpdateUI);
+	EVT_UPDATE_UI($this, $ID_COMMAND_PULL_SELECTED, \&onUpdateUI);
 
 	return $this;
 }
@@ -133,16 +125,16 @@ sub onUpdateUI
 	my $repo = $this->{repo};
 
 	my $enable = 0;
-	$enable = 1 if $id == $COMMAND_REFRESH_STATUS &&
-		!repoStatusBusy();
-	$enable = 1 if $id == $COMMAND_PUSH_ONE &&
+	$enable = 1 if $id == $ID_COMMAND_REFRESH_STATUS &&
+		monitorStarted() && !repoStatusBusy();
+	$enable = 1 if $id == $ID_COMMAND_PUSH_SELECTED &&
 		$repo &&
 		$repo->canPush();
-	$enable = 1 if $id == $COMMAND_PULL_ONE &&
+	$enable = 1 if $id == $ID_COMMAND_PULL_SELECTED &&
 		$repo &&
 		$repo->canPull();
 
-	if ($id == $COMMAND_PULL_ONE)
+	if ($id == $ID_COMMAND_PULL_SELECTED)
 	{
 		my $button_title =
 			$enable && $repo->needsStash() ?
@@ -161,21 +153,21 @@ sub onButton
 	my $id = $event->GetId();
 	display($dbg_cmds,0,"reposWindowRight::onButton($id) repo=".($this->{repo}?$this->{repo}->{path}:'undef'));
 
-	if ($id == $COMMAND_REFRESH_STATUS)
+	if ($id == $ID_COMMAND_REFRESH_STATUS)
 	{
-		repoStatusStart();
+		$this->{frame}->onCommand($event);
 	}
-	elsif ($id == $COMMAND_PUSH_ONE)
+	elsif ($id == $ID_COMMAND_PUSH_SELECTED)
 	{
 		clearSelectedPushRepos();
 		setSelectedPushRepo($this->{repo});
-		$this->{frame}->doThreadedCommand($ID_COMMAND_PUSH_SELECTED);
+		$this->{frame}->onCommand($event);
 	}
-	elsif ($id == $COMMAND_PULL_ONE)
+	elsif ($id == $ID_COMMAND_PULL_SELECTED)
 	{
 		clearSelectedPullRepos();
 		setSelectedPullRepo($this->{repo});
-		$this->{frame}->doThreadedCommand($ID_COMMAND_PULL_SELECTED);
+		$this->{frame}->onCommand($event);
 	}
 }
 

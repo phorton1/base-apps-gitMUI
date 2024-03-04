@@ -25,6 +25,7 @@ BEGIN
 		$ID_STATUS_WINDOW
 
 		$ID_COMMAND_RESCAN
+		$ID_COMMAND_REFRESH_STATUS
 		$ID_COMMAND_REBUILD_CACHE
 
 		$ID_COMMAND_PUSH_ALL
@@ -54,6 +55,7 @@ our (
 	# UI Commands handled by appFrame::onCommand
 
 	$ID_COMMAND_RESCAN,
+	$ID_COMMAND_REFRESH_STATUS,
 	$ID_COMMAND_REBUILD_CACHE,
 
 	$ID_COMMAND_PUSH_ALL,
@@ -61,13 +63,13 @@ our (
 
 	$ID_COMMAND_PUSH_SELECTED,
 	$ID_COMMAND_PULL_SELECTED,
+		# No UI.  Implemented on a window-by-window basis
 
 	# pushing or pulling one repo is a special case
 	# of pushing or pulling selected repos, and
 	# the menu should reflect "Push N repos" or
 	# Push /base/apps/artisan
 
-	# $COMMAND_COMMIT,		# commit all
 	# $COMMAND_TAG,			# tag selected
 
 )= (10000..11000);
@@ -83,15 +85,12 @@ mergeHash($resources->{command_data},{
 	$ID_REPOS_WINDOW		=> ['Repos',	'List of Repos with Details' ],
 	$ID_STATUS_WINDOW		=> ['Status',	'DOES PULLS! A tabular report of Repos showing their status vis-a-vis github' ],
 
-	$ID_COMMAND_RESCAN			=> ['Rescan',		'Re-initialize repository information'],
-	$ID_COMMAND_REBUILD_CACHE	=> ['RebuildCache',	'Re-build the cache from github'],
+	$ID_COMMAND_RESCAN			=> ['Rescan',			'Re-initialize repository information'],
+	$ID_COMMAND_REFRESH_STATUS  => ['Refresh Status',	'Refresh the gitStatus'],
+	$ID_COMMAND_REBUILD_CACHE	=> ['Rebuild Cache',	'Re-build the cache from github'],
 
 	$ID_COMMAND_PUSH_ALL		=> ['PushAll',		'Push All commited changes'],
 	$ID_COMMAND_PULL_ALL		=> ['PullAll',		'Pull All repos that can be pulled'],
-
-	$ID_COMMAND_PUSH_SELECTED	=> ['Push',			'Push selected repos with local commits'],
-	$ID_COMMAND_PULL_SELECTED	=> ['Pull',			'Pull selected repos that are BEHIND']
-
 });
 
 
@@ -116,14 +115,11 @@ unshift @{$resources->{view_menu}},(
 
 
 my @actions_menu = (
-    $ID_SEPARATOR,
-	$ID_COMMAND_PUSH_SELECTED,
-	$ID_COMMAND_PULL_SELECTED,
-    $ID_SEPARATOR,
 	$ID_COMMAND_PUSH_ALL,
 	$ID_COMMAND_PULL_ALL,
     $ID_SEPARATOR,
 	$ID_COMMAND_RESCAN,
+	$ID_COMMAND_REFRESH_STATUS,
 	$ID_COMMAND_REBUILD_CACHE,
 );
 
