@@ -134,11 +134,6 @@ sub new
 		staged_changes   => shared_clone({}),	# changes pending Commit
 		remote_changes   => shared_clone({}),	# changes pending Push
 
-		# temporary fields added as necessary
-		# by various methods
-
-		# found_on_github => 0,
-
 	});
 
 
@@ -148,6 +143,8 @@ sub new
 	{
 		$this->{parent_repo} = $parent_repo;
 		$this->{rel_path}	 = $rel_path;
+		# main_module =>
+
 		# $this->{submodules} = shared_clone([]);
 		# $this->{used_in}	  = shared_clone([]);
 	}
@@ -155,7 +152,11 @@ sub new
 	# added at runtime by various methods
 	#
 
-	#
+	# temporary fields added as necessary
+	# by various methods
+
+	# found_on_github => 0,
+	# save_XXX (AHEAD, BEHIND, HEAD_ID, MASTER_ID, REMOTE_ID)
 
 
 
@@ -484,13 +485,15 @@ sub contentLine
 
 	$value = $value->{path} if $key eq 'parent_repo';
 	$value = repoIdToPath($value)
-		if $key eq 'MAIN_MODULE';
+		if $use_label && $use_label eq 'MAIN_MODULE';
 
 	my $context;
 	$context = { repo_path => $value } if
 		$key eq 'path' ||
 		$key eq 'parent_repo' ||
-		$key eq 'MAIN_MODULE';
+		$use_label && $use_label eq 'MAIN_MODULE';
+	$context = { path => $value } if
+		$key eq 'section_path';
 
 	my $line = $text_ctrl->addLine();
 	$text_ctrl->addPart($line, 0, $color_black, pad($label,12)." = " );
@@ -515,12 +518,22 @@ sub contentArray
 		my $value = $item;
 
 		my $context;
-		$context = { repo=>$this, file=>$value } if $key eq 'docs';
+		$context = { repo=>$this, file=>$value } if
+			$key eq 'docs';
 		$context = { repo_path => $value } if
 			$key eq 'uses' ||
 			$key eq 'used_by' ||
+			$key eq 'friend' ||
 			$key eq 'submodules' ||
 			$key eq 'used_in';
+		$context = { path => $value } if
+			$key eq 'needs';
+		$context = { repo_path => '/src/phorton1', file=>"/$value.md" } if
+			$key eq 'group';
+
+		# GROUPS are recursive through USES and FRIEND.
+		# only the highest level repos need to be specified as groups.
+		# The recursion should be handled in parseRepos()
 
 		my $line = $text_ctrl->addLine();
 		$text_ctrl->addPart($line, 0, $color_black, pad('',4));
@@ -602,6 +615,8 @@ sub toTextCtrl
 
 	$text_ctrl->addLine();
 
+	# MAIN FIELDS FIRST including the $short_status
+
 	# $this->contentLine($text_ctrl,0,'num');
 	$this->contentLine($text_ctrl,1,'path');
 	$this->contentLine($text_ctrl,1,'id');
@@ -632,6 +647,8 @@ sub toTextCtrl
 	$this->contentLine($text_ctrl,0,'descrip');
 	$this->contentLine($text_ctrl,0,'page_header');
 
+	# SUBMODULE FIELDS SECOND
+
 	if ($this->{parent_repo})
 	{
 		$text_ctrl->addLine();
@@ -646,6 +663,7 @@ sub toTextCtrl
 		$this->contentArray($text_ctrl,0,'used_in',1);
 	}
 
+	# ERRORS AND WARNINGS THIRD
 
 	if (@{$this->{errors}} ||
 		@{$this->{warnings}} ||
@@ -657,21 +675,7 @@ sub toTextCtrl
 		$this->contentArray($text_ctrl,0,'notes');
 	}
 
-	if ($this->{docs} ||
-		$this->{usss} ||
-		$this->{used_by} ||
-		$this->{needs} ||
-		$this->{friend} ||
-		$this->{group} )
-	{
-		$text_ctrl->addLine();
-		$this->contentArray($text_ctrl,0,'docs');
-		$this->contentArray($text_ctrl,0,'uses');
-		$this->contentArray($text_ctrl,0,'used_by');
-		$this->contentArray($text_ctrl,0,'needs');
-		$this->contentArray($text_ctrl,0,'friend');
-		$this->contentArray($text_ctrl,0,'group');
-	}
+	# COMMIT INFORMATION for debugging repoStatus visible without scrolling
 
 	$text_ctrl->addLine();
 	$this->contentLine($text_ctrl,1,'HEAD_ID');
@@ -681,6 +685,26 @@ sub toTextCtrl
 	$text_ctrl->addLine();
 	$this->contentCommits($text_ctrl,'local_commits');
 	$this->contentCommits($text_ctrl,'remote_commits');
+
+	# RELATIONSHIP information last before HISTORY
+
+	if ($this->{docs} ||
+		$this->{uses} ||
+		$this->{used_by} ||
+		$this->{needs} ||
+		$this->{friend} ||
+		$this->{group} )
+	{
+		$this->contentArray($text_ctrl,0,'docs');
+		$this->contentArray($text_ctrl,0,'uses');
+		$this->contentArray($text_ctrl,0,'used_by');
+		$this->contentArray($text_ctrl,0,'needs');
+		$this->contentArray($text_ctrl,0,'friend');
+		$this->contentArray($text_ctrl,0,'group');
+		$text_ctrl->addLine();
+	}
+
+	# HISTORY WILL FOLLOW HERE
 }
 
 
