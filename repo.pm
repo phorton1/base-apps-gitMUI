@@ -217,14 +217,6 @@ sub repoNote
 }
 
 
-sub unused_hasChanges
-{
-	my ($this) = @_;
-	return
-		scalar(keys %{$this->{unstaged_changes}}) +
-		scalar(keys %{$this->{staged_changes}}) +
-		scalar(keys %{$this->{remote_changes}});
-}
 sub canAdd
 {
 	my ($this) = @_;
@@ -239,6 +231,27 @@ sub canPush
 {
 	my ($this) = @_;
 	return scalar(keys %{$this->{remote_changes}});
+
+	return
+		$this->{AHEAD} &&
+		!$this->{BEHIND} ? 1 : 0;
+
+		# synonymous with AHEAD and MASTER_ID != REMOTE_ID
+}
+sub canPull
+{
+	my ($this) = @_;
+	return
+		$this->{BEHIND} &&
+		!$this->{AHEAD} ? 1 : 0;
+}
+sub needsStash
+{
+	my ($this) = @_;
+	return
+		$this->canPull() &&
+		(keys %{$this->{staged_changes}} ||
+		 keys %{$this->{unstaged_changes}}) ? 1 : 0;
 }
 
 

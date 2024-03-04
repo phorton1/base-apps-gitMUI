@@ -343,7 +343,7 @@ sub run
 					&$the_callback({ status =>"checking: $repo->{path}" });
 					$rslt = gitChanges($repo);
 					last if !defined($rslt);
-					setCanPush($repo);
+					setCanPushPull($repo);
 					&$the_callback({ repo=>$repo }) if $rslt;
 				}
 
@@ -380,7 +380,7 @@ sub run
 						}
 						$rslt = gitChanges($repo);
 						last if !defined($rslt);
-						setCanPush($repo) if $rslt;
+						setCanPushPull($repo) if $rslt;
 
 						&$the_callback({ repo=>$repo })
 							if $MONITOR_NOTIFY_EVERY_CHANGE || $rslt;

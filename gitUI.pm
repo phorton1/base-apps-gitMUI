@@ -99,7 +99,7 @@ sub new
 
 	EVT_MENU_RANGE($this, $ID_PATH_WINDOW, $ID_STATUS_WINDOW, \&onOpenWindowById);
 	EVT_MENU_RANGE($this, $ID_COMMAND_RESCAN, $ID_COMMAND_PUSH_ALL, \&onCommand);
-	EVT_UPDATE_UI_RANGE($this, $ID_COMMAND_RESCAN, $ID_COMMAND_PUSH_ALL, \&onUpdateUI);
+	EVT_UPDATE_UI_RANGE($this, $ID_COMMAND_RESCAN, $ID_COMMAND_PULL_SELECTED, \&onUpdateUI);
 
 	EVT_COMMAND($this, -1, $THREAD_EVENT, \&onThreadEvent );
 	EVT_COMMAND($this, -1, $MONITOR_EVENT, \&onMonitorEvent );
@@ -164,9 +164,12 @@ sub onCommand
 	my $id = $event->GetId();
 	my $name = $resources->{command_data}->{$id}->[0];
 	display($dbg_cmd,0,"gitUI::Frame::onCommand($id,$name)");
-	if ($id == $ID_COMMAND_PUSH_ALL)
+	if ($id == $ID_COMMAND_PUSH_ALL ||
+		$id == $ID_COMMAND_PULL_ALL ||
+		$id == $ID_COMMAND_PUSH_SELECTED ||
+		$id == $ID_COMMAND_PULL_SELECTED )
 	{
-		$this->doPushCommand($id);
+		$this->doThreadedCommand($id);
 	}
 	elsif ($id == $ID_COMMAND_RESCAN ||
 		   $id == $ID_COMMAND_REBUILD_CACHE)
@@ -195,8 +198,15 @@ sub onUpdateUI
 {
 	my ($this,$event) = @_;
 	my $id = $event->GetId();
-	my $enable = 1;
-	$enable = 0 if $id == $ID_COMMAND_PUSH_ALL && !canPushRepos();
+	my $enable = 0;
+
+	$enable = 1 if $id == $ID_COMMAND_RESCAN && monitorStarted();
+	$enable = 1 if $id == $ID_COMMAND_REBUILD_CACHE && monitorStarted();
+	$enable = 1 if $id == $ID_COMMAND_PUSH_ALL && canPushRepos();
+	$enable = 1 if $id == $ID_COMMAND_PULL_ALL && canPullRepos();
+	$enable = 1 if $id == $ID_COMMAND_PUSH_SELECTED && canPushSelectedRepos();
+	$enable = 1 if $id == $ID_COMMAND_PULL_SELECTED && canPullSelectedRepos();
+
 	$event->Enable($enable);
 }
 
