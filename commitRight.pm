@@ -195,7 +195,7 @@ sub onButton
 	}
 	if ($id == $ID_COMMAND_PUSH_ALL)
 	{
-		$frame->doPushCommand($id);
+		$frame->doThreadedCommand($id);
 	}
 	if ($id == $COMMAND_COMMIT)
 	{

@@ -26,7 +26,11 @@ BEGIN
 
 		$ID_COMMAND_RESCAN
 		$ID_COMMAND_REBUILD_CACHE
+
 		$ID_COMMAND_PUSH_ALL
+		$ID_COMMAND_PULL_ALL
+		$ID_COMMAND_PUSH_SELECTED
+		$ID_COMMAND_PULL_SELECTED
 	),
 
 	@Pub::WX::Resources::EXPORT );
@@ -51,11 +55,18 @@ our (
 
 	$ID_COMMAND_RESCAN,
 	$ID_COMMAND_REBUILD_CACHE,
-	$ID_COMMAND_PUSH_ALL,
 
-	# specific commands handled for idea windows
-	#
-	# $COMMAND_PUSH,			# push selected
+	$ID_COMMAND_PUSH_ALL,
+	$ID_COMMAND_PULL_ALL,
+
+	$ID_COMMAND_PUSH_SELECTED,
+	$ID_COMMAND_PULL_SELECTED,
+
+	# pushing or pulling one repo is a special case
+	# of pushing or pulling selected repos, and
+	# the menu should reflect "Push N repos" or
+	# Push /base/apps/artisan
+
 	# $COMMAND_COMMIT,		# commit all
 	# $COMMAND_TAG,			# tag selected
 
@@ -74,7 +85,12 @@ mergeHash($resources->{command_data},{
 
 	$ID_COMMAND_RESCAN			=> ['Rescan',		'Re-initialize repository information'],
 	$ID_COMMAND_REBUILD_CACHE	=> ['RebuildCache',	'Re-build the cache from github'],
+
 	$ID_COMMAND_PUSH_ALL		=> ['PushAll',		'Push All commited changes'],
+	$ID_COMMAND_PULL_ALL		=> ['PullAll',		'Pull All repos that can be pulled'],
+
+	$ID_COMMAND_PUSH_SELECTED	=> ['Push',			'Push selected repos with local commits'],
+	$ID_COMMAND_PULL_SELECTED	=> ['Pull',			'Pull selected repos that are BEHIND']
 
 });
 
@@ -100,7 +116,12 @@ unshift @{$resources->{view_menu}},(
 
 
 my @actions_menu = (
+    $ID_SEPARATOR,
+	$ID_COMMAND_PUSH_SELECTED,
+	$ID_COMMAND_PULL_SELECTED,
+    $ID_SEPARATOR,
 	$ID_COMMAND_PUSH_ALL,
+	$ID_COMMAND_PULL_ALL,
     $ID_SEPARATOR,
 	$ID_COMMAND_RESCAN,
 	$ID_COMMAND_REBUILD_CACHE,

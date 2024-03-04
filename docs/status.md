@@ -148,8 +148,32 @@ from ANY instance of the submodule, including the
 MAIN_MODULE that IS the repository on github.
 
 If changes ARE made, committed, and pushed to a submodule,
-then the MAIN_MODULE will show as BEHIND and needing a
-a pull.
+then the MAIN_MODULE, and any other submodules
+will show as BEHIND and needing a a pull.
 
-The other submodules *should* reflect their status vis-a-vis
-the MAIN_MODULE on github.
+
+
+## gitPull()
+
+Adding a gitPull() method, analagous to the existing gitPush()
+method, to repoGit.pm.  Stashing will be done automatically
+if needed in gitPull().
+
+I envision this as using the progress dialog, and initially
+being implemented as a single Pull in the reposWindowRight.
+Which means that I need to re-implement the notion of commands
+$COMMAND_PUSH and $COMMAND_PULL on a single selected repo.
+
+Then later there may additionally be $COMMAND_PUSH_SELECTED
+and $COMMAND_PULL_SELECTED which will work off the StatusWindow
+and checkboxes.
+
+I'm already at the point where I am considering adding a
+[] details checkbox to the info window (reposWindowRight)
+to hide all the XXX_IDs, local_commits, and remote_commits
+unless I really want to look at them to figure out a problem.
+
+But first I need to implement gitPull() so that it works,
+and optionally takes a $progress parameter.
+
+

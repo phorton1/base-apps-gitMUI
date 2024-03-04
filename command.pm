@@ -75,29 +75,77 @@ sub abortCommand
 #------------------------------------------
 
 
-sub doPushCommand
-	# is actually nearly generic for calling gitCommands with Dialog
+sub doThreadedCommand
+	# a generic method for calling PUSH or PULL commands with Dialog.
+	# there is currently no mechanism for passing in the single repo
 {
 	my ($this,$command_id) = @_;
 
-	$this->{command_id} = $command_id;
-	$this->{command_verb} = "Pushing";
-	$this->{command_completed} = "Pushed";
-	$this->{command_name} =
-		$command_id == $ID_COMMAND_PUSH_ALL ? "PushAll" :  "PushSelected";
+	my $is_push =
+		$command_id == $ID_COMMAND_PUSH_ALL ||
+		$command_id == $ID_COMMAND_PUSH_SELECTED ? 1 : 0;
+	my $command_qty = 'All';
+	if ($command_id == $ID_COMMAND_PUSH_SELECTED ||
+		$command_id == $ID_COMMAND_PULL_SELECTED)
+	{
+		my $qty = $is_push ?
+			canPushRepos() :
+			canPullRepos();
+		$command_qty = "$qty Selected";
+	}
+	my $command_name = $is_push ?
+		"Push" : "Pull";
 
-	display($dbg_cmds,0,"doGitCommand($command_id)=$this->{command_name}");
+	$this->{is_push} = $is_push;
+	$this->{command_name} = $command_name;
+	$this->{command_qty} = $command_qty;
+	$this->{command_id} = $command_id;
+	$this->{command_verb} = $is_push ?
+		"Pushing" : "Pulling";
+	$this->{command_completed} = $is_push ?
+		"Pushed" : "Pulled";
+
+	display($dbg_cmds,0,"doThreadedCommand($command_id) $command_name $command_qty repos");
+
+	# init {do_command} on repos
 
 	$this->{num_actions} = 0;
 	my $repo_list = getRepoList();
 	for my $repo (@$repo_list)
 	{
-		$repo->{do_push} = 0;
-			# temporary variable to capture state of can_push
-			# at moment command invoked
-		if ($repo->canPush())
+		delete $repo->{do_command};
+	}
+
+	# loop through ALL repos
+
+	if ($command_qty eq 'All')
+	{
+		for my $repo (@$repo_list)
 		{
-			$repo->{do_push} = 1;
+			my $can = $is_push ?
+				$repo->canPush() :
+				$repo->canPull();
+			if ($can)
+			{
+				$repo->{do_command} = 1;
+				$this->{num_actions}++;
+			}
+		}
+	}
+
+	# use selected repos
+
+	else
+	{
+		my $hash = $is_push ?
+			getSelectedPushRepos() :
+			getSelectedPullRepos();
+		for my $path (sort keys %$hash)
+		{
+			my $repo = getRepoByPath($path);
+			return !error("Could not find repo: $path")
+				if !$repo;
+			$repo->{do_command} = 1;
 			$this->{num_actions}++;
 		}
 	}
@@ -122,44 +170,52 @@ sub doPushCommand
 	{
 		display($dbg_thread,1,"starting THREAD");
 		@_ = ();
-		$command_thread = threads->create(	# barfs: my $thread = threads->create(
-			\&doThreadedPush,$this,$repo_list);
-		$command_thread->detach(); 			# barfs;
+		$command_thread = threads->create(
+			\&threadedCommand,$this,$repo_list);
+		$command_thread->detach();
 		display($dbg_thread,1,"THREAD_STARTED");
 		$command_thread = undef;
 	}
 	else
 	{
-		$this->doThreadedPush($repo_list);
+		$this->threadedCommand($repo_list);
 	}
 
 	# $this->{progress}->Destroy();
 	# $this->{progress} = '';
-	display($dbg_cmds,0,"onGitCommand() returning");
+	display($dbg_cmds,0,"doThreadedCommand() returning");
 }
 
 
 #-------------------------------------------------
-# doThreadedPush (or maybe on main thread)
+# threadedCommand (or maybe on main thread)
 #-------------------------------------------------
 
-sub doThreadedPush
+sub threadedCommand
 {
 	my ($this,$repo_list,$data) = @_;
 	my $command_id = $this->{command_id};
-	display($dbg_cmds,0,"doThreadedPush($command_id)=$this->{command_name}");
+	display($dbg_cmds,0,"threadedCommand($command_id)=$this->{command_name} $this->{command_qty}");
 	display($dbg_cmds+1,1,"data("._def($data).")");
+		# data is for 'tags'
 
 	my $rslt = 1;
 	my $act_num = 0;
 	for my $repo (@$repo_list)
 	{
-		if ($repo->{do_push})
+		if ($repo->{do_command})
 		{
+			delete $repo->{do_command};
 			$this->sendThreadEvent({
 				main_name   => $repo->{path},
 				sub_name    => $this->{command_verb} });
-			$rslt = gitPush($repo,$this,\&push_callback);
+
+			# DO THE gitXXX command
+
+			$rslt = $this->{is_push} ?
+				gitPush($repo,$this,\&user_callback) :
+				gitPull($repo,$this,\&user_callback);
+
 			last if $command_aborted || !$rslt;
 
 			$act_num++;
@@ -180,15 +236,13 @@ sub doThreadedPush
 	# and ends up here, which calls sendThreadedEvent(aborted)
 	# again.
 
-	if ($rslt)
-	{
-		my $params = $command_aborted ?
-			{ aborted => 1} :
-			{ done => 1 };
-		$this->sendThreadEvent( $params );
-	}
 
-	display($dbg_cmds,0,"doThreadedCommand() finished");
+	my $params = $command_aborted || !$rslt ?
+		{ aborted => 1} :
+		{ done => 1 };
+	$this->sendThreadEvent( $params );
+
+	display($dbg_cmds,0,"threadedCommand() finished");
 
 }	# doThreadedCommand()
 
@@ -307,7 +361,7 @@ sub updateProgress
 
 
 #---------------------------------------------
-# push_callback
+# user_callback
 #----------------------------------------------
 # PACK is called first, stage is 0 on first, 1 thereafter
 # 	when done, $total = the number of objects for the push
@@ -327,11 +381,11 @@ sub pct_msg
 	return sprintf("%3d%%  $lval/$rval",$pct);
 }
 
-sub push_callback
+sub user_callback
 {
 	my ($this, $CB, $repo, @params) = @_;
 	my $show = join(",",@params);
-	display($dbg_thread+1,0,"push_callback($CB,$show)");
+	display($dbg_thread+1,0,"user_callback($CB,$show)");
 
 	# ABORTING PUSH FROM CALLBACK.
 	# We give priority to abort and short return here.
@@ -348,12 +402,12 @@ sub push_callback
 	my $GIT_EUSER = -7;
 	if ($command_aborted)
 	{
-		warning($dbg_thread,-1,"push_callback returning GIT_EUSER=-7");
+		warning($dbg_thread,-1,"user_callback returning GIT_EUSER=-7");
 		return $GIT_EUSER;
 	}
 
-	# display(0,0,"push_callback $CB ".join(',',@params));
-	# print "push_callback $CB ".join(',',@params);
+	# display(0,0,"user_callback $CB ".join(',',@params));
+	# print "user_callback $CB ".join(',',@params);
 
 	if ($CB == $PUSH_CB_PACK)
 	{
@@ -399,7 +453,7 @@ sub push_callback
 	}
 	else
 	{
-		error("UNKNOWN PUSH CB($CB)!!");
+		error("UNKNOWN USER CB($CB)!!");
 	}
 
 	return 0;
