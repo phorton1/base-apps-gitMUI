@@ -80,11 +80,8 @@ necessary to determine the status of a repo.
   count for the repo ... that is, how many unpushed
   commits exist.
 
-- canPush() - AHEAD, remote changes and MASTER_ID != REMOTE_ID
-  these *should* be equivilant concepts.  canPush literally
+- canPush() - AHEAD (MASTER_ID != REMOTE_ID) && !BEHIND
   means there are local comnits that have not been pushed.
-  I currently use remote_changes to determine canPush().
-  Note that i think there are problems with that approach.
 
 - For any repo that have events in the github event list some
   event in the list *should* match the the REMOTE_ID of the repo.
