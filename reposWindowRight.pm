@@ -15,13 +15,14 @@ use Wx::Event qw(
 	EVT_LEFT_DOWN
 	EVT_BUTTON
 	EVT_UPDATE_UI_RANGE );
+use Pub::Utils;
 use apps::gitUI::utils;
 use apps::gitUI::repos;
+use apps::gitUI::repoStatus;
+use apps::gitUI::repoHistory;
 use apps::gitUI::myTextCtrl;
 use apps::gitUI::myHyperlink;
-use apps::gitUI::repoHistory;
 use apps::gitUI::Resources;
-use Pub::Utils;
 use base qw(Wx::Window);
 
 
@@ -43,8 +44,8 @@ my $BUTTON_SPACE = 10;
 
 
 my (
-	$COMMAND_STATUS,
-	$COMMAND_UPDATE,
+	$COMMAND_REFRESH_STATUS,
+	$COMMAND_PULL,
 	$COMMAND_PUSH,
 
 	# $COMMAND_SCAN_DOCS,
@@ -59,7 +60,7 @@ sub new
     my $this = $class->SUPER::new($splitter);
     $this->{parent} = $parent;
 
-	$this->{cur_repo} = '';
+	$this->{repo} = '';
 	$this->{frame} = $parent->{frame};
 
 	$this->SetBackgroundColour($color_cyan);
@@ -71,11 +72,11 @@ sub new
 	# Buttons added from right to left
 
 	$this->{buttons} = [
-		Wx::Button->new($this,$COMMAND_STATUS,'Refresh Status',		[0,5],	[80,20]),
-		Wx::Button->new($this,$COMMAND_UPDATE,'Update',				[0,5],	[60,20]),
-		Wx::Button->new($this,$COMMAND_PUSH,'Push',					[0,5],	[60,20]),
-		Wx::Button->new($this,-1,'Scan Docs',	[0,5],	[80,20]),
-		Wx::Button->new($this,-1,'Update Docs',	[0,5],	[80,20]),
+		Wx::Button->new($this,$COMMAND_REFRESH_STATUS,	'Refresh Status',	[0,5],	[85,20]),
+		Wx::Button->new($this,$COMMAND_PULL,		 	'Pull',				[0,5],	[75,20]),
+		Wx::Button->new($this,$COMMAND_PUSH,			'Push',				[0,5],	[60,20]),
+		# Wx::Button->new($this,-1,						'Scan Docs',		[0,5],	[80,20]),
+		# Wx::Button->new($this,-1,						'Update Docs',		[0,5],	[80,20]),
 	];
 
 
@@ -83,10 +84,10 @@ sub new
 
 	EVT_SIZE($this, \&onSize);
 
-	EVT_BUTTON($this, $COMMAND_STATUS, \&onButton);
+	EVT_BUTTON($this, $COMMAND_REFRESH_STATUS, \&onButton);
 	# EVT_BUTTON($this, $COMMAND_SCAN_DOCS, \&onButton);
 	# EVT_BUTTON($this, $COMMAND_UPDATE_DOCS, \&onButton);
-	EVT_UPDATE_UI_RANGE($this, $COMMAND_STATUS, $COMMAND_STATUS, \&onUpdateUI);
+	EVT_UPDATE_UI_RANGE($this, $COMMAND_REFRESH_STATUS, $COMMAND_PUSH, \&onUpdateUI);
 
 	return $this;
 }
@@ -129,7 +130,31 @@ sub onUpdateUI
 {
 	my ($this,$event) = @_;
 	my $id = $event->GetId();
-	my $enable = $this->{repo} ? 1 : 0;
+	my $repo = $this->{repo};
+
+	my $enable = 0;
+	$enable = 1 if $id == $COMMAND_REFRESH_STATUS &&
+		!repoStatusBusy();
+	$enable = 1 if $id == $COMMAND_PULL &&
+		$repo &&
+		$repo->{BEHIND} &&
+		!$repo->{AHEAD};
+	$enable = 1 if $id == $COMMAND_PUSH &&
+		$repo &&
+		$repo->canPush();
+
+
+	if ($id == $COMMAND_PULL)
+	{
+		my $button_title =
+			$enable &&
+			keys %{$repo->{staged_changes}} ||
+			keys %{$repo->{unstaged_changes}} ?
+			'Stash+Pull' : 'Pull';
+		$event->SetText($button_title) if
+			$event->GetText() ne $button_title;
+	}
+
 	$event->Enable($enable);
 }
 
@@ -140,9 +165,9 @@ sub onButton
 	my $id = $event->GetId();
 	display($dbg_cmds,0,"reposWindowRight::onButton($id)");
 
-	if ($id == $COMMAND_STATUS)
+	if ($id == $COMMAND_REFRESH_STATUS)
 	{
-		$this->doStatus();
+		repoStatusStart();
 	}
 	# if ($id == $COMMAND_SCAN_DOCS)
 	# {
@@ -188,97 +213,6 @@ sub notifyRepoSelected
 	$this->{repo_name}->SetLabel($kind.$path);
 	$this->{title_ctrl}->SetLabel("Repo[$repo->{num}]");
 }
-
-
-
-#--------------------------------------------------------
-# doStatus - prototype
-#--------------------------------------------------------
-
-my $dbg_git = -1;
-
-
-sub doStatus
-{
-	my ($this) = @_;
-	my $repo = $this->{repo};
-	my $path = $repo->{path};
-	my $text = '';
-
-	display($dbg_git,0,"doStatus($path)");
-
-	if (!gitCommand(0,\$text,$path,'remote update'))
-	{
-		error($text);
-		return 0;
-	}
-
-	# git status
-	# -b == include branch info
-	# --porcelain s== stable simple paraseable result
-
-	if (!gitCommand(1,\$text,$path,'status -b --porcelain'))
-	{
-		error($text);
-		return 0;
-	}
-
-	# master...origin/master [ahead 1, behind 1]
-	# ?? untracked_file
-	# _M modified file
-
-	my @lines = split(/\n/,$text);
-	my $status_text = shift @lines;
-	my $commits = $status_text =~ /\[(.*)\]/ ? $1 : '';
-	my $ahead = $commits =~ /ahead (\d+)/ ? $1 : 0;
-	my $behind = $commits =~ /behind (\d+)/ ? $1 : 0;
-
-	display($dbg_git,1,"AHEAD($ahead) BEHIND($behind)");
-	$repo->{ahead} = $ahead;
-	$repo->{behind} = $behind;
-	$this->notifyRepoSelected($repo);
-
-	return 1;
-}
-
-
-
-
-sub gitCommand
-	# returns 0 on error, 1 on success
-	# always sets the $$retval text
-	# it is an error if:
-	#
-	#	the command returns undef
-	#	the backtick command exited with a non-zero exit code
-	#	$no_blank && the command returns ''
-{
-	my ($no_blank,$ptext,$repo,$command) = @_;
-	display($dbg_git,0,"gitCommand($no_blank,$repo) $command");
-	$$ptext = `git -C $repo $command 2>&1`;
-	my $exit_code = $?;
-
-	if (!defined($$ptext))
-	{
-		$$ptext = "ERROR repo($repo) command($command) returned undef\n";
-		return 0;
-	}
-	if ($exit_code)
-	{
-		$$ptext .= "\n" if $ptext;
-		$$ptext = "ERROR repo($repo) command($command) returned exit_code($exit_code)\n$$ptext";
-		return 0;
-	}
-	if ($no_blank && !$$ptext)
-	{
-		$$ptext = "ERROR repo($repo) command($command) returned blank\n";
-		return 0;
-	}
-
-	display($dbg_git+1,1,"text=$$ptext");
-	return 1;
-}
-
 
 
 

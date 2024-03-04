@@ -31,29 +31,28 @@ my $DEFAULT_REFRESH_INTERVAL = 90;
 
 my $dbg_thread = 0;
 	# thread and API commans
-my $dbg_mon = 1;
+my $dbg_mon = 0;
 	# monitor busy work
 my $dbg_status = 0;
 	# the actual info in an update
+my $dbg_events = 1;
+	# the adding of remote_commits
 my $dbg_notify = -1;
 	# noitification if repo changed
-
-
-# details about updates
-
-my $dbg_local_commits = 1;
 
 
 BEGIN
 {
  	use Exporter qw( import );
 	our @EXPORT = qw(
+		repoStatusBusy
 		repoStatusInit
-		repoStatusGet
+		repoStatusStart
 		repoStatusStop
 		repoStatusReady
 	);
 }
+
 
 my $REPO_STATUS_NONE = 0;
 my $REPO_STATUS_START = 1;
@@ -70,13 +69,20 @@ my $the_callback;
 my $REFRESH_INTERVAL = 0;
 
 my $repo_status:shared = $REPO_STATUS_NONE;
-my $stopping = 0;
+my $stopping:shared = 0;
 my $last_update:shared = 0;
 
 
 #---------------------------------------------
 # API
 #---------------------------------------------
+
+sub repoStatusBusy
+{
+	return
+		$repo_status &&
+		$repo_status < $REPO_STATUS_READY;
+}
 
 sub repoStatusInit
 {
@@ -119,18 +125,17 @@ sub repoStatusStop
 	$stopping = 1;
 
 	my $start = time();
-	while ($repo_status &&
-		$repo_status != $REPO_STATUS_STOPPED &&
+	while ($repo_status != $REPO_STATUS_STOPPED &&
 		time() < $start + $STOP_TIMEOUT)
 	{
 		display($dbg_thread,1,"waiting for repoStatus monitor to stop ...");
 		sleep(0.1);
 	}
-
+	$stopping = 0;
 	warning(0,0,"timed out($STOP_TIMEOUT) trying to stop repoStatus monitor")
 		if $repo_status && $repo_status != $REPO_STATUS_STOPPED;
 
-	$stopping = 0;
+
 }
 
 
@@ -174,9 +179,9 @@ sub run
 		my $now = time();
 		if ($stopping)
 		{
-			$stopping = 0;
 			display($dbg_thread,0,"run(STOPPING)");
 			setStatusState($REPO_STATUS_STOPPED);
+			$stopping = 0;
 		}
 		elsif ($repo_status == $REPO_STATUS_START)
 		{
@@ -261,8 +266,16 @@ sub initRepoStatus
 	$repo->{save_HEAD_ID} 	= $repo->{HEAD_ID};
 	$repo->{save_MASTER_ID} = $repo->{MASTER_ID};
 	$repo->{save_REMOTE_ID} = $repo->{REMOTE_ID};
+	$repo->{save_GITHUB_ID} = $repo->{GITHUB_ID};
+	$repo->{save_REMOTE_COMMITS} = $repo->{remote_commits};
+
+	$repo->{AHEAD} = 0;
+	$repo->{BEHIND} = 0;
+	$repo->{found_REMOTE_ID_on_github} = 0;
+
 	delete $repo->{local_commits};
 	delete $repo->{remote_commits};
+	return gitStart($repo);
 }
 
 
@@ -272,7 +285,6 @@ sub checkChanged
 	my $save_field = "save_$field";
 	my $val = $repo->{$field};
 	my $save_val = $repo->{$save_field};
-
 	my $eq = $numeric ?
 		($val == $save_val) :
 		($val eq $save_val);
@@ -281,6 +293,20 @@ sub checkChanged
 		$$pchanged = 1;
 		display($dbg_notify,0,"changed($field) from $save_val to $val on repo($repo->{path})",0,$UTILS_COLOR_CYAN);
 	}
+}
+
+sub checkRemoteCommitsChanged
+	# if two subsequent events lists return the same
+	# number of events for a repo, I consider it unchanged
+{
+	my ($pchanged,$repo) = @_;
+	my $remote_commits = $repo->{remote_commits};
+	my $saved_commits = $repo->{save_REMOTE_COMMITS};
+	$$pchanged = 1 if
+		($remote_commits && !$saved_commits) ||
+		(!$remote_commits && $saved_commits) ||
+		($remote_commits && scalar(@$remote_commits) != scalar(@$saved_commits));
+	delete $repo->{save_REMOTE_COMMITS};
 }
 
 
@@ -293,6 +319,10 @@ sub finishRepoStatus
 	checkChanged(0,\$changed,$repo,'HEAD_ID');
 	checkChanged(0,\$changed,$repo,'MASTER_ID');
 	checkChanged(0,\$changed,$repo,'REMOTE_ID');
+	checkChanged(0,\$changed,$repo,'GITHUB_ID');
+	checkRemoteCommitsChanged(\$changed,$repo);
+	delete $repo->{found_REMOTE_ID_on_github};
+
 	if ($changed)
 	{
 		display($dbg_notify+1,0,"STATUS_REPO_CHANGED($repo->{path})",0,$UTILS_COLOR_CYAN);
@@ -301,8 +331,8 @@ sub finishRepoStatus
 }
 
 
-
 sub updateStatusAll
+	# the main method that updates the status for all repos
 {
 	my ($events) = @_;
 	my $num_events = @$events;
@@ -311,15 +341,13 @@ sub updateStatusAll
 	my $repo_list = getRepoList();
 	for my $repo (@$repo_list)
 	{
-		initRepoStatus($repo);
+		return 0 if !initRepoStatus($repo);
+		return 0 if $stopping;
 	}
 
-	for my $repo (@$repo_list)
+	for my $event (reverse @$events)
 	{
-		my $git_repo = gitStart($repo);
-			# adds local_commits and sets AHEAD
-		return 0 if !$git_repo;
-		return 0 if $stopping;
+		oneEvent($event);
 	}
 
 	for my $repo (@$repo_list)
@@ -328,6 +356,114 @@ sub updateStatusAll
 	}
 
 	return 1;
+}
+
+
+
+sub oneEvent
+{
+	my ($event) = @_;
+	my $event_id = $event->{id};
+	my $type = $event->{type};
+	return if $type ne 'PushEvent';
+		# We are only interested in PushEvents
+		# see https://docs.github.com/en/rest/using-the-rest-api/github-event-types?apiVersion=2022-11-28
+
+	my $git_user = getPref('GIT_USER');
+
+	my $time_str = $event->{created_at} || '';
+	my $time = gmtToInt($time_str);
+	my $github_repo = $event->{repo} || '';
+	my $repo_id = $github_repo->{name} || '';
+	$repo_id =~ s/^$git_user\///;
+
+	my $repo = getRepoById($repo_id) || '';
+	return !error("Could not find repo($repo_id) in event($event_id)")
+		if !$repo;
+
+	my $payload = $event->{payload} || '';
+	my $head = $payload ? $payload->{head} || '' : '';
+	my $before = $payload ? $payload->{before} || '' : '';
+	my $commits = $payload ? $payload->{commits} : '';
+
+	return !error("No 'before' in event($event_id) path($repo->{path})")
+		if !$before;
+	return !error("No 'head' in event($event_id) path($repo->{path})")
+		if !$head;
+	return !error("No commits in event($event_id) path($repo->{path})")
+		if !$commits || !@$commits;
+
+	display($dbg_events,0,"commits for repo($repo_id=$repo->{path}) at $time_str");
+	display($dbg_events,1,"before=$before") if $before;
+
+	return if !oneRepoEvent($repo,$event_id,$time,$head,$before,$commits);
+
+	# add the event analogously to all submodules
+
+	if ($repo->{used_in})
+	{
+		for my $sub_path (@{$repo->{used_in}})
+		{
+			my $sub_repo = getRepoByPath($sub_path);
+			return !error("Could not find submodule($sub_path) in event($event_id) path($repo->{path})")
+				if !$sub_repo;
+			return if !oneRepoEvent($sub_repo,$event_id,$time,$head,$before,$commits);
+		}
+	}
+
+	return 1;
+}
+
+
+sub oneRepoEvent
+{
+	my ($repo,$event_id,$time,$head,$before,$commits) = @_;
+	my $num_commits = @$commits;
+	display($dbg_events,0,"onRepoEvent($repo->{path}) for $num_commits commits");
+
+	# start counting remote commits after those
+	# known by the local repo ..
+
+	$repo->{found_REMOTE_ID_on_github} = 1
+		if $before eq $repo->{REMOTE_ID};
+	$repo->{remote_commits} ||= shared_clone([]);
+
+	# the head will always be the last commit in the commit list
+	# repoDisplay(0,1,"head=$head") if $head;
+	# checkEventCommit($repo,$head,'payload_head');
+
+	my $sha = '';
+	for my $commit (@$commits)
+	{
+		$sha = $commit->{sha} || '';
+		my $msg = $commit->{message} || '';
+		$msg =~ s/\n/ /g;
+		$msg =~ s/\t/ /g;
+		push @{$repo->{remote_commits}},shared_clone({
+			sha => $sha,
+			msg => $msg,
+			time => $time });
+
+		my $behind_str = '';
+		if ($sha eq $repo->{REMOTE_ID})
+		{
+			$repo->{found_REMOTE_ID_on_github} = 1;
+		}
+		elsif ($repo->{found_REMOTE_ID_on_github})
+		{
+			$repo->{BEHIND}++;
+			$behind_str = "BEHIND($repo->{BEHIND})";
+		}
+
+		display($dbg_events,2,pad($behind_str,10)._lim($sha,8)._lim($msg,40));
+	}
+
+	return !error("head($head)<>last_commit($sha) in event($event_id) path($repo->{path})")
+		if $sha ne $head;
+
+	$repo->{GITHUB_ID} = $sha;
+	return 1;
+
 }
 
 

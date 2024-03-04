@@ -6,7 +6,7 @@ and a bit time consuming.  Updating, either pulling from github
 or normalizing local submodules, is even more complicated.
 
 Checking of the status versus github requires, obviously, an internet
-conntection. Automatic realtime checking is/would-be rate limited
+conntection. Automatic realtime checking is rate limited
 to one check per minute.
 
 There are, I believe, currently some problems with the commitWindow
@@ -23,10 +23,10 @@ added to, and maintained, for every repo in repoGit().
 A new module, gitStatus.pm has been created.
 It contains the updateStatus thread.
 
-There is a preference, GITHUB_UPDATE_INTERVAL, which *should* be
-set to 0 or a minimum of 60, that will cause the thread to watch
-for changes to github events, and/or to check the integrity of
-local subodules.
+There is a preference, GITHUB_UPDATE_INTERVAL, default 90,
+which *should* be set to 0 or a minimum of 60, that will cause
+the thread to check for changes to github events, and/or to check
+the integrity of local subodules.
 
 The updateStatus thread does the behind-the-scenes work
 to get github events and place fields on all of the repos
@@ -63,33 +63,35 @@ necessary to determine the status of a repo.
   submodule to the master submodule. Described in more detail
   below.
 
+
 ### Invariants
 
 - none of my repos should have 'detached' heads.
   All repos *should* be checked out to their 'master' $branch.
 
-- head_id *should* always == master_id. Except in the middle
-  of a pull, perhaps, on the local machine, the master_id should
-  always be the most recent commit, and the head_id should always
-  match it.  In other words head_id is only used as an error
+- HEAD_ID *should* always == MASTER_ID. Except in the middle
+  of a pull, perhaps, on the local machine, the MASTER_ID should
+  always be the most recent commit, and the HEAD_ID should always
+  match it.  In other words HEAD_ID is only used as an error
   check.
 
-- remote_id *should* always either == master_id, or be
-  'behind' it, and from this we determine the 'ahead'
+- REMOTE_ID *should* always either == MASTER_ID, or be
+  'behind' it, and from this we determine the AHEAD
   count for the repo ... that is, how many unpushed
   commits exist.
 
-- canPush() - BEHIND, remote changes and master_id != remote_id -
+- canPush() - AHEAD, remote changes and MASTER_ID != REMOTE_ID
   these *should* be equivilant concepts.  canPush literally
   means there are local comnits that have not been pushed.
   I currently use remote_changes to determine canPush().
   Note that i think there are problems with that approach.
 
-- All events in the github event list *should* **line up** with
-  the remote_id of the repo .. that is to say that for every list
-  of events returned by github, there should be at least ONE commit
-  for any mentioned repo, that has the same SHA as the most recent
-  sync (push or pull) we did to/from github.
+- For any repo that have events in the github event list some
+  event in the list *should* match the the REMOTE_ID of the repo.
+  That is to say that for every list of events returned by github,
+  there should be at least ONE commit for any mentioned repo,
+  that has the same SHA as the most recent sync (push or pull)
+  we did to/from github.
 
 
 ### Remote Commits
@@ -107,31 +109,47 @@ a merge.  Unlikely, but possible.
 Otherwise, for each repo, we can now determine BEHIND by
 noting any remote commits since REMOTE_ID.
 
+GITHUB_ID will be set to the most recent commit, if any
+found in the github event list.
+
 
 ## Thread vs. Explicit Command
 
-I envision the gitStatus process being run once at program startup
-on a Thread, after the monitor has started.  This means that either
-we need a short timeout, or a separate threaad, to do the gitStatus,
-or else we would hang the monitor loop until an HTTP get timed out.
+The gitStatus process is run at program startup on a Thread.
 
-*perhaps* part of this could be fired off as a one-time detached thread from
-doGitHub().
+The gitStatus 'monitor' is built to wait until the disk **monitor**
+is started.
 
-The *full* status requires that gitChanges() has been run, and cannot
-take place until the monitor IS started.  However, we can GET the github
-events into a cachefile at anytime.  Note that when run from a thread
-the displayDialog (WX main thread only object) cannot be used for display.
+An explicit command, repoStatusStart() may be called
+to invoke a manual refresh of the status, and is generally only
+called if repoStatusBusy() returns false.
 
 
+## Refresh Status, Push, and Pull Buttons in Info Window
+
+The Info Window (reposWindowRight) has a button that
+will refresh the status synchronously outside of the
+thread refresh cycle.
+
+It has Push and Pull buttons that are not currently
+implemented.
 
 
-## Push Button, Status Window with Refresh button
 
-I also enveison a new Status window that ties all of this together.
+## Sub-Module consistency and updating
 
-The repo-info window *should* get Push and (future) Update buttons.
+The gitStatus::oneEvent() method knows about
+submodules, and as it process events for a MAIN_MODULE
+it processes those same events through to the USED_IN
+submodules,
 
-Note that there is a bug in responding to links in the infoPane
-when clicked on from the commitWindow.  It updates the contents,
-but really *should* switch to the 'Repos' window.
+Remember that changes to a submodule can be pushed
+from ANY instance of the submodule, including the
+MAIN_MODULE that IS the repository on github.
+
+If changes ARE made, committed, and pushed to a submodule,
+then the MAIN_MODULE will show as BEHIND and needing a
+a pull.
+
+The other submodules *should* reflect their status vis-a-vis
+the MAIN_MODULE on github.

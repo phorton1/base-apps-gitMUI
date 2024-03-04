@@ -414,6 +414,95 @@ sub getRemoteChanges
 }
 
 
+#------------------------------------------------
+# gitDiff
+#------------------------------------------------
+
+sub showDiffFile
+{
+	my ($old_new,$git_file) = @_;
+	my $size = $git_file ? $git_file->size() : '' ;
+	my $mode = $git_file ? $git_file->mode() : '' ;
+	display($dbg_diff,1,"$old_new git_file("._def($git_file).") size($size) mode($mode)");
+}
+
+sub gitDiff
+{
+	my ($repo,$is_staged,$fn) = @_;
+	display($dbg_diff,0,"gitDiff($is_staged,$fn)");
+
+	# get the git_repo and its index
+
+	my $git_repo = Git::Raw::Repository->open($repo->{path});
+	return gitError($repo,"Could not create git_repo") if !$git_repo;
+
+	# the options
+
+	my $opts = {
+		paths => [ $fn ],
+		reverse => !$is_staged,
+			include_typechange => 1,
+		include_untracked => 1,	# !$is_staged,
+			recurse_untracked_dirs => 1,
+			show_untracked_content => 1, # !$is_staged,
+		# show_binary => 1,
+			# skip_binary_check => 1,
+		context_lines => 5,
+		prefix => {
+			a => $is_staged ? 'index' : 'work' ,
+			b => $is_staged ? 'HEAD'  : 'index' }};
+
+	$opts->{tree} = getTree($repo, $git_repo, 'HEAD')
+		if $is_staged;
+
+	my $diff = $git_repo->diff($opts);
+	return gitError($repo,"Could not do diff()") if !$diff;
+
+	if ($dbg_diff < 0)
+	{
+		my @deltas = $diff->deltas();
+		my $delta_count = @deltas;	# $diff->delta_count();
+		display($dbg_diff,1,"DELTAS($delta_count)");
+		for my $delta (@deltas)
+		{
+			my $status = $delta->status();
+			my $flags = $delta->flags();
+			my $flag_text = join(',',@$flags);
+			display($dbg_diff,2,"status($status) flags("._def($flags).") flag_text("._def($flag_text).")");
+			showDiffFile("old",$delta->old_file());
+			showDiffFile("new",$delta->new_file());
+		}
+		my @patches = $diff->patches();
+		my $patch_count = @patches;
+		display($dbg_diff,1,"PATCHES($patch_count)");
+		for my $patch (@patches)
+		{
+			my $stats = $patch->line_stats();
+			my $context = $stats->{context};
+			my $additions = $stats->{additions};
+			my $deletions = $stats->{deletions};
+			my @hunks = $patch->hunks();
+			my $hunk_count = @hunks;
+			display($dbg_diff,2,"PATCH context($context) additions($additions) deletions($deletions) hunks($hunk_count)");
+			for my $hunk (@hunks)
+			{
+				my $old_start = $hunk->old_start();
+				my $old_lines = $hunk->old_lines();
+				my $new_start = $hunk->old_start();
+				my $new_lines = $hunk->old_lines();
+				display($dbg_diff,3,"hunk old($old_start,$old_lines) new($new_start,$new_lines)");
+				print $hunk->header();
+			}
+		}
+	}
+
+	my $text = $diff->buffer( 'patch' );
+	my $length = length($text);
+
+	display($dbg_diff,0,"gitDiff($fn) returning $length bytes");
+	return $text;
+}
+
 
 #--------------------------------------------
 # gitIndex
@@ -706,7 +795,6 @@ sub gitTag
 # gitPush
 #-------------------------------------------------------
 
-
 sub cb_credentials
 {
 	my ($url) = @_;
@@ -855,95 +943,6 @@ sub gitPush
 }
 
 
-
-#------------------------------------------------
-# gitDiff
-#------------------------------------------------
-
-sub showDiffFile
-{
-	my ($old_new,$git_file) = @_;
-	my $size = $git_file ? $git_file->size() : '' ;
-	my $mode = $git_file ? $git_file->mode() : '' ;
-	display($dbg_diff,1,"$old_new git_file("._def($git_file).") size($size) mode($mode)");
-}
-
-sub gitDiff
-{
-	my ($repo,$is_staged,$fn) = @_;
-	display($dbg_diff,0,"gitDiff($is_staged,$fn)");
-
-	# get the git_repo and its index
-
-	my $git_repo = Git::Raw::Repository->open($repo->{path});
-	return gitError($repo,"Could not create git_repo") if !$git_repo;
-
-	# the options
-
-	my $opts = {
-		paths => [ $fn ],
-		reverse => !$is_staged,
-			include_typechange => 1,
-		include_untracked => 1,	# !$is_staged,
-			recurse_untracked_dirs => 1,
-			show_untracked_content => 1, # !$is_staged,
-		# show_binary => 1,
-			# skip_binary_check => 1,
-		context_lines => 5,
-		prefix => {
-			a => $is_staged ? 'index' : 'work' ,
-			b => $is_staged ? 'HEAD'  : 'index' }};
-
-	$opts->{tree} = getTree($repo, $git_repo, 'HEAD')
-		if $is_staged;
-
-	my $diff = $git_repo->diff($opts);
-	return gitError($repo,"Could not do diff()") if !$diff;
-
-	if ($dbg_diff < 0)
-	{
-		my @deltas = $diff->deltas();
-		my $delta_count = @deltas;	# $diff->delta_count();
-		display($dbg_diff,1,"DELTAS($delta_count)");
-		for my $delta (@deltas)
-		{
-			my $status = $delta->status();
-			my $flags = $delta->flags();
-			my $flag_text = join(',',@$flags);
-			display($dbg_diff,2,"status($status) flags("._def($flags).") flag_text("._def($flag_text).")");
-			showDiffFile("old",$delta->old_file());
-			showDiffFile("new",$delta->new_file());
-		}
-		my @patches = $diff->patches();
-		my $patch_count = @patches;
-		display($dbg_diff,1,"PATCHES($patch_count)");
-		for my $patch (@patches)
-		{
-			my $stats = $patch->line_stats();
-			my $context = $stats->{context};
-			my $additions = $stats->{additions};
-			my $deletions = $stats->{deletions};
-			my @hunks = $patch->hunks();
-			my $hunk_count = @hunks;
-			display($dbg_diff,2,"PATCH context($context) additions($additions) deletions($deletions) hunks($hunk_count)");
-			for my $hunk (@hunks)
-			{
-				my $old_start = $hunk->old_start();
-				my $old_lines = $hunk->old_lines();
-				my $new_start = $hunk->old_start();
-				my $new_lines = $hunk->old_lines();
-				display($dbg_diff,3,"hunk old($old_start,$old_lines) new($new_start,$new_lines)");
-				print $hunk->header();
-			}
-		}
-	}
-
-	my $text = $diff->buffer( 'patch' );
-	my $length = length($text);
-
-	display($dbg_diff,0,"gitDiff($fn) returning $length bytes");
-	return $text;
-}
 
 
 

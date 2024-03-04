@@ -681,6 +681,7 @@ sub toTextCtrl
 	$this->contentLine($text_ctrl,1,'HEAD_ID');
 	$this->contentLine($text_ctrl,1,'MASTER_ID');
 	$this->contentLine($text_ctrl,1,'REMOTE_ID');
+	$this->contentLine($text_ctrl,1,'GITHUB_ID');
 
 	$text_ctrl->addLine();
 	$this->contentCommits($text_ctrl,'local_commits');
