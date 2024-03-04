@@ -41,8 +41,21 @@ BEGIN
 		getRepoByPath
 
 		canPushRepos
-		setCanPush
-		clearSelected
+		canPullRepos
+
+		getSelectedPushRepos
+		clearSelectedPushRepos
+		setSelectedPushRepo
+		clearSelectedPushRepo
+		canPushSelectedRepos
+
+		getSelectedPullRepos
+		clearSelectedPullRepos
+		setSelectedPullRepo
+		clearSelectedPullRepo
+		canPullSelectedRepos
+
+		setCanPushPull
 
 		groupReposBySection
 	);
@@ -53,6 +66,14 @@ my $repo_filename = '/base/bat/git_repositories.txt';
 my $repo_hash:shared = shared_clone({});
 my $repo_list:shared = shared_clone([]);
 my $repos_can_push = shared_clone({});
+my $repos_can_pull = shared_clone({});
+my $repos_do_push = shared_clone({});
+my $repos_do_pull = shared_clone({});
+
+
+#----------------------------------
+# accessors
+#----------------------------------
 
 sub getRepoHash		{ return $repo_hash; }
 sub getRepoList		{ return $repo_list; }
@@ -77,36 +98,77 @@ sub canPushRepos
 {
 	return scalar(keys %$repos_can_push);
 }
+sub canPullRepos
+{
+	return scalar(keys %$repos_can_pull);
+}
 
 
-sub setCanPush
-	# There are definitely some issues with current diff
-	# change detection vis-a-vis submodules. I'm not sure
-	# that 'remote_changes' is the best indication of whether
-	# a repo can be pushed.  master_id != remote_id might
-	# be another, perhaps better, indicator. TODO WIP
+
+sub getSelectedPushRepos
+{
+	return $repos_do_push;
+}
+sub clearSelectedPushRepos
+{
+	$repos_do_push = shared_clone({});
+}
+sub setSelectedPushRepo
 {
 	my ($repo) = @_;
-	my $num = keys %{$repo->{remote_changes}};
-	if ($num)
-	{
-		$repos_can_push->{$repo->{path}} = $num;
-	}
-	else
-	{
-		delete $repos_can_push->{$repo->{path}};
-	}
+	$repos_do_push->{$repo->{path}} = 1;
 }
-
-sub clearSelected
+sub clearSelectedPushRepo
 {
-	for my $repo (@$repo_list)
-	{
-		$repo->{selected} = 0;
-	}
+	my ($repo) = @_;
+	delete $repos_do_push->{$repo->{path}};
+}
+sub canPushSelectedRepos
+{
+	return scalar(keys %$repos_do_push);
 }
 
 
+
+sub getSelectedPullRepos
+{
+	return $repos_do_pull;
+}
+sub clearSelectedPullRepos
+{
+	$repos_do_pull = shared_clone({});
+}
+sub setSelectedPullRepo
+{
+	my ($repo) = @_;
+	$repos_do_pull->{$repo->{path}} = 1;
+}
+sub clearSelectedPullRepo
+{
+	my ($repo) = @_;
+	delete $repos_do_pull->{$repo->{path}};
+}
+sub canPullSelectedRepos
+{
+	return scalar(keys %$repos_do_pull);
+}
+
+
+sub setCanPushPull
+{
+	my ($repo) = @_;
+	$repo->canPush() ?
+		$repos_can_push->{$repo->{path}} = 1 :
+		delete $repos_can_push->{$repo->{path}};
+	$repo->canPull() ?
+		$repos_can_pull->{$repo->{path}} = 1 :
+		delete $repos_can_pull->{$repo->{path}};
+}
+
+
+#------------------------------------------
+# parseRepos
+#------------------------------------------
 
 sub parseRepos
 {

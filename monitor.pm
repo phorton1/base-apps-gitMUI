@@ -83,10 +83,6 @@ use apps::gitUI::repoGit;
 use Pub::Utils;
 
 
-
-our $MONITOR_NOTIFY_EVERY_CHANGE = 1;
-	# whether to call back on every change for
-	# showing instantaneous diff updates in commitListCtrl
 my $DELAY_MONITOR_STARTUP = 0;
 	# Set this to number of seconds to delay monitor thread
 	# actually starting, to see what happens to other threads
@@ -116,8 +112,6 @@ BEGIN {
 
 		$MON_CB_TYPE_STATUS
 		$MON_CB_TYPE_REPO
-
-		$MONITOR_NOTIFY_EVERY_CHANGE
 	);
 }
 
@@ -342,7 +336,7 @@ sub run
 					display($dbg_mon,0,"initial call to gitChanges($repo->{path})");
 					&$the_callback({ status =>"checking: $repo->{path}" });
 					$rslt = gitChanges($repo);
-					last if !defined($rslt);
+					last if !$rslt;
 					setCanPushPull($repo);
 					&$the_callback({ repo=>$repo }) if $rslt;
 				}
@@ -379,11 +373,9 @@ sub run
 							last;
 						}
 						$rslt = gitChanges($repo);
-						last if !defined($rslt);
-						setCanPushPull($repo) if $rslt;
-
-						&$the_callback({ repo=>$repo })
-							if $MONITOR_NOTIFY_EVERY_CHANGE || $rslt;
+						last if !$rslt;
+						setCanPushPull($repo);
+						&$the_callback({ repo=>$repo });
 
 						# create/remove monitors based on file system changes
 

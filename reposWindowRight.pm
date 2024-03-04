@@ -45,8 +45,8 @@ my $BUTTON_SPACE = 10;
 
 my (
 	$COMMAND_REFRESH_STATUS,
-	$COMMAND_PULL,
-	$COMMAND_PUSH,
+	$COMMAND_PUSH_ONE,
+	$COMMAND_PULL_ONE,
 
 	# $COMMAND_SCAN_DOCS,
 	# $COMMAND_UPDATE_DOCS,
@@ -73,8 +73,8 @@ sub new
 
 	$this->{buttons} = [
 		Wx::Button->new($this,$COMMAND_REFRESH_STATUS,	'Refresh Status',	[0,5],	[85,20]),
-		Wx::Button->new($this,$COMMAND_PULL,		 	'Pull',				[0,5],	[75,20]),
-		Wx::Button->new($this,$COMMAND_PUSH,			'Push',				[0,5],	[60,20]),
+		Wx::Button->new($this,$COMMAND_PUSH_ONE,		'Push',				[0,5],	[75,20]),
+		Wx::Button->new($this,$COMMAND_PULL_ONE,		'Pull',				[0,5],	[60,20]),
 		# Wx::Button->new($this,-1,						'Scan Docs',		[0,5],	[80,20]),
 		# Wx::Button->new($this,-1,						'Update Docs',		[0,5],	[80,20]),
 	];
@@ -84,10 +84,10 @@ sub new
 
 	EVT_SIZE($this, \&onSize);
 
-	EVT_BUTTON($this, $COMMAND_REFRESH_STATUS, \&onButton);
-	# EVT_BUTTON($this, $COMMAND_SCAN_DOCS, \&onButton);
-	# EVT_BUTTON($this, $COMMAND_UPDATE_DOCS, \&onButton);
-	EVT_UPDATE_UI_RANGE($this, $COMMAND_REFRESH_STATUS, $COMMAND_PUSH, \&onUpdateUI);
+	EVT_BUTTON($this, $COMMAND_REFRESH_STATUS, 	\&onButton);
+	EVT_BUTTON($this, $COMMAND_PUSH_ONE,		\&onButton);
+	EVT_BUTTON($this, $COMMAND_PULL_ONE, 		\&onButton);
+	EVT_UPDATE_UI_RANGE($this, $COMMAND_REFRESH_STATUS, $COMMAND_PULL_ONE, \&onUpdateUI);
 
 	return $this;
 }
@@ -135,21 +135,17 @@ sub onUpdateUI
 	my $enable = 0;
 	$enable = 1 if $id == $COMMAND_REFRESH_STATUS &&
 		!repoStatusBusy();
-	$enable = 1 if $id == $COMMAND_PULL &&
-		$repo &&
-		$repo->{BEHIND} &&
-		!$repo->{AHEAD};
-	$enable = 1 if $id == $COMMAND_PUSH &&
+	$enable = 1 if $id == $COMMAND_PUSH_ONE &&
 		$repo &&
 		$repo->canPush();
+	$enable = 1 if $id == $COMMAND_PULL_ONE &&
+		$repo &&
+		$repo->canPull();
 
-
-	if ($id == $COMMAND_PULL)
+	if ($id == $COMMAND_PULL_ONE)
 	{
 		my $button_title =
-			$enable &&
-			keys %{$repo->{staged_changes}} ||
-			keys %{$repo->{unstaged_changes}} ?
+			$enable && $repo->needsStash() ?
 			'Stash+Pull' : 'Pull';
 		$event->SetText($button_title) if
 			$event->GetText() ne $button_title;
@@ -163,18 +159,24 @@ sub onButton
 {
 	my ($this,$event) = @_;
 	my $id = $event->GetId();
-	display($dbg_cmds,0,"reposWindowRight::onButton($id)");
+	display($dbg_cmds,0,"reposWindowRight::onButton($id) repo=".($this->{repo}?$this->{repo}->{path}:'undef'));
 
 	if ($id == $COMMAND_REFRESH_STATUS)
 	{
 		repoStatusStart();
 	}
-	# if ($id == $COMMAND_SCAN_DOCS)
-	# {
-	# }
-	# if ($id == $COMMAND_UPDATE_DOCS)
-	# {
-	# }
+	elsif ($id == $COMMAND_PUSH_ONE)
+	{
+		clearSelectedPushRepos();
+		setSelectedPushRepo($this->{repo});
+		$this->{frame}->doThreadedCommand($ID_COMMAND_PUSH_SELECTED);
+	}
+	elsif ($id == $COMMAND_PULL_ONE)
+	{
+		clearSelectedPullRepos();
+		setSelectedPullRepo($this->{repo});
+		$this->{frame}->doThreadedCommand($ID_COMMAND_PULL_SELECTED);
+	}
 }
 
 

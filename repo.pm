@@ -132,7 +132,6 @@ sub new
 
 		unstaged_changes => shared_clone({}),	# changes pending Add
 		staged_changes   => shared_clone({}),	# changes pending Commit
-		remote_changes   => shared_clone({}),	# changes pending Push
 
 	});
 
@@ -230,20 +229,12 @@ sub canCommit
 sub canPush
 {
 	my ($this) = @_;
-	return scalar(keys %{$this->{remote_changes}});
-
-	return
-		$this->{AHEAD} &&
-		!$this->{BEHIND} ? 1 : 0;
-
-		# synonymous with AHEAD and MASTER_ID != REMOTE_ID
+	return $this->{AHEAD} && !$this->{BEHIND} ? 1 : 0;
 }
 sub canPull
 {
 	my ($this) = @_;
-	return
-		$this->{BEHIND} &&
-		!$this->{AHEAD} ? 1 : 0;
+	return $this->{BEHIND} && !$this->{AHEAD} ? 1 : 0;
 }
 sub needsStash
 {
@@ -639,7 +630,6 @@ sub toTextCtrl
 	my $short_status = '';
 	$short_status = $this->addTextForHashNum($short_status,'unstaged_changes',"UNSTAGED");
 	$short_status = $this->addTextForHashNum($short_status,'staged_changes',"STAGED");
-	$short_status = $this->addTextForHashNum($short_status,'remote_changes',"REMOTE");
 	$short_status = $this->addTextForNum($short_status,'AHEAD');
 	$short_status = $this->addTextForNum($short_status,'BEHIND');
 

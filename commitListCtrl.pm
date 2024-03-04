@@ -244,39 +244,36 @@ sub updateRepos
 	$this->SetVirtualSize([$width,$vheight]);
 	$this->Refresh();
 
-	if ($MONITOR_NOTIFY_EVERY_CHANGE)
-	{
-		# re-notify if the item and/or repo still exist
+	# re-notify if the item and/or repo still exist
 
-		my $notify_repo = '';
-		my $notify_item = '';
-		if ($notify_path)
+	my $notify_repo = '';
+	my $notify_item = '';
+	if ($notify_path)
+	{
+		$notify_repo = $this->{repos}->{$notify_path} || '';
+		if ($notify_repo)
 		{
-			$notify_repo = $this->{repos}->{$notify_path} || '';
-			if ($notify_repo)
+			display($dbg_pop,1,"found notify_path($notify_path}");
+			if ($notify_fn)
 			{
-				display($dbg_pop,1,"found notify_path($notify_path}");
-				if ($notify_fn)
+				$notify_item = $notify_repo->{$this->{key}}->{$notify_fn} || '';
+				if ($notify_item)
 				{
-					$notify_item = $notify_repo->{$this->{key}}->{$notify_fn} || '';
-					if ($notify_item)
-					{
-						display($dbg_pop,1,"found notify_fn($notify_fn}")
-					}
-					else
-					{
-						$notify_repo = '';
-					}
+					display($dbg_pop,1,"found notify_fn($notify_fn}")
+				}
+				else
+				{
+					$notify_repo = '';
 				}
 			}
-			$this->{notify_repo} = $notify_repo;
-			$this->{notify_item} = $notify_item;
-			display($dbg_pop,1,"calling right($notify_repo,$notify_item)");
-			$this->{parent}->{parent}->{right}->notifyItemSelected({
-				is_staged => $this->{is_staged},
-				repo => $notify_repo,
-				item => $notify_item });
 		}
+		$this->{notify_repo} = $notify_repo;
+		$this->{notify_item} = $notify_item;
+		display($dbg_pop,1,"calling right($notify_repo,$notify_item)");
+		$this->{parent}->{parent}->{right}->notifyItemSelected({
+			is_staged => $this->{is_staged},
+			repo => $notify_repo,
+			item => $notify_item });
 	}
 
 	display($dbg_pop,0,"endUpdate($this->{name}) finished with num_repos($num_repos) vheight($vheight)");
@@ -647,11 +644,8 @@ sub onLeftDown
 sub notifyRepoSelected
 {
 	my ($this,$repo) = @_;
-	if ($MONITOR_NOTIFY_EVERY_CHANGE)
-	{
-		$this->{notify_repo} = $repo;
-		$this->{notify_item} = '';
-	}
+	$this->{notify_repo} = $repo;
+	$this->{notify_item} = '';
 	$this->{parent}->{parent}->{right}->notifyItemSelected({
 		is_staged => $this->{is_staged},
 		repo =>$repo,
@@ -874,11 +868,10 @@ sub notifyItemSelected
 	my ($this,$repo,$item) = @_;
 	my $path = $repo ? $repo->{path} : '';
 	my $fn = $item ? $item->{fn} : '';
-	if ($MONITOR_NOTIFY_EVERY_CHANGE)
-	{
-		$this->{notify_repo} = $repo;
-		$this->{notify_item} = $item;
-	}
+
+	$this->{notify_repo} = $repo;
+	$this->{notify_item} = $item;
+
 	display($dbg_sel,0,"notifyItemSelected($this->{name},$path,$fn)");
 	$this->{parent}->{parent}->{right}->notifyItemSelected({
 		is_staged => $this->{is_staged},
@@ -1025,11 +1018,8 @@ sub doAction
 		}
 	}
 
-	if ($MONITOR_NOTIFY_EVERY_CHANGE)
-	{
-		$this->{notify_repo} = '';
-		$this->{notify_item} = '';
-	}
+	$this->{notify_repo} = '';
+	$this->{notify_item} = '';
 	$this->notifyItemSelected('','');
 }
 

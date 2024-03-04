@@ -20,14 +20,16 @@ use apps::gitUI::utils;
 
 my $MAX_SHOW_CHANGES = 30;
 
+
 my $dbg_start = 1;
 my $dbg_chgs = 1;
+my $dbg_diff = 1;
 my $dbg_index = 1;
 my $dbg_revert = 1;
 my $dbg_commit = 1;
-my $dbg_push = 1;
 my $dbg_tag = 0;
-my $dbg_diff = 1;
+my $dbg_push = 1;
+my $dbg_pull = 0;
 	# -1 to show diff details
 
 my $dbg_creds = 0;
@@ -42,21 +44,22 @@ BEGIN
 	our @EXPORT = qw(
 		gitStart
 		gitChanges
+		gitDiff
 		gitIndex
 		gitRevert
 		gitCommit
 		gitTag
 		gitPush
-		gitDiff
+		gitPull
 	);
 }
 
 
 my $credential_error:shared = 0;
 
-my $push_cb;
-my $push_cb_object;
-my $push_cb_repo;
+my $user_cb;
+my $user_cb_object;
+my $user_cb_repo;
 	# We specifically use non-shared global variables to
 	# hold the users $object and $repo so that it should
 	# work with multiple simulatneous threaded pushes
@@ -152,55 +155,52 @@ sub gitStart
 
 	# rebuild/add local_commits and AHEAD
 
-	if (1)
+	delete $repo->{local_commits};
+
+	my ($head_id_found,
+		$master_id_found,
+		$remote_id_found) = (0,0,0);
+
+	my $log = $git_repo->walker();
+	# $log->sorting(["time","reverse"]);
+	$log->push($head_commit);
+
+	my $com = $log->next();
+	my $ahead = 0;
+
+	while ($com && (
+		!$head_id_found ||
+		!$master_id_found ||
+		!$remote_id_found ))
 	{
-		delete $repo->{local_commits};
+		my $sha = $com->id();
+		my $msg = $com->summary();
+		my $time = $com->time();
+		my $extra = '';
 
-		my ($head_id_found,
-			$master_id_found,
-			$remote_id_found) = (0,0,0);
+		$head_id_found = 1 if $sha eq $head_id;
+		$master_id_found = 1 if $sha eq $master_id;
+		$remote_id_found = 1 if $sha eq $remote_id;
 
-		my $log = $git_repo->walker();
-		# $log->sorting(["time","reverse"]);
-		$log->push($head_commit);
+		# these are from newest to oldest
 
-		my $com = $log->next();
-		my $ahead = 0;
-
-		while ($com && (
-			!$head_id_found ||
-			!$master_id_found ||
-			!$remote_id_found ))
+		my $ahead_str = '';
+		if ($master_id_found && !$remote_id_found)
 		{
-			my $sha = $com->id();
-			my $msg = $com->summary();
-			my $time = $com->time();
-			my $extra = '';
-
-			$head_id_found = 1 if $sha eq $head_id;
-			$master_id_found = 1 if $sha eq $master_id;
-			$remote_id_found = 1 if $sha eq $remote_id;
-
-			# these are from newest to oldest
-
-			my $ahead_str = '';
-			if ($master_id_found && !$remote_id_found)
-			{
-				$ahead++;
-				$ahead_str = "AHEAD($ahead) ";
-			}
-
-			display($dbg_start+1,1,pad($ahead_str,10)."$time ".pad($extra,30)._lim($sha,8)." "._lim($msg,20));
-
-			$repo->{local_commits} ||= shared_clone([]);
-			push @{$repo->{local_commits}},shared_clone({
-				sha => $sha,
-				msg => $msg,
-				time => $time,
-			});
-
-			$com = $log->next();
+			$ahead++;
+			$ahead_str = "AHEAD($ahead) ";
 		}
+
+		display($dbg_start+1,1,pad($ahead_str,10)."$time ".pad($extra,30)._lim($sha,8)." "._lim($msg,20));
+
+		$repo->{local_commits} ||= shared_clone([]);
+		push @{$repo->{local_commits}},shared_clone({
+			sha => $sha,
+			msg => $msg,
+			time => $time,
+		});
+
+		$com = $log->next();
 
 		warning($dbg_start,1,"repo($repo->{path}) is AHEAD($ahead)")
 			if $ahead;
@@ -218,57 +218,12 @@ sub gitStart
 
 sub gitChanges
 	# returns undef if any problems
-	# returns 1 if the any of the hashes of changes has changed
-	# returns 0 otherwise
+	# returns 1 otherwise
 {
 	my ($repo) = @_;
-	display($dbg_chgs,0,"getChanges($repo->{path})");
-	my $git_repo = Git::Raw::Repository->open($repo->{path});
-	return gitError($repo,"Could not create git_repo") if !$git_repo;
-
-	my $changes_changed = 0;
-
-	my $rslt = getLocalChanges($repo, $git_repo);
-	return if !defined($rslt);
-	$changes_changed += $rslt;
-
-	$rslt = getRemoteChanges($repo,$git_repo);
-	return if !defined($rslt);
-	$changes_changed += $rslt;
-
-	# update the main refs if anything changes
-	# perhaps due to commits made in regular gitGUI program
-	# it's fast.
-
-	gitStart($repo,$git_repo);
-
-	display($dbg_chgs,0,"gitChanges($repo->{path}) returning $changes_changed");
-	return $changes_changed;
-}
-
-
-sub assignHashIfChanged
-{
-	my ($repo,$key,$changes,$changed) = @_;
-	my $hash = $repo->{$key};
-	$changed ||= scalar(keys %$hash) != scalar(keys %$changes);
-	if ($changed)
-	{
-		display($dbg_chgs,0,"assignHashIfChanged($key,$repo->{path})");
-		my $repo_list = apps::gitUI::repos::getRepoList();
-		## lock $repo_list;
-		$repo->{$key} = $changes;
-		return 1;
-	}
-	return 0;
-}
-
-
-sub getLocalChanges
-	# git status -s
-{
-	my ($repo,$git_repo) = @_;
-	display($dbg_chgs,0,"getLocalChanges($repo->{path})");
+	display($dbg_chgs,0,"gitChanges($repo->{path})");
+	my $git_repo = gitStart($repo);
+	return if !$git_repo;
 
 	my $opts = { flags => {
 		include_untracked => 1,
@@ -276,6 +231,8 @@ sub getLocalChanges
 	my $status = $git_repo->status($opts);
 	return gitError($repo,"No result from git_status")
 		if !$status;
+
+	# this keeps the changes to near-atomic in nature
 
 	my $unstaged_changed = 0;
 	my $staged_changed = 0;
@@ -344,74 +301,26 @@ sub getLocalChanges
 		}
 	}
 
-	my $changes_changed = 0;
-	$changes_changed += assignHashIfChanged($repo,'unstaged_changes',$new_unstaged_changes,$unstaged_changed);
-	$changes_changed += assignHashIfChanged($repo,'staged_changes',$new_staged_changes,$staged_changed);
-	display($dbg_chgs,0,"getLocalChanges($repo->{path}) returning $changes_changed");
-	return $changes_changed;
+	assignHashIfChanged($repo,'unstaged_changes',$new_unstaged_changes,$unstaged_changed);
+	assignHashIfChanged($repo,'staged_changes',$new_staged_changes,$staged_changed);
+	display($dbg_chgs,0,"gitChanges($repo->{path}) returning 1");
+	return 1;
 }
 
 
-sub getRemoteChanges
-	# git diff $branch origin/$branch --name-status
+sub assignHashIfChanged
 {
-	my ($repo,$git_repo) = @_;
-	my $branch = $repo->{branch};
-	display($dbg_chgs,0,"getRemoteChanges($repo->{path}) branch=$branch");
-
-	# Get the local HEAD and 'remote' origin/$branch trees
-
-	my $tree_remote = getTree($repo,$git_repo, "origin/$branch");
-	return if !$tree_remote;
-
-	my $tree_head = getTree($repo, $git_repo, "HEAD");
-	return if !$tree_head;
-
-	# Diff the Remote tree against HEAD
-	# short return if no changes
-
-	my $diff = $tree_remote->diff({ tree => $tree_head });
-	return gitError($repo,"Could not get diff()")
-		if !$diff;
-
-	my $text = $diff->buffer("name_status");
-	return gitError($repo,"Could not get diff text($diff)")
-		if !defined($text);
-
-	$text =~ s/^\s+|\s$//g;
-	return 0 if !$text;
-
-	# Split the text into lines and process them
-	# Occasionallly I get an asterisk at the end of the filename
-	# and I don't knowo aht it means.
-
-	my $remote_changed = 0;
-	my $remote_changes = $repo->{remote_changes};
-	my $new_remote_changes = shared_clone({});
-
-	my @changes = split(/\n/,$text);
-	my $num_changes = @changes;
-	display($dbg_chgs,2,"remote: $num_changes changed files")
-		if $num_changes > $MAX_SHOW_CHANGES;
-
-	for my $change (sort @changes)
+	my ($repo,$key,$changes,$changed) = @_;
+	my $hash = $repo->{$key};
+	$changed ||= scalar(keys %$hash) != scalar(keys %$changes);
+	if ($changed)
 	{
-		# next if $change =~ /\*$/;
-		my ($type,$fn) = split("\t",$change);
-		display($dbg_chgs,2,"change($change) remote: $type $fn")
-			if $num_changes <= $MAX_SHOW_CHANGES;
-
-		$new_remote_changes->{$fn} = new_change($repo,$fn,$type);
-
-		$remote_changed = 1 if
-			!$remote_changes->{$fn} ||
-			$type ne $remote_changes->{$fn}->{type};
+		display($dbg_chgs,0,"assignHashIfChanged($key,$repo->{path})");
+		my $repo_list = apps::gitUI::repos::getRepoList();
+		$repo->{$key} = $changes;
 	}
-
-	my $changes_changed = assignHashIfChanged($repo,'remote_changes',$new_remote_changes,$remote_changed);
-	display($dbg_chgs,0,"getRemoteChanges($repo->{path}) returning $changes_changed");
-	return $changes_changed;
 }
+
 
 
 #------------------------------------------------
@@ -727,16 +636,12 @@ sub gitCommit
 	return gitError($repo,"Could not create git_commit")
 		if !$commit;
 
-	# move the changes from 'staged' to 'remote'
+	# clear the 'staged' changes
 	# and generate a callback if in the appFrame
 
-	display($dbg_commit+1,1,"moving $num staged_changes to remote_changes");
-	mergeHash($repo->{remote_changes},$repo->{staged_changes});
 	$repo->{staged_changes} = shared_clone({});
-	setCanPush($repo);
-
 	gitStart($repo,$git_repo);
-	$repo->{AHEAD}++;
+	setCanPushPull($repo);
 
 	apps::gitUI::Frame::monitor_callback({ repo=>$repo })
 		if getAppFrame();
@@ -750,7 +655,6 @@ sub gitCommit
 #--------------------------------------------
 # gitTag
 #--------------------------------------------
-
 
 sub gitTag
 	# Note that we manually generate a monitor_callback
@@ -815,8 +719,8 @@ sub user_callback
 	my $show = join(",",@params);
 	display($dbg_cb,0,"user_callback($CB,$show)");
 	my $rslt = 0;
-	$rslt = &$push_cb($push_cb_object,$CB,$push_cb_repo,@params)
-		if $push_cb;
+	$rslt = &$user_cb($user_cb_object,$CB,$user_cb_repo,@params)
+		if $user_cb;
 	display($dbg_cb,0,"user_callback() returning $rslt");
 	return $rslt;
 }
@@ -860,13 +764,12 @@ sub gitPush
 {
 	my ($repo,$user_obj,$user_cb) = @_;
 
-	$push_cb = $user_cb;
-	$push_cb_object = $user_obj;
-	$push_cb_repo = $repo;
+	$user_cb = $user_cb;
+	$user_cb_object = $user_obj;
+	$user_cb_repo = $repo;
 
 	my $branch = $repo->{branch};
-	my $num = scalar(keys %{$repo->{remote_changes}});
-	display($dbg_push,0,"gitPush($branch,$repo->{path}) $num remote_chanes)");
+	display($dbg_push,0,"gitPush($branch,$repo->{path}) with $repo->{AHEAD} commits");
 
 	my $git_repo = Git::Raw::Repository->open($repo->{path});
 	return gitError($repo,"Could not create git_repo")
@@ -917,7 +820,6 @@ sub gitPush
 		# and pass it as a callback.
 
 		$msg =~ s/at \/base.*$//;
-
 		user_callback($PUSH_CB_ERROR,$msg);
 	};
 
@@ -926,14 +828,11 @@ sub gitPush
 
 	if ($rslt)
 	{
-		display($dbg_commit+1,1,"clearing $num remote_changes");
-		$repo->{remote_changes} = shared_clone({});
 
 		gitStart($repo,$git_repo);
-		$repo->{AHEAD} = 0;
-		$repo->{BEHIND} = 0;
-
-		setCanPush($repo);
+		# $repo->{AHEAD} = 0;
+		$repo->{BEHIND} = 0;  # pre-empt the next repoStatus() call
+		setCanPushPull($repo);
 		apps::gitUI::Frame::monitor_callback({ repo=>$repo })
 			if getAppFrame();
 	}
@@ -944,6 +843,34 @@ sub gitPush
 
 
 
+#--------------------------------------------------
+# gitPull
+#--------------------------------------------------
+
+sub gitPull
+	# Note that we manually generate a monitor_callback
+	# after adjusting repo hashes
+{
+	my ($repo,$user_obj,$user_cb) = @_;
+
+	$user_cb = $user_cb;
+	$user_cb_object = $user_obj;
+	$user_cb_repo = $repo;
+
+	my $branch = $repo->{branch};
+	my $need_stash = $repo->needsStash();
+	display($dbg_pull,0,"gitPull($branch,$repo->{path}) $repo->{BEHIND} commits needs_stash=$need_stash");
+
+	my $git_repo = Git::Raw::Repository->open($repo->{path});
+	return gitError($repo,"Could not create git_repo")
+		if !$git_repo;
+
+	my $remote = Git::Raw::Remote->load($git_repo, 'origin');
+	return gitError($repo,"Could not create remote")
+		if !$remote;
+
+	return !error("gitPull() not implemented yet");
+}
 
 
 
