@@ -16,6 +16,7 @@ use Wx::Event qw(
 	EVT_BUTTON
 	EVT_UPDATE_UI
 	EVT_SPLITTER_SASH_POS_CHANGED );
+use Pub::WX::Dialogs;
 use apps::gitUI::utils;
 use apps::gitUI::repos;
 use apps::gitUI::myTextCtrl;
@@ -197,12 +198,39 @@ sub onButton
 	}
 	if ($id == $COMMAND_COMMIT)
 	{
-		# $app_frame->doGitCommand($COMMAND_COMMIT,$this->{commit_msg}->GetValue());
+		# determine if any repos are BEHIND or
+		# need REBASE-ing, and thus a commit would
+		# create a Merge Conflict, warn the user
+		# but let them continue.
+
+		my $repo_list = getRepoList();
+		my $num_behind = 0;
+		my $num_rebase = 0;
+		for my $repo (@$repo_list)
+		{
+			if ($repo->canCommit())
+			{
+				$num_behind++ if $repo->{BEHIND};
+				$num_rebase++ if $repo->{REBASE};
+			}
+		}
+		if ($num_behind || $num_rebase)
+		{
+			my $msg = '';
+			$msg .= "$num_behind repos are BEHIND" if $num_behind;
+			$msg .= " and " if $num_behind && $num_rebase;
+			$msg .= "$num_rebase repos need REBASE" if $num_rebase;
+			return if !yesNoDialog($this,
+				"WARNING: A commit at this time will cause a Merge Conflict\n".
+				$msg."\nDo you wish to proceed anyways?",
+				"Merge Conflict");
+		}
+
 		my $commit_msg = $this->{commit_msg}->GetValue();
 		$this->{commit_msg}->SetValue('');
 
 		display($dbg_cmds,0,"COMMIT_BUTTON doing commit on repos");
-		my $repo_list = getRepoList();
+
 		for my $repo (@$repo_list)
 		{
 			my $rslt = $repo->canCommit() ?

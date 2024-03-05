@@ -394,7 +394,7 @@ sub drawRepo
 		$dc->DrawBitmap($bm2, $ICON_LEFT, $ypos+4, 0);
 	}
 	$dc->SetFont($font_bold);
-	$dc->SetTextForeground($color_blue);
+	$dc->SetTextForeground(linkDisplayColor($repo));
 	$dc->DrawBitmap($bm, $TOGGLE_LEFT, $ypos+3, 0);
 	$dc->DrawText($name,$TEXT_LEFT,$ypos);
 }

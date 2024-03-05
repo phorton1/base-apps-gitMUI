@@ -198,3 +198,14 @@ I'm already at the point where I am considering adding a
 [] details checkbox to the info window (reposWindowRight)
 to hide all the XXX_IDs, local_commits, and remote_commits
 unless I really want to look at them to figure out a problem.
+
+
+
+# Notes on Parent Submodule commits
+
+Note content:
+
+Changed File
+CHANGE old(1,0) to new(1,0)
+| -Subproject commit b0d9f9f4e2a0f410c550c24ffcf9aacca6d37fd7
+| +Subproject commit b0d9f9f4e2a0f410c550c24ffcf9aacca6d37fd7-dirty
