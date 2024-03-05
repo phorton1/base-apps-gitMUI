@@ -66,10 +66,10 @@ BEGIN
 
 		$THREAD_EVENT
 
-		$PUSH_CB_ERROR
-		$PUSH_CB_PACK
-        $PUSH_CB_TRANSFER
-        $PUSH_CB_REFERENCE
+		$GIT_CB_ERROR
+		$GIT_CB_PACK
+        $GIT_CB_TRANSFER
+        $GIT_CB_REFERENCE
 
 		$repo_filename
 		$komodo_exe
@@ -133,10 +133,10 @@ our $komodo_exe = "\"C:\\Program Files (x86)\\ActiveState Komodo Edit 8\\komodo.
 # SIDEBAND (Resolving deltas) had too many problems,
 #   very quick, so I don't use it.
 
-our $PUSH_CB_ERROR      = -1;		# $msg
-our $PUSH_CB_PACK		= 0;		# $stage, $current, $total
-our $PUSH_CB_TRANSFER	= 1;		# $current, $total, $bytes
-our $PUSH_CB_REFERENCE  = 2;		# $ref, $msg
+our $GIT_CB_ERROR      = -1;		# $msg
+our $GIT_CB_PACK		= 0;		# $stage, $current, $total
+our $GIT_CB_TRANSFER	= 1;		# $current, $total, $bytes
+our $GIT_CB_REFERENCE  = 2;		# $ref, $msg
 
 
 #---------------------------------------------

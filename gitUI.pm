@@ -98,7 +98,7 @@ sub new
 	$this->SetMinSize([100,100]);
 
 	EVT_MENU_RANGE($this, $ID_PATH_WINDOW, $ID_STATUS_WINDOW, \&onOpenWindowById);
-	EVT_MENU_RANGE($this, $ID_COMMAND_RESCAN, $ID_COMMAND_PUSH_ALL, \&onCommand);
+	EVT_MENU_RANGE($this, $ID_COMMAND_RESCAN, $ID_COMMAND_PULL_ALL, \&onCommand);
 	EVT_UPDATE_UI_RANGE($this, $ID_COMMAND_RESCAN, $ID_COMMAND_PULL_ALL, \&onUpdateUI);
 
 	EVT_COMMAND($this, -1, $THREAD_EVENT, \&onThreadEvent );

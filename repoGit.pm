@@ -40,7 +40,16 @@ use apps::gitUI::repos;
 use apps::gitUI::utils;
 
 
-my $MAX_SHOW_CHANGES = 30;
+
+my $AUTO_UPDATE_SUBMODULE_PARENTS = 0;
+	# THIS APPROACH IS "SO-SO".
+	# TRYING A PROTOTYPE OF ANOTHER APPROACH in reposWindowRight().
+	# After a pull of a submodule, we will call gitChanges()
+	# on the parent module.  If it has exactly one unstaged
+	# change, and it is the submodule, we will Commit and
+	# Push(?) that change.  The main difficulty will be in
+	# making it work nice in the progress dialog with callbacks.
+	# TBD after checkin.
 
 my $STASH_UNTRACKED_FILES = 1;
 	# Whether, when pulling, to Stash untracked files.
@@ -86,6 +95,8 @@ BEGIN
 }
 
 
+my $MAX_SHOW_CHANGES = 30;
+
 my $credential_error:shared = 0;
 
 my $user_cb;
@@ -94,17 +105,6 @@ my $user_cb_repo;
 	# We specifically use non-shared global variables to
 	# hold the users $object and $repo so that it should
 	# work with multiple simulatneous threaded pushes
-
-
-sub new_change
-{
-	my ($repo,$fn,$type) = @_;
-	my $item = shared_clone({
-		repo => $repo,
-		fn	 => $fn,
-		type => $type });
-	return $item;
-}
 
 
 sub gitError
@@ -276,11 +276,12 @@ sub gitStart
 
 sub gitChanges
 	# returns undef if any problems
-	# returns 1 otherwise
+	# returns 0 if no new changes
+	# returns 1 if changes have changed
 {
-	my ($repo) = @_;
+	my ($repo,$git_repo) = @_;
 	display($dbg_chgs,0,"gitChanges($repo->{path})");
-	my $git_repo = gitStart($repo);
+	$git_repo ||= gitStart($repo);
 	return if !$git_repo;
 
 	my $opts = { flags => {
@@ -352,7 +353,11 @@ sub gitChanges
 			display($dbg_chgs,2,"$show: $type $fn")
 				if $num_changes <= $MAX_SHOW_CHANGES;
 
-			$new_hash->{$fn} = new_change($repo,$fn,$type);
+			$new_hash->{$fn} =	shared_clone({
+				repo => $repo,
+				fn	 => $fn,
+				type => $type });
+
 			$$pbool = 1 if
 				!$old_hash->{$fn} ||
 				$type ne $old_hash->{$fn}->{type};
@@ -548,13 +553,13 @@ sub gitIndex
 		$index->add_all({ paths => ['*'] });	# Add all files
 		$index->write;
 		mergeHash($repo->{staged_changes},$repo->{unstaged_changes});
-		$repo->{'staged_changes'} = shared_clone({});
+		$repo->{'unstaged_changes'} = shared_clone({});
 	}
 	else					# Remove everything from the index by using unstage(*)
 	{
 		return if !unstage($repo,$git_repo,'*');
 		mergeHash($repo->{unstaged_changes},$repo->{staged_changes});
-		$repo->{'unstaged_changes'} = shared_clone({});
+		$repo->{'staged_changes'} = shared_clone({});
 	}
 
 	apps::gitUI::Frame::monitor_callback({ repo=>$repo })
@@ -791,7 +796,7 @@ sub cb_pack
 {
 	my ($stage, $current, $total) = @_;
 	display($dbg_cb,0,"cb_pack($stage, $current, $total)");
-	my $rslt = user_callback($PUSH_CB_PACK,$stage, $current, $total);
+	my $rslt = user_callback($GIT_CB_PACK,$stage, $current, $total);
 	display($dbg_cb,0,"cb_pack() returning $rslt");
 	return $rslt;
 }
@@ -799,7 +804,7 @@ sub cb_transfer
 {
 	my ($current, $total, $bytes) = @_;
 	display($dbg_cb,0,"cb_transfer($current, $total, $bytes)");
-	my $rslt = user_callback($PUSH_CB_TRANSFER,$current,$total,$bytes);
+	my $rslt = user_callback($GIT_CB_TRANSFER,$current,$total,$bytes);
 	display($dbg_cb,0,"cb_transfer() returning $rslt");
 	return $rslt;
 }
@@ -812,7 +817,7 @@ sub cb_reference
 	# "use of undefined variable" errors when trying to
 	# show params by simple join.
 	$msg = 'done' if !defined($msg);
-	my $rslt = user_callback($PUSH_CB_REFERENCE,$ref,$msg);
+	my $rslt = user_callback($GIT_CB_REFERENCE,$ref,$msg);
 	display($dbg_cb,0,"cb_reference() returning $rslt");
 	return $rslt;
 }
@@ -822,10 +827,10 @@ sub gitPush
 	# Note that we manually generate a monitor_callback
 	# after adjusting repo hashes
 {
-	my ($repo,$user_obj,$user_cb) = @_;
+	my ($repo,$u_obj,$u_cb) = @_;
 
-	$user_cb = $user_cb;
-	$user_cb_object = $user_obj;
+	$user_cb = $u_cb;
+	$user_cb_object = $u_obj;
 	$user_cb_repo = $repo;
 
 	my $branch = $repo->{branch};
@@ -878,7 +883,7 @@ sub gitPush
 		# and pass it as a callback.
 
 		$msg =~ s/at \/base.*$//;
-		user_callback($PUSH_CB_ERROR,$msg);
+		user_callback($GIT_CB_ERROR,$msg);
 	};
 
 	# We call gitStart() and generate an event in any case
@@ -901,23 +906,15 @@ sub gitPush
 #--------------------------------------------------
 # gitPull
 #--------------------------------------------------
-# AUTO COMMIT AND PUSH of parent repos on Pull of Submodule.
-#
-# After a pull of a submodule, we will call gitChanges()
-# on the parent module.  If it has exactly one unstaged
-# change, and it is the submodule, we will Commit and
-# Push(?) that change.  The main difficulty will be in
-# making it work nice in the progress dialog with callbacks.
-# TBD after checkin.
 
 sub gitPull
 	# Note that we manually generate a monitor_callback
 	# after adjusting repo hashes
 {
-	my ($repo,$user_obj,$user_cb) = @_;
+	my ($repo,$u_obj,$u_cb) = @_;
 
-	$user_cb = $user_cb;
-	$user_cb_object = $user_obj;
+	$user_cb = $u_cb;
+	$user_cb_object = $u_obj;
 	$user_cb_repo = $repo;
 
 	my $branch = $repo->{branch};
@@ -967,7 +964,13 @@ sub gitPull
 	}};
 
 	# Do the fetch.  If it has any problems, they
-	# will be reported via the exception.
+	# will be reported via the exception
+
+
+	apps::gitUI::monitor::monitorPause(1);
+		# should be done on all big operations
+		# and we should also stop the repoStatus  monitor
+
 
 	my $rslt;
 	eval
@@ -983,7 +986,7 @@ sub gitPull
 			$err->message() : $err;
 		error($msg);
 		$msg =~ s/at \/base.*$//;
-		user_callback($PUSH_CB_ERROR,$msg);
+		user_callback($GIT_CB_ERROR,$msg);
 	};
 
 	# If the fetch worked, do the rebase
@@ -998,7 +1001,7 @@ sub gitPull
 
 	if ($rslt)
 	{
-		apps::gitUI::monitor::monitorPause(1);	# should be done on all big operations
+
 		my $text = `git -C "$repo->{path}" rebase 2>&1` || '';
 		my $exit_code = $? || 0;
 		my $msg = "rebase exit_code($exit_code) text($text)";
@@ -1006,10 +1009,9 @@ sub gitPull
 		if ($exit_code || $text !~ /Successfully rebased and updated/)
 		{
 			gitError($repo,$msg);
-			# user_callback($PUSH_CB_ERROR,$msg);
+			# user_callback($GIT_CB_ERROR,$msg);
 			$rslt = 0;
 		}
-		apps::gitUI::monitor::monitorPause(0);
 	}
 
 	# We call gitStart() and generate an event in any case
@@ -1023,6 +1025,49 @@ sub gitPull
 	apps::gitUI::Frame::monitor_callback({ repo=>$repo })
 		if getAppFrame();
 
+
+	my $parent_repo = $repo->{parent_repo};
+	if ($AUTO_UPDATE_SUBMODULE_PARENTS && $rslt && $parent_repo)
+	{
+		display($dbg_pull,1,"checking parent repo($parent_repo->{path})");
+		my $parent_chgs = gitChanges($parent_repo);
+			# We are 'eating' the gitChanges(), so WE need to notify
+			# if any changes.
+
+		my $unstaged = $parent_repo->{unstaged_changes};
+		if (!$parent_repo->{BEHIND} &&
+			!$parent_repo->{AHEAD} &&
+			!$parent_repo->{REBASE} &&
+			!scalar(keys %{$parent_repo->{staged_changes}}) &&
+			scalar(keys %$unstaged) == 1 &&
+			(keys %$unstaged)[0] eq $repo->{rel_path})
+		{
+			warning($dbg_pull,1,"ONLY CHANGE TO PARENT REPO IS UNSTAGED($repo->{rel_path})");
+
+			my $commit = ${$repo->{local_commits}}[0];
+			my $commit_id = $commit->{sha};
+			my $commit_msg = $commit->{msg};
+			my $commit8 = _lim($commit_id,8);
+
+			my $msg = "gitPull submodule($repo->{rel_path}) auto_commit($commit8) $commit_msg";
+
+			# stage, commit, and (?) push the change
+
+			$rslt = gitIndex($parent_repo,0);
+			$rslt &&= gitCommit($parent_repo,$msg);
+			# $rslt &&= gitPush($parent_repo, $user_cb_object, $user_cb);
+		}
+
+
+		if ($parent_chgs)
+		{
+			setCanPushPull($parent_repo);
+			apps::gitUI::Frame::monitor_callback({ repo=>$parent_repo })
+				if getAppFrame();
+		}
+	}
+
+	apps::gitUI::monitor::monitorPause(0);
 	display($dbg_pull,1,"gitPull() returning rslt="._def($rslt));
 	return $rslt;
 

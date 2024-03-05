@@ -44,9 +44,14 @@ my $TITLE_WIDTH = 60;
 my $BUTTON_SPACE = 10;
 
 my ($COMMAND_PUSH_LOCAL,
-	$COMMAND_PULL_LOCAL) = (8323..9000);
+	$COMMAND_PULL_LOCAL,
+	$COMMAND_UPDATE_SUBMODULES) = (8323..9000);
 	# apparently local events are needed for
 	# update UI ?!?
+
+
+# $COMMAND_UPDATE_SUBMODULES is really a global command
+# but I am testing it here ...
 
 
 sub new
@@ -71,6 +76,7 @@ sub new
 		Wx::Button->new($this,$ID_COMMAND_REFRESH_STATUS,	'Refresh Status',	[0,5],	[85,20]),
 		Wx::Button->new($this,$COMMAND_PUSH_LOCAL,			'Push',				[0,5],	[75,20]),
 		Wx::Button->new($this,$COMMAND_PULL_LOCAL,			'Pull',				[0,5],	[60,20]),
+		Wx::Button->new($this,$COMMAND_UPDATE_SUBMODULES,	'UpdateSubs',		[0,5],	[75,20]),
 		# Wx::Button->new($this,-1,						'Scan Docs',		[0,5],	[80,20]),
 		# Wx::Button->new($this,-1,						'Update Docs',		[0,5],	[80,20]),
 	];
@@ -81,9 +87,12 @@ sub new
 	EVT_BUTTON($this, $ID_COMMAND_REFRESH_STATUS, 	\&onButton);
 	EVT_BUTTON($this, $COMMAND_PUSH_LOCAL,	\&onButton);
 	EVT_BUTTON($this, $COMMAND_PULL_LOCAL, 	\&onButton);
+	EVT_BUTTON($this, $COMMAND_UPDATE_SUBMODULES, \&onButton);
+
 	EVT_UPDATE_UI($this, $ID_COMMAND_REFRESH_STATUS,\&onUpdateUI);
 	EVT_UPDATE_UI($this, $COMMAND_PUSH_LOCAL,	\&onUpdateUI);
 	EVT_UPDATE_UI($this, $COMMAND_PULL_LOCAL, \&onUpdateUI);
+	# EVT_UPDATE_UI($this, $COMMAND_UPDATE_SUBMODULES, \&onUpdateUI);
 
 	return $this;
 }
@@ -173,6 +182,10 @@ sub onButton
 		setSelectedPullRepo($this->{repo});
 		$this->{frame}->doThreadedCommand($ID_COMMAND_PULL_SELECTED);
 	}
+	elsif ($id == $COMMAND_UPDATE_SUBMODULES)
+	{
+		$this->doUpdateSubmodules();
+	}
 }
 
 
@@ -210,6 +223,93 @@ sub notifyRepoSelected
 
 	$this->{repo_name}->SetLabel($kind.$path);
 	$this->{title_ctrl}->SetLabel("Repo[$repo->{num}]");
+}
+
+
+#-----------------------------------------------------------
+# doUpdateSubmodules
+#-----------------------------------------------------------
+
+use apps::gitUI::repoGit;
+
+sub doUpdateSubmodules
+	# For each submodules that is 'up to date' locally ... that is they have
+	# no unstaged or staged changes ... see if the parent has a unstaged
+	# change of that submodule pending, and if so, create a commit that
+	# references the most recent commit in the submodule.
+{
+	my ($this) = @_;
+	display(0,0,"doUpdateSubmodules()");
+	my $repo_list = getRepoList();
+	for my $sub (@$repo_list)
+	{
+		my $parent = $sub->{parent_repo};
+		next if !$parent;
+
+		my $rel_path = $sub->{rel_path};
+		my $ahead = $sub->{AHEAD};
+		my $behind = $sub->{BEHIND};
+		my $rebase = $sub->{REBASE};
+		my $master_id = $sub->{MASTER_ID};
+		my $staged = keys %{$sub->{staged_changes}};
+		my $unstaged = keys %{$sub->{unstaged_changes}};
+
+		my $commit = ${$sub->{local_commits}}[0];
+		my $commit_id = $commit->{sha};
+		my $commit_msg = $commit->{msg};
+
+		my $master8 = _lim($master_id,8);
+		my $commit8 = _lim($commit_id,8);
+
+		display(0,1,"submodule($sub->{path} unstaged($unstaged) staged($staged) ahead($ahead) behind($behind) rebase($rebase) master_id="._lim($master_id,8));
+
+		if ($commit_id ne $master_id)
+		{
+			error("submodule($rel_path) most recent commit($commit8) != master_id($master8)");
+			next;
+		}
+
+		if ($staged || $unstaged || $behind || $rebase)
+		{
+			display(0,2,"submodule($rel_path) cannot be automatically committed");
+			next
+		}
+
+		my $found;
+		my $parent_staged = keys %{$parent->{staged_changes}};
+		my $parent_unstaged = $parent->{unstaged_changes};
+		for my $path (keys %$parent_unstaged)
+		{
+			if ($path eq $rel_path)
+			{
+				$found = $parent_unstaged->{$path};
+				last;
+			}
+		}
+
+		if (!$found)
+		{
+			display(0,2,"parent does not have $rel_path unstaged_change");
+			next;
+		}
+		if ($parent_staged)
+		{
+			error("Cannot auto-commit submodule($sub->{path}) because parent has $parent_staged staged changes");
+			next;
+		}
+
+		warning(0,2,"AUTO-COMMITTING($parent->{path}) submodule($rel_path) = $found->{type}");
+
+		my $msg = "submodule($rel_path) auto_commit($commit8) $commit_msg";
+		display(0,3,"msg=$msg");
+
+		my $rslt = gitIndex($parent,0,[$rel_path]);
+		$rslt &&= gitCommit($parent,$msg);
+
+		display(0,3,"AUTO-COMMIT completed") if $rslt;
+
+		last if !$rslt;
+	}
 }
 
 
