@@ -442,7 +442,7 @@ sub oneEvent
 		if !$before;
 	return !error("No 'head' in event($event_id) path($repo->{path})")
 		if !$head;
-	return !error("No commits in event($event_id) path($repo->{path})")
+	return !warning(0,0,"No commits in event($event_id) path($repo->{path})")
 		if !$commits || !@$commits;
 
 	display($dbg_events,0,"commits for repo($repo_id=$repo->{path}) at $time_str");
