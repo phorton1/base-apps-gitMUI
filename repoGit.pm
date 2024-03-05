@@ -359,10 +359,11 @@ sub gitChanges
 		}
 	}
 
-	assignHashIfChanged($repo,'unstaged_changes',$new_unstaged_changes,$unstaged_changed);
-	assignHashIfChanged($repo,'staged_changes',$new_staged_changes,$staged_changed);
-	display($dbg_chgs,0,"gitChanges($repo->{path}) returning 1");
-	return 1;
+	my $changed = 0;
+	$changed++ if assignHashIfChanged($repo,'unstaged_changes',$new_unstaged_changes,$unstaged_changed);
+	$changed++ if assignHashIfChanged($repo,'staged_changes',$new_staged_changes,$staged_changed);
+	display($dbg_chgs,0,"gitChanges($repo->{path}) returning $changed");
+	return $changed;
 }
 
 
@@ -377,6 +378,7 @@ sub assignHashIfChanged
 		my $repo_list = apps::gitUI::repos::getRepoList();
 		$repo->{$key} = $changes;
 	}
+	return $changed;
 }
 
 

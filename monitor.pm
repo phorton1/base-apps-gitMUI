@@ -1,75 +1,33 @@
 #-----------------------------------------------
 # Monitor all repo paths for changes
 #-----------------------------------------------
-#
-#	I'M ON THE LOOKOUT FOR TWO BUGS:
-#
-#		1. after various actions I start getting spurious win_notify() messages
-#		2. after various actions I stop getting simple test1.tet file change notifications
-#
 # Uses a thread to watch for changes to repos.
-# Notifies via a callback with the $repo that has changed.
 # In general, the thread can be started (if not already running),
 # paused, and stopped.
 #
-#    ** note .. we probably need a way for the client to tell
-#    the monitor that IT modified one or more repos to prevent
-#    supeflous callbacks.
-#
 # Assumes someone else has parsed the repo().
-# Calls gitChanges() on each repo during thread initialization.
+# Calls gitChanges() on every repo during initialization.
+# Stops if gitChanges() ever returns undef.
+# Notifies via a callback if gitChanges() noted a change.
 #
 # uses Win32::ChangeNotify to monitor changes to all repo directories.
-# For any directory that has changed, it calls gitChanges() on that
-# directory, and if gitChanges() reports that the CHANGES have CHANGED,
-# calls the user callback.
+# For any directory that has changed, it calls gitChanges() and possibly
+# notifies on the associated repo.
 #
 # Win32::ChangeNotify() can register on a flat folder, or a folder tree,
-# including subfolders.  An issue arises if a repo has subfolders that are,
-# in fact, separate repos. If we wer to register on the folder tree for
-# the outer level repo (i.e. /base), then we would receive notifications
-# for the outer level repo when any files in the inner repo (i.e. /base/apps/gitUI)
-# changed, and there is no good way to combine the two events and make
-# the distinction.
+# including subfolders.  Note that for subfolders that are
+# separate repos and submodules we will register on both the outer
+# level repo and the inner level repo.  The outer level folder will
+# receive uselsss ChangeNotifications and call gitChanges(), but that
+# will return 0 (no new changes), and NOT call the UI.
 #
-# SO, this scheme requires knowledge about repos that contain other repos.
-# It gets this info by reading the .gitignore files that it (may) find in
-# a repo's (main) path.  If the file contains an ignore of the form
+# In practice this ia efficient enough and does away with previous
+# exclude and create submonitor hassles.  I am not cleaning that
+# code up today, but much of this file is no longer needed.
 #
-#                     blah/**
-#
-# this object assumes that means that the repo contains sub repos, and
-# instead of registering on the folder tree for the outer path, we
-# register on the flat folder, and then register explicitly on any
-# subtrees that are NOT excluded by RE's like the one above.
-#
-# So, the /base repo actually registers FLAT for the /base directory,
-# but then makes separate TREE registrations for the subfolders that
-# are NOT separate repos ... /base/bat, /base/MyMS, /base/MyVPN, and
-# /base/MyWX, in such a way that when noficiations are received for
-# those subfolders we map them back to /base and generate our 'event'
-# on that.
-#
-# The (probable) main downside to using Win32::ChangeNotify is that
-# it *may* "lock" the directories against renaming or moving, and
-# will fail if directores ARE moved or renamed. However, it is assumed
-# that the worst case, in either scheme, is that the UI program is
-# stopped and restarted.
-#
-# SUBMODULES
-#
-# The monitor works with submodules, but not optimally. A submodule
-# will be represented in the repo_list as an additional repos in
-# addition to the parent repo.  The submodule will NOT be excluded
-# from the monitor for the parent repo, nor will it, by itself,
-# trigger the 'exclude subfolders' scheme.
-#
-# Therefore the parent will receive superflous notify events when
-# files in the submodule are modified.  As mentioned, this will be
-# sub-optimal, but *should not* cause any problems, so this
-# implementation is unchanged by the introduction of submodules
-# into my repositories.
-
+# HAVE TO SEE if active processes like builds are upset by this,
+# but they already have their own .git_ignores that I wasn't utilizing,
+# and would have received all those notifications anyways.
 
 package apps::gitUI::monitor;
 use strict;
@@ -82,6 +40,8 @@ use apps::gitUI::repos;
 use apps::gitUI::repoGit;
 use Pub::Utils;
 
+my $USE_SUBMONITORS = 0;
+	# Turned off for now, code to be removed in the future.
 
 my $DELAY_MONITOR_STARTUP = 0;
 	# Set this to number of seconds to delay monitor thread
@@ -220,7 +180,7 @@ sub createMonitor
 		}
 		else
 		{
-			$excludes =  parseGitIgnore($path);
+			$excludes =  $USE_SUBMONITORS ? parseGitIgnore($path) : '';
 			$include_subfolders = 0 if $excludes;
 			display($dbg_mon,0,"CREATE MONITOR($path) excludes("._def($excludes).")");
 		}
@@ -371,9 +331,12 @@ sub run
 					display($dbg_mon,0,"initial call to gitChanges($repo->{path})");
 					&$the_callback({ status =>"checking: $repo->{path}" });
 					$rslt = gitChanges($repo);
-					last if !$rslt;
-					setCanPushPull($repo);
-					&$the_callback({ repo=>$repo }) if $rslt;
+					last if !defined($rslt);
+					if ($rslt)
+					{
+						setCanPushPull($repo);
+						&$the_callback({ repo=>$repo });
+					}
 				}
 
 				if (defined($rslt))
@@ -414,9 +377,12 @@ sub run
 							last;
 						}
 						$rslt = gitChanges($repo);
-						last if !$rslt;
-						setCanPushPull($repo);
-						&$the_callback({ repo=>$repo });
+						last if !defined($rslt);
+						if ($rslt)
+						{
+							setCanPushPull($repo);
+							&$the_callback({ repo=>$repo });
+						}
 
 						# create/remove monitors based on file system changes
 
@@ -451,6 +417,7 @@ sub run
 
 	display($dbg_mon,0,"thread exited abnormally!!");
 }
+
 
 
 #--------------------------------------

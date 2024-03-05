@@ -3,7 +3,6 @@
 #------------------------------------------------------------
 # A gitUI like window that acts on multiple repositories
 
-
 package apps::gitUI::commitWindow;
 use strict;
 use warnings;
