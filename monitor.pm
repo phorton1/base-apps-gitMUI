@@ -77,7 +77,7 @@ use warnings;
 use threads;
 use threads::shared;
 use Win32::ChangeNotify;
-use Time::HiRes qw(sleep);
+use Time::HiRes qw(sleep time);
 use apps::gitUI::repos;
 use apps::gitUI::repoGit;
 use Pub::Utils;
@@ -90,6 +90,8 @@ my $DELAY_MONITOR_STARTUP = 0;
 
 my $dbg_thread = 0;
 	# monitor thread lifecycle
+my $dbg_pause = 0;
+	# debug the pause
 my $dbg_mon = 1;
 	# TODO: /Arduino/libraries/myIOT/data is not getting a monitor
 	# monitor creation of monitors
@@ -109,6 +111,7 @@ BEGIN {
 		monitorStart
 		monitorStop
 		monitorStarted
+		monitorPause
 
 		$MON_CB_TYPE_STATUS
 		$MON_CB_TYPE_REPO
@@ -138,7 +141,39 @@ my %monitors;
 my $running:shared = 0;
 my $started:shared = 0;
 my $stopping:shared = 0;
-my $paused:shared = 0;
+my $pause:shared = 0;			# command
+my $paused:shared = 0;			# state
+
+my $PAUSE_TIMEOUT = 2;
+
+sub monitorPause
+{
+	my ($p) = @_;
+	display($dbg_pause,0,"monitorPause($p)");
+	if ($p)
+	{
+		if (!$paused)
+		{
+			$pause = $p;
+			my $start = time();
+			while (!$paused && time() < $start + $PAUSE_TIMEOUT)
+			{
+				display($dbg_pause+1,1,"waiting for monitor paused");
+				sleep(0.1);
+			}
+			error("timeout waiting for monitor pause") if !$paused;
+		}
+		else
+		{
+			warning($dbg_pause,0,"monitor already paused");
+		}
+		return $paused;
+	}
+	$pause = 0;
+	$paused = 0;
+	return 1;
+}
+
 
 
 #------------------------------------------------------
@@ -347,6 +382,12 @@ sub run
 					display($dbg_thread,0,"thread {started}");
 					&$the_callback({ status =>"started" }) ;
 				}
+			}
+			elsif ($pause)
+			{
+				display($dbg_thread,0,"thread {pausing}");
+				$pause = 0;
+				$paused = 1;
 			}
 			elsif (!$paused)
 			{

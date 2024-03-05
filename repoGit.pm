@@ -4,6 +4,28 @@
 # Contains gitXXX methods that change repositories using Git::Raw
 # Some changes (i.e. real 'gitChanges') will generate monitor events,
 # but many others will not, and so we generate them manually here.
+#
+# REBASE
+#
+# Rebasing is not an atomic operation in this module.
+# Rebasing is only done during a Pull in our system.
+# If a repo needs to be manually rebased, use "git rebase"
+# from the command line.
+#
+# SUBMODULE PARENT COMMITS
+#
+# Also, be careful about needlessly committing the parent module's
+# submodule while in the middle of mods.  Only after the submodules
+# changes are committed should the parent module's commit of the
+# submodule occur.
+#
+# STASH
+#
+# Stashes automatically get cleaned up after two weeks, by default,
+# in gc_prune during repository cleanup.
+# I am going to not call 'git stash clear' at this time.
+# They slightly pollute the regular gitUI history, but are probably
+# useful.
 
 package apps::gitUI::repoGit;
 use strict;
@@ -19,6 +41,15 @@ use apps::gitUI::utils;
 
 
 my $MAX_SHOW_CHANGES = 30;
+
+my $STASH_UNTRACKED_FILES = 1;
+	# Whether, when pulling, to Stash untracked files.
+	# Pros: all submodules will be the same
+	# Cons: I could lose work-in-progress.
+	# For now, the sanctity of submodules is more important,
+	# and if needed, the untracked files will be in the
+	# stash, so this is set to 1 and untracked files will
+	# be deleted during a Stash.
 
 
 my $dbg_start = 1;
@@ -161,13 +192,18 @@ sub gitStart
 		$master_id_found,
 		$remote_id_found) = (0,0,0);
 
+	# push all branches on the walker to do history
+	# and sort it in time order (most recent first)
+
 	my $log = $git_repo->walker();
-	# $log->sorting(["time","reverse"]);
 	$log->push($head_commit);
+	$log->push($master_commit);
+	$log->push($remote_commit);
+	$log->sorting(["time"]);	# ,"reverse"]);
 
-	my $com = $log->next();
 	my $ahead = 0;
-
+	my $rebase = 0;
+	my $com = $log->next();
 	while ($com && (
 		!$head_id_found ||
 		!$master_id_found ||
@@ -182,16 +218,35 @@ sub gitStart
 		$master_id_found = 1 if $sha eq $master_id;
 		$remote_id_found = 1 if $sha eq $remote_id;
 
-		# these are from newest to oldest
+		# These are from newest to oldest
+		# AHEAD is if there are local commits and MASTERS is AFTER the REMOTE.
+		# BEHIND is only set by gitStatus ..
+
+		# After the Fetch during a Pull, REMOTE will be BEFORE the MASTER, indicating
+		# that a Rebase is necessary. It is SIGNIFICANT, that the repo is now in a state
+		# where no commits should be allowed, lest we create a state where a Merge is
+		# required. Since a Fetch may be done from the command line, the system needs to
+		# know about this possibility, grr, so I am adding a member variable
+		#
+		# 		REBASE
+		#
+		# For lack of a better word, this indicates that the repo is now out of date
+		# with respect to itself locally, and needs to be REBASED.
 
 		my $ahead_str = '';
+		my $rebase_str = '';
 		if ($master_id_found && !$remote_id_found)
 		{
 			$ahead++;
 			$ahead_str = "AHEAD($ahead) ";
 		}
+		if ($remote_id_found && !$master_id_found)
+		{
+			$rebase++;
+			$rebase_str = "REBASE($rebase) ";
+		}
 
-		display($dbg_start+1,1,pad($ahead_str,10)."$time ".pad($extra,30)._lim($sha,8)." "._lim($msg,20));
+		display($dbg_start+1,1,pad($ahead_str.$rebase_str,10)."$time ".pad($extra,30)._lim($sha,8)." "._lim($msg,20));
 
 		$repo->{local_commits} ||= shared_clone([]);
 		push @{$repo->{local_commits}},shared_clone({
@@ -201,11 +256,14 @@ sub gitStart
 		});
 
 		$com = $log->next();
-
-		warning($dbg_start,1,"repo($repo->{path}) is AHEAD($ahead)")
-			if $ahead;
-		$repo->{AHEAD} = $ahead;
 	}
+
+	warning($dbg_start,1,"repo($repo->{path}) is AHEAD($ahead)")
+		if $ahead;
+	warning($dbg_start-1,1,"repo($repo->{path}) needs REBASE($rebase)")
+		if $rebase;
+	$repo->{AHEAD} = $ahead;
+	$repo->{REBASE} = $rebase;
 
 	return $git_repo;
 }
@@ -784,9 +842,7 @@ sub gitPush
 	return gitError($repo,"Could not create refspec($refspec_str)")
 		if !$refspec;
 
-	warning(0,0,"progres_cb=".\&cb_pack);
-
-	my $push_options = { callbacks => {
+	my $callback_options = { callbacks => {
 		credentials => \&cb_credentials,
 		pack_progress 			=> \&cb_pack,
 		push_transfer_progress 	=> \&cb_transfer,
@@ -795,10 +851,10 @@ sub gitPush
 		# sideband_progress		=> \&cb_sideband,
 	}};
 
-	my $rslt ;
+	my $rslt;
 	eval
 	{
-		$rslt = $remote->push([ $refspec ], $push_options);
+		$rslt = $remote->push([ $refspec ], $callback_options);
 		1;
 	}
 	or do
@@ -823,19 +879,16 @@ sub gitPush
 		user_callback($PUSH_CB_ERROR,$msg);
 	};
 
-	# Note that we manually generate a monitor_callback
-	# after adjusting repo hashes
+	# We call gitStart() and generate an event in any case
+	# to keep the system as consistent as possible, but we only
+	# clear BEHIND if it worked.
 
-	if ($rslt)
-	{
-
-		gitStart($repo,$git_repo);
-		# $repo->{AHEAD} = 0;
-		$repo->{BEHIND} = 0;  # pre-empt the next repoStatus() call
-		setCanPushPull($repo);
-		apps::gitUI::Frame::monitor_callback({ repo=>$repo })
-			if getAppFrame();
-	}
+	gitStart($repo,$git_repo);
+	$repo->{BEHIND} = 0 if $rslt;
+		# pre-empt the next repoStatus() call
+	setCanPushPull($repo);
+	apps::gitUI::Frame::monitor_callback({ repo=>$repo })
+		if getAppFrame();
 
 	display($dbg_push,1,"gitPush() returning rslt="._def($rslt));
 	return $rslt;
@@ -846,6 +899,14 @@ sub gitPush
 #--------------------------------------------------
 # gitPull
 #--------------------------------------------------
+# AUTO COMMIT AND PUSH of parent repos on Pull of Submodule.
+#
+# After a pull of a submodule, we will call gitChanges()
+# on the parent module.  If it has exactly one unstaged
+# change, and it is the submodule, we will Commit and
+# Push(?) that change.  The main difficulty will be in
+# making it work nice in the progress dialog with callbacks.
+# TBD after checkin.
 
 sub gitPull
 	# Note that we manually generate a monitor_callback
@@ -865,11 +926,104 @@ sub gitPull
 	return gitError($repo,"Could not create git_repo")
 		if !$git_repo;
 
+	if ($need_stash)
+	{
+		display($dbg_pull,1,"STASHING($repo->{path})");
+
+		my $config = $git_repo->config();
+		my $name   = $config->str('user.name');
+		my $email  = $config->str('user.email');
+		my $sig = Git::Raw::Signature->new($name, $email, time(), 0);
+		my $msg = "Stashed at ".now()." from repoGit::Pull()";
+
+		# We call Git::Raw::Stash::save() directly
+		# with an 'include_untracked' option. Oh it's a class method.
+		# so use a pointer.
+
+		my $options = $STASH_UNTRACKED_FILES ? ['include_untracked'] : [];
+		my $sha = Git::Raw::Stash->save($git_repo,$sig,$msg,$options);
+		if (!$sha)
+		{
+			$STASH_UNTRACKED_FILES ?
+				return gitError($repo,"No SHA returned from Stash") :
+				warning(0,0,"No SHA returned from Stash($repo->{path})");
+		}
+
+	}
+
 	my $remote = Git::Raw::Remote->load($git_repo, 'origin');
 	return gitError($repo,"Could not create remote")
 		if !$remote;
 
-	return !error("gitPull() not implemented yet");
+	my $callback_options = { callbacks => {
+		credentials 			=> \&cb_credentials,
+		pack_progress 			=> \&cb_pack,
+		push_transfer_progress 	=> \&cb_transfer,
+		push_update_reference 	=> \&cb_reference,
+		# push_negotation 		=> \&cb_negotiate,
+		# sideband_progress		=> \&cb_sideband,
+	}};
+
+	# Do the fetch.  If it has any problems, they
+	# will be reported via the exception.
+
+	my $rslt;
+	eval
+	{
+		$remote->fetch($callback_options);
+		$rslt = 1;
+		1;
+	}
+	or do
+	{
+		my $err = $@;
+		my $msg = ref($err) =~ /Git::Raw::Error/ ?
+			$err->message() : $err;
+		error($msg);
+		$msg =~ s/at \/base.*$//;
+		user_callback($PUSH_CB_ERROR,$msg);
+	};
+
+	# If the fetch worked, do the rebase
+	# Rather than figure oiut Git::Raw::Rebase,
+	# with not a single example or any clear idea of how
+	# to use it on the entire internet, and which I would
+	# have to spend hours figuring out, I simply call the
+	# command line git from backticks.
+	#
+	# This is currently the only place that my gitUI calls
+	# the git command line ....
+
+	if ($rslt)
+	{
+		apps::gitUI::monitor::monitorPause(1);	# should be done on all big operations
+		my $text = `git -C "$repo->{path}" rebase 2>&1` || '';
+		my $exit_code = $? || 0;
+		my $msg = "rebase exit_code($exit_code) text($text)";
+		display($dbg_pull+1,2,$msg);
+		if ($exit_code || $text !~ /Successfully rebased and updated/)
+		{
+			gitError($repo,$msg);
+			# user_callback($PUSH_CB_ERROR,$msg);
+			$rslt = 0;
+		}
+		apps::gitUI::monitor::monitorPause(0);
+	}
+
+	# We call gitStart() and generate an event in any case
+	# to keep the system as consistent as possible, but we only
+	# clear BEHIND if it worked.
+
+	gitStart($repo,$git_repo);
+	$repo->{BEHIND} = 0 if $rslt;
+		# pre-empt the next repoStatus() call
+	setCanPushPull($repo);
+	apps::gitUI::Frame::monitor_callback({ repo=>$repo })
+		if getAppFrame();
+
+	display($dbg_pull,1,"gitPull() returning rslt="._def($rslt));
+	return $rslt;
+
 }
 
 

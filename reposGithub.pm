@@ -135,7 +135,10 @@ sub gitHubRequest
 
 		# DO THE REQUEST
 
-		my $my_ua = new LWP::UserAgent (agent => 'Mozilla/5.0', cookie_jar =>{});
+		my $my_ua = new LWP::UserAgent (
+			agent => 'Mozilla/5.0',
+			cookie_jar =>{});
+		$my_ua->timeout(15);
 		$my_ua->ssl_opts( SSL_ca_file => Mozilla::CA::SSL_ca_file() );
 		$my_ua->ssl_opts( verify_hostname => 1 );
 

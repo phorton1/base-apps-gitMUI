@@ -8,6 +8,16 @@
 # thread.
 #
 # can be restarted in the middle of an existing 'update'
+#
+# Needs the monitor to be Started, and needs to Pause it.
+# TODO: monitorPause and a new pauseRepoStatus() method need to be called consistently throughout.
+#
+# There seems to be a minimum 60 second latency from Pushes
+# until we get an event.  THEREFORE I *may* (likely) allow
+# Pulls to repos that are not explicitly BEHIND, but give
+# a notice/confirm message if they are not while being pulled.
+# They still cannot be pulled if they are AHEAD, but they
+# won't show in red until repoStatus discovers them.
 
 
 package apps::gitUI::repoStatus;
@@ -37,7 +47,7 @@ my $dbg_status = 0;
 	# the actual info in an update
 my $dbg_events = 1;
 	# the adding of remote_commits
-my $dbg_notify = -1;
+my $dbg_notify = 0;
 	# noitification if repo changed
 
 
@@ -108,12 +118,14 @@ sub repoStatusInit
 }
 
 
-
 sub repoStatusStart
 	# stop it if it's running
+	# sleeps seem to be necessary for
+	# event synchronization with stop()
 {
 	display($dbg_thread,0,"repoStatusStart");
 	repoStatusStop();
+	sleep(0.2);
 	setStatusState($REPO_STATUS_START);
 }
 
@@ -135,7 +147,7 @@ sub repoStatusStop
 	warning(0,0,"timed out($STOP_TIMEOUT) trying to stop repoStatus monitor")
 		if $repo_status && $repo_status != $REPO_STATUS_STOPPED;
 
-
+	sleep(0.2);
 }
 
 
@@ -159,8 +171,8 @@ sub statusStateToString
 		$state == $REPO_STATUS_NONE  	    ? 'NONE' :
 		$state == $REPO_STATUS_START 	    ? 'START' :
 		$state == $REPO_STATUS_GET_EVENTS 	? 'GET_EVENTS' :
-		$state == $REPO_STATUS_WAIT_MON    ? 'WAIT_MON' :
-		$state == $REPO_STATUS_MON_READY   ? 'MON_READY' :
+		$state == $REPO_STATUS_WAIT_MON     ? 'WAIT_MON' :
+		$state == $REPO_STATUS_MON_READY    ? 'MON_READY' :
 		$state == $REPO_STATUS_READY 	    ? 'READY' :
 		$state == $REPO_STATUS_STOPPED 	? 'STOPPED' :
 		'unknown repo status';
@@ -173,7 +185,6 @@ sub run
 	display($dbg_thread,0,"repoStatus::run() started");
 
 	my $events;
-
 	while (1)
 	{
 		my $now = time();
@@ -208,7 +219,7 @@ sub run
 		}
 		elsif ($repo_status == $REPO_STATUS_WAIT_MON)
 		{
-			display($dbg_mon,0,"run(MON_WAIT_MON)");
+			display($dbg_mon+1,0,"run(MON_WAIT_MON)");
 			if (!monitorStarted())
 			{
 				display($dbg_mon + 1,1,"waiting for monitorStarted");
@@ -222,11 +233,18 @@ sub run
 		elsif ($repo_status == $REPO_STATUS_MON_READY)
 		{
 			display($dbg_mon,0,"run(MON_READY)");
+
+			# We must pause the monitor to prevent any
+			# repos from changing out from under us ..
+
+			monitorPause(1);
 			my $rslt = updateStatusAll($events);
+			monitorPause(0);
+
 			if ($rslt)
 			{
 				setStatusState($REPO_STATUS_READY);
-				display($dbg_status,1,"will auto-update in $REFRESH_INTERVAL seonds")
+				display($dbg_status,1,"will auto-update in $REFRESH_INTERVAL seconds")
 					if $REFRESH_INTERVAL;
 				$last_update = time();
 			}
@@ -257,75 +275,109 @@ sub run
 #---------------------------------------------------------------------------
 # status workers
 #---------------------------------------------------------------------------
+# Since EVERY repo in the event list will get a GITHUB_ID,
+# I only want to see debugging when a non-blank GITHUB_ID changs.
+#
+# Note that since we call gitStart() on every repo, and this method
+# does NOT change AHEAD or REBASE, or any of the main ID's, the only
+# cases for it to notify the UI are when BEHIND or GITHUB_ID changes.
+
 
 sub initRepoStatus
 {
 	my ($repo) = @_;
-	$repo->{save_AHEAD} 	= $repo->{AHEAD};
-	$repo->{save_BEHIND} 	= $repo->{BEHIND};
-	$repo->{save_HEAD_ID} 	= $repo->{HEAD_ID};
-	$repo->{save_MASTER_ID} = $repo->{MASTER_ID};
-	$repo->{save_REMOTE_ID} = $repo->{REMOTE_ID};
-	$repo->{save_GITHUB_ID} = $repo->{GITHUB_ID};
-	$repo->{save_REMOTE_COMMITS} = $repo->{remote_commits};
 
-	$repo->{AHEAD} = 0;
+	$repo->{save_BEHIND} 	= $repo->{BEHIND};
+	$repo->{save_GITHUB_ID} = $repo->{GITHUB_ID} || '';
+
+	# $repo->{save_AHEAD} 	= $repo->{AHEAD};
+	# $repo->{save_REBASE} 	= $repo->{REBASE};
+	# $repo->{save_HEAD_ID} 	= $repo->{HEAD_ID};
+	# $repo->{save_MASTER_ID} = $repo->{MASTER_ID};
+	# $repo->{save_REMOTE_ID} = $repo->{REMOTE_ID};
+	# $repo->{save_REMOTE_COMMITS} = $repo->{remote_commits};
+
+	# $repo->{AHEAD} = 0;
+	# $repo->{REBASE} = 0;
+
 	$repo->{BEHIND} = 0;
 	$repo->{found_REMOTE_ID_on_github} = 0;
 
-	delete $repo->{local_commits};
+	# delete $repo->{local_commits};
+	# done by gitStart()
+
 	delete $repo->{remote_commits};
 	return gitStart($repo);
 }
 
 
-sub checkChanged
-{
-	my ($numeric,$pchanged,$repo,$field) = @_;
-	my $save_field = "save_$field";
-	my $val = $repo->{$field};
-	my $save_val = $repo->{$save_field};
-	my $eq = $numeric ?
-		($val == $save_val) :
-		($val eq $save_val);
-	if (!$eq)
-	{
-		$$pchanged = 1;
-		display($dbg_notify,0,"changed($field) from $save_val to $val on repo($repo->{path})",0,$UTILS_COLOR_CYAN);
-	}
-}
+# sub checkChanged
+# {
+# 	my ($numeric,$pchanged,$repo,$field) = @_;
+# 	my $save_field = "save_$field";
+# 	my $val = $repo->{$field};
+# 	my $save_val = $repo->{$save_field};
+# 	my $eq = $numeric ?
+# 		($val == $save_val) :
+# 		($val eq $save_val);
+# 	if (!$eq)
+# 	{
+# 		$$pchanged = 1;
+# 		display($dbg_notify,0,"changed($field) from $save_val to $val on repo($repo->{path})",0,$UTILS_COLOR_CYAN);
+# 	}
+# }
 
-sub checkRemoteCommitsChanged
-	# if two subsequent events lists return the same
-	# number of events for a repo, I consider it unchanged
-{
-	my ($pchanged,$repo) = @_;
-	my $remote_commits = $repo->{remote_commits};
-	my $saved_commits = $repo->{save_REMOTE_COMMITS};
-	$$pchanged = 1 if
-		($remote_commits && !$saved_commits) ||
-		(!$remote_commits && $saved_commits) ||
-		($remote_commits && scalar(@$remote_commits) != scalar(@$saved_commits));
-	delete $repo->{save_REMOTE_COMMITS};
-}
+#	sub checkRemoteCommitsChanged
+#		# if two subsequent events lists return the same
+#		# number of events for a repo, I consider it unchanged
+#	{
+#		my ($pchanged,$repo) = @_;
+#		my $remote_commits = $repo->{remote_commits};
+#		my $saved_commits = $repo->{save_REMOTE_COMMITS};
+#		$$pchanged = 1 if
+#			($remote_commits && !$saved_commits) ||
+#			(!$remote_commits && $saved_commits) ||
+#			($remote_commits && scalar(@$remote_commits) != scalar(@$saved_commits));
+#		delete $repo->{save_REMOTE_COMMITS};
+#	}
 
 
 sub finishRepoStatus
 {
 	my ($repo) = @_;
 	my $changed = 0;
-	checkChanged(1,\$changed,$repo,'AHEAD');
-	checkChanged(1,\$changed,$repo,'BEHIND');
-	checkChanged(0,\$changed,$repo,'HEAD_ID');
-	checkChanged(0,\$changed,$repo,'MASTER_ID');
-	checkChanged(0,\$changed,$repo,'REMOTE_ID');
-	checkChanged(0,\$changed,$repo,'GITHUB_ID');
-	checkRemoteCommitsChanged(\$changed,$repo);
+
+	if ($repo->{BEHIND} != $repo->{save_BEHIND})
+	{
+		$changed = 1;
+		display($dbg_notify,0,"BEHIND_CHANGED(from $repo->{save_BEHIND} to $repo->{BEHIND}) for $repo->{path}",0,$UTILS_COLOR_CYAN);
+	}
+	if ($repo->{GITHUB_ID} ne $repo->{save_GITHUB_ID})
+	{
+		$changed = 1;
+		display($dbg_notify,0,"GITHUB_ID_CHANGED(from ".
+			_lim($repo->{save_GITHUB_ID},8)." to ".
+			_lim($repo->{GITHUB_ID},8).") for $repo->{path}",
+			0,$UTILS_COLOR_CYAN) if $repo->{save_GITHUB_ID};
+	}
+
+	# checkChanged(1,\$changed,$repo,'AHEAD');
+	# checkChanged(1,\$changed,$repo,'BEHIND');
+	# checkChanged(1,\$changed,$repo,'REBASE');
+	# checkChanged(0,\$changed,$repo,'HEAD_ID');
+	# checkChanged(0,\$changed,$repo,'MASTER_ID');
+	# checkChanged(0,\$changed,$repo,'REMOTE_ID');
+	# checkChanged(0,\$changed,$repo,'GITHUB_ID');
+	# checkRemoteCommitsChanged(\$changed,$repo);
+
+	delete $repo->{save_BEHIND};
+	delete $repo->{save_GITHUB_ID};
 	delete $repo->{found_REMOTE_ID_on_github};
 
 	if ($changed)
 	{
 		display($dbg_notify+1,0,"STATUS_REPO_CHANGED($repo->{path})",0,$UTILS_COLOR_CYAN);
+		setCanPushPull($repo);
 		&$the_callback({ repo=>$repo });
 	}
 }

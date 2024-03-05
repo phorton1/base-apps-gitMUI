@@ -235,7 +235,7 @@ sub linkDisplayColor
 {
 	my ($repo) = @_;
 	return
-		@{$repo->{errors}} || $repo->{BEHIND} ? $color_red :
+		@{$repo->{errors}} || $repo->{BEHIND} || $repo->{REBASE} ? $color_red :
 			# errors or merge conflict
 		$repo->canPush() || $repo->{AHEAD} ? $color_orange :
 			# needs push

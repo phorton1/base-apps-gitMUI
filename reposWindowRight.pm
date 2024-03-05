@@ -43,6 +43,10 @@ my $TITLE_LEFT_MARGIN = 6;
 my $TITLE_WIDTH = 60;
 my $BUTTON_SPACE = 10;
 
+my ($COMMAND_PUSH_LOCAL,
+	$COMMAND_PULL_LOCAL) = (8323..9000);
+	# apparently local events are needed for
+	# update UI ?!?
 
 
 sub new
@@ -58,15 +62,15 @@ sub new
 	$this->SetBackgroundColour($color_cyan);
 
 	$this->{title_ctrl} = Wx::StaticText->new($this,-1,'Repo:',[5,5],[$TITLE_LEFT_MARGIN-10,20]);
-	my $repo_name = $this->{repo_name} = apps::gitUI::myHyperlink->new($this,-1,'',[$TITLE_LEFT_MARGIN + $TITLE_WIDTH,5]);
+	my $repo_name = $this->{repo_name} = apps::gitUI::myHyperlink->new($this,-1,'',[$TITLE_LEFT_MARGIN + $TITLE_WIDTH,7]);
 	$this->{text_ctrl} = apps::gitUI::myTextCtrl->new($this);
 
 	# Buttons added from right to left
 
 	$this->{buttons} = [
 		Wx::Button->new($this,$ID_COMMAND_REFRESH_STATUS,	'Refresh Status',	[0,5],	[85,20]),
-		Wx::Button->new($this,$ID_COMMAND_PUSH_SELECTED,	'Push',				[0,5],	[75,20]),
-		Wx::Button->new($this,$ID_COMMAND_PUSH_SELECTED,	'Pull',				[0,5],	[60,20]),
+		Wx::Button->new($this,$COMMAND_PUSH_LOCAL,			'Push',				[0,5],	[75,20]),
+		Wx::Button->new($this,$COMMAND_PULL_LOCAL,			'Pull',				[0,5],	[60,20]),
 		# Wx::Button->new($this,-1,						'Scan Docs',		[0,5],	[80,20]),
 		# Wx::Button->new($this,-1,						'Update Docs',		[0,5],	[80,20]),
 	];
@@ -75,11 +79,11 @@ sub new
 
 	EVT_SIZE($this, \&onSize);
 	EVT_BUTTON($this, $ID_COMMAND_REFRESH_STATUS, 	\&onButton);
-	EVT_BUTTON($this, $ID_COMMAND_PUSH_SELECTED,	\&onButton);
-	EVT_BUTTON($this, $ID_COMMAND_PULL_SELECTED, 	\&onButton);
+	EVT_BUTTON($this, $COMMAND_PUSH_LOCAL,	\&onButton);
+	EVT_BUTTON($this, $COMMAND_PULL_LOCAL, 	\&onButton);
 	EVT_UPDATE_UI($this, $ID_COMMAND_REFRESH_STATUS,\&onUpdateUI);
-	EVT_UPDATE_UI($this, $ID_COMMAND_PUSH_SELECTED,	\&onUpdateUI);
-	EVT_UPDATE_UI($this, $ID_COMMAND_PULL_SELECTED, \&onUpdateUI);
+	EVT_UPDATE_UI($this, $COMMAND_PUSH_LOCAL,	\&onUpdateUI);
+	EVT_UPDATE_UI($this, $COMMAND_PULL_LOCAL, \&onUpdateUI);
 
 	return $this;
 }
@@ -127,14 +131,14 @@ sub onUpdateUI
 	my $enable = 0;
 	$enable = 1 if $id == $ID_COMMAND_REFRESH_STATUS &&
 		monitorStarted() && !repoStatusBusy();
-	$enable = 1 if $id == $ID_COMMAND_PUSH_SELECTED &&
+	$enable = 1 if $id == $COMMAND_PUSH_LOCAL &&
 		$repo &&
 		$repo->canPush();
-	$enable = 1 if $id == $ID_COMMAND_PULL_SELECTED &&
+	$enable = 1 if $id == $COMMAND_PULL_LOCAL &&
 		$repo &&
 		$repo->canPull();
 
-	if ($id == $ID_COMMAND_PULL_SELECTED)
+	if ($id == $COMMAND_PULL_LOCAL)
 	{
 		my $button_title =
 			$enable && $repo->needsStash() ?
@@ -157,17 +161,17 @@ sub onButton
 	{
 		$this->{frame}->onCommand($event);
 	}
-	elsif ($id == $ID_COMMAND_PUSH_SELECTED)
+	elsif ($id == $COMMAND_PUSH_LOCAL)
 	{
 		clearSelectedPushRepos();
 		setSelectedPushRepo($this->{repo});
-		$this->{frame}->onCommand($event);
+		$this->{frame}->doThreadedCommand($ID_COMMAND_PUSH_SELECTED);
 	}
-	elsif ($id == $ID_COMMAND_PULL_SELECTED)
+	elsif ($id == $COMMAND_PULL_LOCAL)
 	{
 		clearSelectedPullRepos();
 		setSelectedPullRepo($this->{repo});
-		$this->{frame}->onCommand($event);
+		$this->{frame}->doThreadedCommand($ID_COMMAND_PULL_SELECTED);
 	}
 }
 

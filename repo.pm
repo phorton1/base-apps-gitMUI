@@ -89,10 +89,7 @@ sub new
 		section_path => $section_path,
 		section_name => $section_name,
 
-		# TODO WIP status fields always exist
-		# currently set in reposGithub.pm but
-		# probably should be moved to repoGit()
-		# and called during parseRepos().
+		# Status fields always exist
 
 		HEAD_ID 	=> '',
 		MASTER_ID 	=> '',
@@ -101,6 +98,7 @@ sub new
 
 		AHEAD		=> 0,
 		BEHIND  	=> 0,
+		REBASE		=> 0,
 
 		# parsed fields
 		# PRIVATE is inherited for submdules
@@ -148,16 +146,11 @@ sub new
 		# $this->{used_in}	  = shared_clone([]);
 	}
 
-	# added at runtime by various methods
-	#
-
 	# temporary fields added as necessary
 	# by various methods
 
 	# found_on_github => 0,
 	# save_XXX (AHEAD, BEHIND, HEAD_ID, MASTER_ID, REMOTE_ID)
-
-
 
 	bless $this,$class;
 	return $this;
@@ -222,6 +215,12 @@ sub canAdd
 	return scalar(keys %{$this->{unstaged_changes}});
 }
 sub canCommit
+	# Do we prevent commits when the repo is BEHIND
+	# or needs a REBASE?  I think instead I will give
+	# a warning message in the only place that Commit
+	# occurs - from the commitWindow, warning the user
+	# that the commit will cause a need for a Merge,
+	# and allowing it if they want to do something weird.
 {
 	my ($this) = @_;
 	return scalar(keys %{$this->{staged_changes}});
@@ -583,6 +582,17 @@ sub contentCommits
 }
 
 
+sub addTextForFxn
+{
+	my ($this,$text,$fxn) = @_;
+	my $rslt = $this->$fxn();
+	if ($rslt)
+	{
+		$text .= ' ' if $text;
+		$text .= $fxn;
+	}
+	return $text;
+}
 
 sub addTextForNum
 {
@@ -632,6 +642,13 @@ sub toTextCtrl
 	$short_status = $this->addTextForHashNum($short_status,'staged_changes',"STAGED");
 	$short_status = $this->addTextForNum($short_status,'AHEAD');
 	$short_status = $this->addTextForNum($short_status,'BEHIND');
+	$short_status = $this->addTextForNum($short_status,'REBASE');
+		# Above determine canCommit, canPush, canPull, and needsStash
+	$short_status = $this->addTextForFxn($short_status,'canAdd');
+	$short_status = $this->addTextForFxn($short_status,'canCommit');
+	$short_status = $this->addTextForFxn($short_status,'canPush');
+	$short_status = $this->addTextForFxn($short_status,'canPull');
+	$short_status = $this->addTextForFxn($short_status,'needsStash');
 
 	if ($short_status)
 	{

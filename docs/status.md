@@ -152,25 +152,49 @@ will show as BEHIND and needing a a pull.
 
 ## gitPull()
 
-Adding a gitPull() method, analagous to the existing gitPush()
-method, to repoGit.pm.  Stashing will be done automatically
-if needed in gitPull().
+Added a gitPull() method, analagous to the existing gitPush()
+method, to repoGit.pm.  Stashing is done automatically,
+if needed, in gitPull().  It is upto the UI to not Pull\
+repos that need stashing if that's what the user desires.
 
-I envision this as using the progress dialog, and initially
-being implemented as a single Pull in the reposWindowRight.
-Which means that I need to re-implement the notion of commands
-$COMMAND_PUSH and $COMMAND_PULL on a single selected repo.
+gitPull() uses the same Progress dialog and callbacks as gitPush().
+Pulls can be done on all, or selected repos, including the nominal
+case of pulling a single selected repo.
 
-Then later there may additionally be $COMMAND_PUSH_SELECTED
-and $COMMAND_PULL_SELECTED which will work off the StatusWindow
-and checkboxes.
+### Pull == Fetch and Rebase
+
+There is no single Git::Raw operation for a Pull.
+
+It is implemented in terms of a Fetch (Git::Remote Download
+and update 'tips') followed by a Rebase of the repo.
+
+
+### Automatic Commit and Push of Parent Repo Submodule updates.
+
+A Pull of a submodule results in an unstaged change pending
+commit in the parent.  Ignoring the case of a parent that has
+several submodule pulls in a single instance, If we detect that
+the only change to a Parent after doing a Pull to a submodule
+is an unstaged change of the module, then an a preference
+
+	AUTOMATIC_PARENT_COMMIT_AND_PUSH_ON_SUBMODULE_PULL
+
+or a smaller word, will drive a secondary process that will,
+in turn, automatically Stage, Commit, and Push that change
+to the submodule, in keeping with my general approach to
+updating (pulling).
+
+If there are any other unstaged or staged changes in the
+parent, or if the parent is otherwise BEHIND or AHEAD of the
+net, then the user will need to handle the parents submodule
+delta manually.
+
+
+
+
+## Other UI Mods:
 
 I'm already at the point where I am considering adding a
 [] details checkbox to the info window (reposWindowRight)
 to hide all the XXX_IDs, local_commits, and remote_commits
 unless I really want to look at them to figure out a problem.
-
-But first I need to implement gitPull() so that it works,
-and optionally takes a $progress parameter.
-
-
