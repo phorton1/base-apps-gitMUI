@@ -91,8 +91,12 @@ BEGIN
 		gitTag
 		gitPush
 		gitPull
+
+		$GIT_EXE_RE
 	);
 }
+
+our $GIT_EXE_RE = '\.pm$|\.pl$|\.$cgi';
 
 
 my $MAX_SHOW_CHANGES = 30;
@@ -483,17 +487,30 @@ sub gitDiff
 #--------------------------------------------
 # Move things from staged to unstaged and back
 
+sub addEXEFile
+	# the only way I found to Add a file with EXE bits is
+	# to read the file into memory and add it as a buffer
+{
+	my ($index,$repo,$path) = @_;
+	my $fullpath = makePath($repo->{path},$path);
+	my $text = getTextFile($fullpath,1);
+	my $MODE_EXE = 0100755;
+	$index->add_frombuffer($path,$text,$MODE_EXE);
+}
+
+
 sub gitIndex
-	# git add -A
+	# git add paths, or -A (all)
 	# Note that we manually generate a monitor_callback
 	# after adjusting repo hashes.
 	# CHMOD NOTE:  Git::Raw does not have a 'chmod' function or
-	#   support setting the executable bit on new files
+	#   hooks which support setting the executable bit on new files
 	#   from windows, as is done with the pre-commit
 	#   script for .pm/pl/cgi files in the regular gitUI.
-	#   New .pm/ files should be added using the regular
-	#   gitUI, and/or run /bat/fix_git_exe_bits.pm in that
-	#   repo if you forget!!
+	#   The only way I was able to find to set the EXE bits
+	#   was to Add the file as a single path, using add_frombuffer.
+	#	THEREFORE, if there are any EXE files (pm|pl|cgi) in the
+	#   commit, the *paths* version MUST be used.
 {
 	my ($repo,$is_staged,$paths) = @_;
 	my $show = $is_staged ? 'staged' : 'unstaged';
@@ -529,7 +546,11 @@ sub gitIndex
 			{
 				$u_type eq 'D' ?
 					$index->remove($path) :
-					$index->add($path);			# Add a single file
+					# Add a single file
+					# and use addFromBuffer for executable bits
+					$path =~ /$GIT_EXE_RE/i ?
+						addEXEFile($index,$repo,$path) :
+						$index->add($path);
 
 				$index->write;
 				$staged->{$path} = $uchange;

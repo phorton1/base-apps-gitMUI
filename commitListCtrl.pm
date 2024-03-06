@@ -941,6 +941,8 @@ sub toggleSelection
 #-----------------------------------------
 # my $ACTION_DO_ALL = 0;				# do all files in all repos
 #	  optimized to call gitIndex() with no paths
+#     except if !$is_staged && a $GIT_EXE_RE path is found
+#	  then we switch back to paths ..
 # my $ACTION_DO_REPO = 1;				# do selected files within repo
 # my $ACTION_DO_SELECTED = 2;			# do all selected files
 # my $ACTION_DO_SINGLE_FILE = 3;		# do a single (unselected) file
@@ -958,8 +960,32 @@ sub doActionRepo
 
 	my $doit = 1;						# do all by default
 	my $paths = '';
-	if ($how == $ACTION_DO_REPO ||		# do all selected files within repo
-		$how == $ACTION_DO_SELECTED)	# do all selected files
+	if ($how == $ACTION_DO_ALL)
+	{
+		# if we are the unstaged list, and Adding new files
+		# we need to check if there are any EXE's and
+		# use the paths if so so that gitIndex will call
+		# add_frombuffer with the EXE_MODE.
+
+		if (!$this->{is_staged})
+		{
+			my $found_exe = 0;
+			$paths = [];
+
+			my $items = $repo->{$this->{key}};
+			for my $fn (sort keys %$items)
+			{
+				push @$paths,$fn;
+				$found_exe = 1
+					if $items->{$fn}->{type} eq 'A' &&
+						$fn =~ /$GIT_EXE_RE/i
+			}
+			warning($dbg_actions,1,"USING PATHS FOR DO_ALL with NEW EXE FILES")
+				if $found_exe;
+			$paths = '' if !$found_exe;
+		}
+	}
+	else	# otherwise do selected paths
 	{
 		$doit = 0;
 		$paths = [];
