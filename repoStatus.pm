@@ -35,7 +35,7 @@ use apps::gitUI::repoGit;
 use apps::gitUI::reposGithub;
 use apps::gitUI::monitor;
 
-my $STOP_TIMEOUT = 2;
+my $REPO_WAIT_TIMEOUT = 2;
 my $DEFAULT_REFRESH_INTERVAL = 90;
 
 
@@ -59,14 +59,18 @@ BEGIN
 		repoStatusInit
 		repoStatusStart
 		repoStatusStop
+		repoStatusPause
 		repoStatusReady
+
+		freezeMonitors
 	);
 }
 
 
 my $REPO_STATUS_NONE = 0;
-my $REPO_STATUS_START = 1;
-my $REPO_STATUS_GET_EVENTS = 2;
+my $REPO_STATUS_PAUSED = 1;
+my $REPO_STATUS_START = 2;
+my $REPO_STATUS_GET_EVENTS = 3;
 my $REPO_STATUS_WAIT_MON = 4;
 my $REPO_STATUS_MON_READY = 5;
 my $REPO_STATUS_READY = 6;
@@ -80,12 +84,24 @@ my $REFRESH_INTERVAL = 0;
 
 my $repo_status:shared = $REPO_STATUS_NONE;
 my $stopping:shared = 0;
+my $pausing:shared =0;
 my $last_update:shared = 0;
 
 
 #---------------------------------------------
 # API
 #---------------------------------------------
+
+
+sub freezeMonitors
+	# A convenience method to freeze both the
+	# the directory monitor and this statusMonitor
+{
+	my ($freeze) = @_;
+	monitorPause($freeze);
+	repoStatusPause($freeze);
+}
+
 
 sub repoStatusBusy
 {
@@ -133,19 +149,46 @@ sub repoStatusStart
 sub repoStatusStop
 {
 	display($dbg_thread,0,"repoStatusStop");
-
 	$stopping = 1;
+	_waitRepoStatus($REPO_STATUS_STOPPED);
+	$stopping = 0;
+	sleep(0.2);
+}
+
+
+sub repoStatusPause
+{
+	my ($pause) = @_;
+	display($dbg_thread,0,"repoStatusPause($pause)");
+	if ($pause)
+	{
+		$pausing = 1;
+		_waitRepoStatus($REPO_STATUS_PAUSED);
+		$pausing = 0;
+		sleep(0.2);
+	}
+	elsif ($repo_status == $REPO_STATUS_PAUSED)
+	{
+		setStatusState($REPO_STATUS_READY);
+	}
+}
+
+
+sub _waitRepoStatus
+{
+	my ($wait_for_state) = @_;
+	my $name = statusStateToString($wait_for_state);
+	display($dbg_thread,0,"_waitRepoStatus($name)");
 
 	my $start = time();
-	while ($repo_status != $REPO_STATUS_STOPPED &&
-		time() < $start + $STOP_TIMEOUT)
+	while ($repo_status != $wait_for_state &&
+		time() < $start + $REPO_WAIT_TIMEOUT)
 	{
-		display($dbg_thread,1,"waiting for repoStatus monitor to stop ...");
+		display($dbg_thread,1,"waiting for repoStatus($name) ...");
 		sleep(0.1);
 	}
-	$stopping = 0;
-	warning(0,0,"timed out($STOP_TIMEOUT) trying to stop repoStatus monitor")
-		if $repo_status && $repo_status != $REPO_STATUS_STOPPED;
+	warning(0,0,"timed out($REPO_WAIT_TIMEOUT) trying to stop repoStatus monitor")
+		if $repo_status && $repo_status != $wait_for_state;
 
 	sleep(0.2);
 }
@@ -155,6 +198,9 @@ sub repoStatusStop
 #-----------------------------------------------------
 # implementation
 #-----------------------------------------------------
+# It will probably be better to use a Thread::Queue
+# than using sleep() in the loop.
+
 
 sub setStatusState
 {
@@ -169,6 +215,7 @@ sub statusStateToString
 	my ($state) = @_;
 	return
 		$state == $REPO_STATUS_NONE  	    ? 'NONE' :
+		$state == $REPO_STATUS_PAUSED 	    ? 'PAUSED' :
 		$state == $REPO_STATUS_START 	    ? 'START' :
 		$state == $REPO_STATUS_GET_EVENTS 	? 'GET_EVENTS' :
 		$state == $REPO_STATUS_WAIT_MON     ? 'WAIT_MON' :
@@ -193,6 +240,12 @@ sub run
 			display($dbg_thread,0,"run(STOPPING)");
 			setStatusState($REPO_STATUS_STOPPED);
 			$stopping = 0;
+		}
+		elsif ($pausing)
+		{
+			display($dbg_thread,0,"run(PAUSING)");
+			setStatusState($REPO_STATUS_PAUSED);
+			$pausing = 0;
 		}
 		elsif ($repo_status == $REPO_STATUS_START)
 		{

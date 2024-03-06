@@ -49,6 +49,7 @@ my ($COMMAND_PUSH_LOCAL,
 	# apparently local events are needed for
 	# update UI ?!?
 
+my $in_update_submodules:shared = 0;
 
 # $COMMAND_UPDATE_SUBMODULES is really a global command
 # but I am testing it here ...
@@ -92,7 +93,7 @@ sub new
 	EVT_UPDATE_UI($this, $ID_COMMAND_REFRESH_STATUS,\&onUpdateUI);
 	EVT_UPDATE_UI($this, $COMMAND_PUSH_LOCAL,	\&onUpdateUI);
 	EVT_UPDATE_UI($this, $COMMAND_PULL_LOCAL, \&onUpdateUI);
-	# EVT_UPDATE_UI($this, $COMMAND_UPDATE_SUBMODULES, \&onUpdateUI);
+	EVT_UPDATE_UI($this, $COMMAND_UPDATE_SUBMODULES, \&onUpdateUI);
 
 	return $this;
 }
@@ -146,6 +147,8 @@ sub onUpdateUI
 	$enable = 1 if $id == $COMMAND_PULL_LOCAL &&
 		$repo &&
 		$repo->canPull();
+	$enable = 1 if $id == $COMMAND_UPDATE_SUBMODULES &&
+		monitorStarted() && !$in_update_submodules;
 
 	if ($id == $COMMAND_PULL_LOCAL)
 	{
@@ -240,6 +243,8 @@ sub doUpdateSubmodules
 {
 	my ($this) = @_;
 	display(0,0,"doUpdateSubmodules()");
+	$in_update_submodules = 1;
+	freezeMonitors(1);
 	my $repo_list = getRepoList();
 	for my $sub (@$repo_list)
 	{
@@ -310,6 +315,8 @@ sub doUpdateSubmodules
 
 		last if !$rslt;
 	}
+	freezeMonitors(0);
+	$in_update_submodules = 0;
 }
 
 

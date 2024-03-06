@@ -988,7 +988,9 @@ sub gitPull
 	# will be reported via the exception
 
 
-	apps::gitUI::monitor::monitorPause(1);
+	# This is now freezeMonitors() in the command methods
+	# that call gitXXX methods
+	# apps::gitUI::monitor::monitorPause(1);
 		# should be done on all big operations
 		# and we should also stop the repoStatus  monitor
 
@@ -1088,7 +1090,7 @@ sub gitPull
 		}
 	}
 
-	apps::gitUI::monitor::monitorPause(0);
+	# apps::gitUI::monitor::monitorPause(0);
 	display($dbg_pull,1,"gitPull() returning rslt="._def($rslt));
 	return $rslt;
 
