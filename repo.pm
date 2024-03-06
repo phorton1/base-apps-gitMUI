@@ -491,31 +491,36 @@ sub contentLine
 		if $use_label && $use_label eq 'MAIN_MODULE';
 
 	my $context;
-	$context = { repo_path => $value } if
-		$key eq 'path' ||
+	my $color = $color_blue;
+	if ($key eq 'path' ||
 		$key eq 'parent_repo' ||
-		$use_label && $use_label eq 'MAIN_MODULE';
+		($use_label && $use_label eq 'MAIN_MODULE'))
+	{
+		$context = { repo_path => $value };
+		my $repo = apps::gitUI::repos::getRepoByPath($value);
+		$color = linkDisplayColor($repo);
+	}
 	$context = { path => $value } if
 		$key eq 'section_path';
 
 	my $line = $text_ctrl->addLine();
 	$text_ctrl->addPart($line, 0, $color_black, pad($label,12)." = " );
-	$text_ctrl->addPart($line, $bold, $color_blue, $value, $context );
+	$text_ctrl->addPart($line, $bold, $color, $value, $context );
 }
 
 
 sub contentArray
 {
-	my ($this,$text_ctrl,$bold,$key,$ucase,$color) = @_;
+	my ($this,$text_ctrl,$bold,$key,$ucase) = @_;
 	$ucase ||= 0;
-	$color ||= $color_blue;
-
 	my $label = $key;
 	$label = uc($label) if $ucase;
 	my $array = $this->{$key};
 	return '' if !$array || !@$array;
 
 	$text_ctrl->addSingleLine($bold, $color_black, $label);
+
+	my $color = $color_blue;
 	for my $item (@$array)
 	{
 		my $value = $item;
@@ -523,12 +528,19 @@ sub contentArray
 		my $context;
 		$context = { repo=>$this, file=>$value } if
 			$key eq 'docs';
-		$context = { repo_path => $value } if
-			$key eq 'uses' ||
+
+		if ($key eq 'uses' ||
 			$key eq 'used_by' ||
 			$key eq 'friend' ||
 			$key eq 'submodules' ||
-			$key eq 'used_in';
+			$key eq 'used_in')
+		{
+			$context = { repo_path => $value };
+			my $repo = apps::gitUI::repos::getRepoByPath($value);
+			$color = linkDisplayColor($repo);
+		}
+
+
 		$context = { path => $value } if
 			$key eq 'needs';
 		$context = { repo_path => '/src/phorton1', file=>"/$value.md" } if
