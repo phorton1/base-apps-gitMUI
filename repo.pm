@@ -13,6 +13,7 @@ use threads;
 use threads::shared;
 use Time::HiRes qw(sleep);
 use Pub::Utils;
+use Pub::Prefs;
 use apps::gitUI::utils;
 
 
@@ -503,6 +504,16 @@ sub contentLine
 	}
 	$context = { path => $value } if
 		$key eq 'section_path';
+
+	if ($key eq 'parent' || $key eq 'id')
+	{
+		my $clean = $value;
+		$clean =~ s/\(|\)//g;
+		my $url = "https://github.com/";
+		$url .= getPref('GIT_USER')."/" if $key eq 'id';
+		$url .= $clean;
+		$context = { path => $url };
+	}
 
 	my $line = $text_ctrl->addLine();
 	$text_ctrl->addPart($line, 0, $color_black, pad($label,12)." = " );

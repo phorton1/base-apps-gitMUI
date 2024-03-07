@@ -1046,7 +1046,12 @@ sub mouseClick
 	display($dbg_click,0,"mouseClick($show_part->{text})");
 
 	my $path = $this->getClickFunction($hit,1);
-	if ($path =~ s/^SYSTEM //)
+	if ($path =~ s/^BROWSE //)
+	{
+		my $command = "\"start $path\"";
+		system(1,$command);
+	}
+	elsif ($path =~ s/^SYSTEM //)
 	{
 		chdir $path;
 		system(1,"\"$path\"");
@@ -1083,12 +1088,17 @@ sub getClickFunction
 		if $is_click;
 
 	# decide the best thing to do on a left click
+	# path = https:// == 'shell start' a Browser
 	# path = md,gif,png,jpg,jpeg,pdf - shell
 	# path = txt,pm,pl,cpp,c,h - komodo
 	# repo - show repo details if not in that window, open gitUI otherwise
 	# otherwise, show in explorer
 
-	if ($path =~ /\.(md|gif|png|jpg|jpeg|pdf)$/)
+	if ($path =~ /^https:\/\//)
+	{
+		return "BROWSE $path";
+	}
+	elsif ($path =~ /\.(md|gif|png|jpg|jpeg|pdf)$/)
 	{
 		return "SYSTEM $path";
 	}

@@ -28,7 +28,8 @@ my ($ID_COPY,				# any
 	$ID_OPEN_EXPLORER,		# repo, path
 	$ID_OPEN_IN_KOMODO,		# path
 	$ID_OPEN_IN_SHELL,		# path
-	$ID_OPEN_IN_NOTEPAD  ) = (19000..19999);
+	$ID_OPEN_IN_NOTEPAD,	# path https://
+	$ID_OPEN_IN_BROWSER ) = (19000..19999);
 
 my $menu_desc = {
 	$ID_COPY            => ['Copy',				'Copy selected region to clipboard' ],
@@ -40,6 +41,7 @@ my $menu_desc = {
 	$ID_OPEN_IN_KOMODO	=> ['Komodo',			'Open one or more items in Komodo Editor' ],
 	$ID_OPEN_IN_SHELL   => ['Shell',			'Open single item in the Windows Shell' ],
 	$ID_OPEN_IN_NOTEPAD => ['Notepad',			'Open single item in the Windows Notepad' ],
+	$ID_OPEN_IN_BROWSER => ['Browser',			'Open https:// url in System Browser' ],
 };
 
 
@@ -53,7 +55,7 @@ BEGIN {
 sub addContextMenu
 {
 	my ($this) = @_;
-	EVT_MENU_RANGE($this, $ID_COPY, $ID_OPEN_IN_NOTEPAD, \&onContextMenu);
+	EVT_MENU_RANGE($this, $ID_COPY, $ID_OPEN_IN_BROWSER, \&onContextMenu);
 }
 
 
@@ -63,7 +65,8 @@ sub popupContextMenu
 	$repo ||= '';
 	$path ||= '';
 
-	display($dbg_menu,1,"popupContextMenu)($repo,$path)");
+	my $is_url = $path =~ /^https:\/\// ? 1 : 0;
+	display($dbg_menu,1,"popupContextMenu)($repo,$path) is_url($is_url)");
 	$this->{popup_repo} = $repo;
 	$this->{popup_path} = $path;
 
@@ -72,8 +75,9 @@ sub popupContextMenu
 		$repo->{id} eq $repo_context->{id};
 
 	my $menu = Wx::Menu->new();
-	foreach my $id ($ID_COPY..$ID_OPEN_IN_NOTEPAD)
+	foreach my $id ($ID_COPY..$ID_OPEN_IN_BROWSER)
 	{
+		next if $is_url && $id != $ID_OPEN_IN_BROWSER;
 		next if $id == $ID_COPY && (!$this->can('canCopy') || !$this->canCopy());
 		next if $id == $ID_OPEN_DETAILS && $is_this_repo;
 		next if $id > $ID_COPY && $id <= $ID_ALL_HISTORY && !$repo;
@@ -144,6 +148,13 @@ sub onContextMenu
 		my $command = $komodo_exe." \"$path\"";
 		execNoShell($command);
 	}
+	elsif ($command_id == $ID_OPEN_IN_BROWSER)
+	{
+		my $command = "\"start $path\"";
+		system(1,$command);
+
+	}
+
 }	# onContextMenu()
 
 1;

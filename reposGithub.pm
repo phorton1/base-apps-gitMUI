@@ -366,8 +366,9 @@ sub doGitHub
 					   $entry->{description} =~ /Copied from (.*?)\s/i)
 				{
 					my $parent = $1;
+					$repo->repoWarning($dbg_github,2,"Copied from $parent");
 					$parent =~ s/https:\/\/github.com\///;
-					$entry->{parent} = "($parent)";
+					$repo->{parent} = "($parent)";
 				}
 
 			} 	# found $repo
