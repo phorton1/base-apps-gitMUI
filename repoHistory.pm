@@ -231,7 +231,7 @@ sub historyToTextCtrl
 			_plim($commit->{author},$max_name)." ");
 		$text_ctrl->addPart($line,1,$color_orange,$branch_text)
 			if $branch_text;
-		$text_ctrl->addPart($line,1,$color_green,$tag_text)
+		$text_ctrl->addPart($line,1,$color_lime,$tag_text)
 			if $tag_text;
 		$text_ctrl->addPart($line,0,$color_black,$spacer.$commit->{summary});
 	}

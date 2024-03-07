@@ -91,6 +91,7 @@ BEGIN
 		$color_purple
 		$color_orange
 		$color_white
+		$color_lime
 		$color_light_grey
 		$color_medium_grey
 		$color_dark_cyan
@@ -219,9 +220,10 @@ our $color_magenta       = Wx::Colour->new(0xC0, 0x00, 0xC0);		# link: staged or
 our $color_yellow        = Wx::Colour->new(0xFF, 0xD7, 0x00);		# commitRight title background; dialog: repoWarning
 our $color_grey          = Wx::Colour->new(0x99, 0x99, 0x99);		# unused
 our $color_purple        = Wx::Colour->new(0x60, 0x00, 0xC0);		# unused
-our $color_orange        = Wx::Colour->new(0xC0, 0x60, 0x00);		# link: needs Push
+our $color_orange        = Wx::Colour->new(0xC0, 0x60, 0x00);		# link: needs Push; history: tags
 our $color_white         = Wx::Colour->new(0xFF, 0xFF, 0xFF);		# dialog: repoNote
 our $color_dark_cyan     = Wx::Colour->new(0x00, 0x80, 0x80);		# unused
+our $color_lime  	     = Wx::Colour->new(0x50, 0xA0, 0x00);		# hitory: tags
 our $color_light_grey    = Wx::Colour->new(0xF0, 0xF0, 0xF0);		# commitRight panel; dialog: repoDisplay
 our $color_medium_grey   = Wx::Colour->new(0xC0, 0xC0, 0xC0);		# reposWindowList selected item
 
