@@ -21,13 +21,17 @@
 # receive uselsss ChangeNotifications and call gitChanges(), but that
 # will return 0 (no new changes), and NOT call the UI.
 #
-# In practice this ia efficient enough and does away with previous
+# In practice this is efficient enough and does away with previous
 # exclude and create submonitor hassles.  I am not cleaning that
 # code up today, but much of this file is no longer needed.
 #
 # HAVE TO SEE if active processes like builds are upset by this,
 # but they already have their own .git_ignores that I wasn't utilizing,
 # and would have received all those notifications anyways.
+#
+# Note that Win32 MAXIMUM_WAIT_OBJECTS is 64, so they have to be
+# broken into groups of 64 for Win32::ChangeNotify::wait_any()
+# (Win32::IPC::wait_any) to work on more than 64.
 
 package apps::gitUI::monitor;
 use strict;
@@ -35,26 +39,33 @@ use warnings;
 use threads;
 use threads::shared;
 use Win32::ChangeNotify;
+# use Win32::IPC qw(wait_any);
 use Time::HiRes qw(sleep time);
 use apps::gitUI::repos;
 use apps::gitUI::repoGit;
 use Pub::Utils;
 
-my $USE_SUBMONITORS = 0;
-	# Turned off for now, code to be removed in the future.
+
 
 my $DELAY_MONITOR_STARTUP = 0;
 	# Set this to number of seconds to delay monitor thread
 	# actually starting, to see what happens to other threads
 	# and program functions.
+my $MONITOR_WAIT = 100;
+	# milliseconds 100 milliseconds does not seem
+	# to tax the machine (task manager)
+my $MONITOR_PAUSE_SLEEP = 0.2;
+	# seconds to sleep in pause loop
+
+my $MAXIMUM_WAIT_OBJECTS = 64;
+	# Windows limitation
 
 my $dbg_thread = 0;
 	# monitor thread lifecycle
 my $dbg_pause = 0;
 	# debug the pause
 my $dbg_mon = 1;
-	# TODO: /Arduino/libraries/myIOT/data is not getting a monitor
-	# monitor creation of monitors
+	# see creation of monitors
 my $dbg_cb = 1;
 	# debug callbacks and events
 
@@ -95,9 +106,6 @@ my $WIN32_FILTER =
 
 my $thread;
 my $the_callback;
-my %monitors;
-	# NOT SHARED, yet BUILT BY THE THREAD!
-
 my $running:shared = 0;
 my $started:shared = 0;
 my $stopping:shared = 0;
@@ -136,153 +144,10 @@ sub monitorPause
 
 
 
+
 #------------------------------------------------------
-# Win32::ChangeNotify stuff
+# run()
 #------------------------------------------------------
-
-sub parseGitIgnore
-	# find patterns like blah** and turn the
-	# blah portion into an re and push it on a list
-{
-	my ($path) = @_;
-	my $retval = '';
-	my $text = getTextFile("$path/.gitignore") || '';
-	my @lines = split(/\n/,$text);
-	for my $line (@lines)
-	{
-		$line =~ s/^\s+|\s+$//g;
-		if ($line =~ /^(.*)\*\*$/)
-		{
-			my $re = $1;
-			$re =~ s/\(/\\\(/g;		# change parents to RE
-			$re =~ s/\)/\\\)/g;
-			$retval ||= [];
-			push @$retval,$re;
-			display($dbg_mon,0,"exclude='$re'");
-		}
-	}
-	return $retval;
-}
-
-
-sub createMonitor
-{
-	my ($path,$parent) = @_;
-	$parent ||= '';
-
-	if (!$monitors{$path})
-	{
-		my $excludes = '';
-		my $include_subfolders = 1;
-		if ($parent)
-		{
-			display($dbg_mon,0,"CREATE SUB_MONITOR($path,$parent->{path})");
-		}
-		else
-		{
-			$excludes =  $USE_SUBMONITORS ? parseGitIgnore($path) : '';
-			$include_subfolders = 0 if $excludes;
-			display($dbg_mon,0,"CREATE MONITOR($path) excludes("._def($excludes).")");
-		}
-
-		my $mon = Win32::ChangeNotify->new($path,$include_subfolders,$WIN32_FILTER);
-		if (!$mon)
-		{
-			error("apps::gitUI::monitor::createMonitor() - Could not create monitor($path)");
-			return 0;
-		}
-
-		my $monitor = $monitors{$path} = {
-			mon => $mon,
-			path => $path,
-			parent => $parent,
-			excludes => $excludes,
-			exists => 1};
-
-		if ($excludes)
-		{
-			display($dbg_mon,0,"EXCLUDE SUBDIRS on path($path)");
-			return 0 if !createSubMonitors($monitor);
-		}
-	}
-	else
-	{
-		$monitors{$path}->{exists} = 1;
-	}
-	return 1;
-}
-
-
-sub createSubMonitors
-{
-	my ($monitor) = @_;
-	my $path = $monitor->{path};
-	my $excludes = $monitor->{excludes};
-
-	return !error("createSubMonitors() not opendir $path")
-		if !opendir(DIR,$path);
-
-	# set exists=0 on all monitors
-	# for delete pass at end
-
-	for my $p (keys %monitors)
-	{
-		my $m = $monitors{$p};
-		$m->{exists} = 0;
-	}
-
-    while (my $entry=readdir(DIR))
-    {
-        next if $entry =~ /^(\.|\.\.)$/;
-		next if $entry =~/^\.git$/;
-			# do include .git itself
-		my $sub_path = "$path/$entry";
-		my $is_dir = -d $sub_path ? 1 : 0;
-		if ($is_dir)
-		{
-			my $skipit = 0;
-			for my $exclude (@$excludes)
-			{
-				if ($entry =~ /^$exclude$/)
-				{
-					$skipit = 1;
-					last;
-				}
-			}
-
-			if ($skipit)
-			{
-				display($dbg_mon,0,"skipping subdir $entry");
-			}
-			else
-			{
-				if (!createMonitor($sub_path,$monitor))
-				{
-					closedir DIR;
-					return 0;
-				}
-			}
-		}
-	}
-	closedir DIR;
-
-	# Harvest any unused monitors
-
-	for my $p (keys %monitors)
-	{
-		my $m = $monitors{$p};
-		my $parent = $m->{parent};
-		if (($parent eq $monitor) && !$m->{exists})
-		{
-			display($dbg_mon,0,"DELETING UNUSED MONITOR($p");
-			delete $monitors{$p}
-		}
-	}
-
-	return 1;
-}
-
-
 
 sub run
 	# we never actually stop the monitor due to problems with threads.
@@ -290,6 +155,11 @@ sub run
 	# rebuilds it on started
 {
 	display($dbg_thread,0,"monitor::run()");
+
+	my $monitors = [];
+	my $monitor_groups = [];
+	push @$monitor_groups,$monitors;
+	my $repo_list = getRepoList();
 
 	if ($DELAY_MONITOR_STARTUP)		# to see startup before any events occur
 	{
@@ -305,117 +175,144 @@ sub run
 		if ($stopping)
 		{
 			display($dbg_thread,0,"thread {stopping}");
-			%monitors = ();
-			$stopping = 0;
-			$running = 0;
-			$started = 0;
-			$paused = 0;
+			last;
 		}
-		elsif ($running)
+		elsif ($pause)
 		{
-			if (!$started)		# ==> $CHECK_CHANGES_ON_INIT
-			{
-				display($dbg_thread,0,"thread {starting}");
-				&$the_callback({ status =>"starting" });
-				my $repo_list = getRepoList();
+			display($dbg_thread,0,"thread {pausing}");
+			$pause = 0;
+			$paused = 1;
+		}
+		elsif ($paused)
+		{
+			display($dbg_thread+1,0,"thread {paused}");
+			sleep($MONITOR_PAUSE_SLEEP);
+		}
 
-				for my $repo (@$repo_list)
+		#------------------------------------
+		# initialization
+		#------------------------------------
+
+		elsif (!$started)
+		{
+			display($dbg_thread,0,"thread {starting}");
+			&$the_callback({ status =>"starting" });
+
+			my $num = 0;
+			my $group = 0;
+			for my $repo (@$repo_list)
+			{
+				if ($num == $MAXIMUM_WAIT_OBJECTS)
 				{
-					&$the_callback({ status =>"monitor: $repo->{path}" });
-					$rslt = undef if !createMonitor($repo->{path});
+					$num = 0;
+					$group++;
+					$monitors = [];
+					push @$monitor_groups,$monitors;
 				}
 
-				for my $repo (@$repo_list)
+				&$the_callback({ status =>"monitor: $repo->{path}" });
+				display($dbg_mon,0,"CREATE MONITOR[$group:$num] $repo->{path}");
+				my $mon = Win32::ChangeNotify->new($repo->{path},1,$WIN32_FILTER);
+				if (!$mon)
 				{
-					last if !defined($rslt);
-					display($dbg_mon,0,"initial call to gitChanges($repo->{path})");
-					&$the_callback({ status =>"checking: $repo->{path}" });
+					error("apps::gitUI::monitor::createMonitor() - Could not create monitor($group:$num) $repo->{path}");
+					$rslt = undef;
+					last;
+				}
+				push @$monitors,$mon;
+				$num++;
+			}
+
+			for my $repo (@$repo_list)
+			{
+				last if !defined($rslt);
+				display($dbg_mon,0,"initial call to gitChanges($repo->{path})");
+				&$the_callback({ status =>"checking: $repo->{path}" });
+				$rslt = gitChanges($repo);
+				last if !defined($rslt);
+				if ($rslt)
+				{
+					setCanPushPull($repo);
+					&$the_callback({ repo=>$repo });
+				}
+			}
+
+			last if !defined($rslt);
+
+			$started = 1;
+			display($dbg_thread,0,"thread {started}");
+			&$the_callback({ status =>"started" }) ;
+		}
+
+		#------------------------------------
+		# normal running
+		#------------------------------------
+
+		else
+		{
+			my $group = 0;
+			for $monitors (@$monitor_groups)
+			{
+				my $ready = Win32::ChangeNotify::wait_any(@$monitors,$MONITOR_WAIT);
+				if (!defined($ready))
+				{
+					error("Error in Win32::ChangeNotify() group($group): $^E");
+					$rslt = undef;
+					last;
+				}
+				if ($ready)
+				{
+					$monitors->[$ready-1]->reset();
+					my $num = $group * $MAXIMUM_WAIT_OBJECTS + $ready-1;
+					my $repo = $repo_list->[$num];
+					display($dbg_cb,0,"win_notify[$group:".($ready-1)."] $repo->{path}");
+
 					$rslt = gitChanges($repo);
+					display($dbg_cb,1,"gitChanges="._def($rslt));
+
 					last if !defined($rslt);
 					if ($rslt)
 					{
 						setCanPushPull($repo);
 						&$the_callback({ repo=>$repo });
 					}
-				}
+				}	# a monitor is reaady
 
-				if (defined($rslt))
-				{
-					$started = 1;
-					display($dbg_thread,0,"thread {started}");
-					&$the_callback({ status =>"started" }) ;
-				}
-			}
-			elsif ($pause)
-			{
-				display($dbg_thread,0,"thread {pausing}");
-				$pause = 0;
-				$paused = 1;
-			}
-			elsif (!$paused)
-			{
-				my $repo_hash = getRepoHash();
-				for my $path (sort keys %monitors)
-				{
-					my $m = $monitors{$path};
-					next if !$m;	# could be deleted during loop
+				$group++;
 
-					my $rslt = $m->{mon}->wait(0);
-					if (defined($rslt) && $rslt>0)
-					{
-						$m->{mon}->reset();
+			}	# for each monitor_group
 
-						my $parent = $m->{parent};
-						my $report_path = $parent ? $parent->{path} : $m->{path};
-						my $repo = $repo_hash->{$report_path};
-						display($dbg_cb,0,"win_notify($path,$report_path)");
+			last if !defined($rslt);
 
-						if (!$repo)
-						{
-							error("Could not get repo $repo($report_path)");
-							$rslt = undef;
-							last;
-						}
-						$rslt = gitChanges($repo);
-						last if !defined($rslt);
-						if ($rslt)
-						{
-							setCanPushPull($repo);
-							&$the_callback({ repo=>$repo });
-						}
+		}	# normal running
+	}	# while 1
 
-						# create/remove monitors based on file system changes
-
-						if ($m->{excludes})
-						{
-							$rslt = undef if !createSubMonitors($m);
-							last if !$rslt;
-						}
-
-					}	# got result from monitor
-				}	# for each monitor
-			}	# ! paused
-
-			if (!defined($rslt))
-			{
-				%monitors = ();
-				$stopping = 0;
-				$running = 0;
-				$started = 0;
-				$paused = 0;
-
-				warning($dbg_thread,0,"STOPPING MONITOR DUE TO ERROR!!");
-				&$the_callback({ status =>"STOPPING MONITOR DUE TO ERROR!!" });
-
-				sleep(10)
-			}
-
-		}	# running
-
-		sleep(defined($rslt)?0.2:10);
+	if (!$stopping)
+	{
+		error("MONITOR STOPPED  DUE TO ERROR!!");
+		&$the_callback({ status =>"MONITOR STOPPED DUE TO ERROR!!" });
+	}
+	else
+	{
+		display($dbg_thread,0,"thread {stopped}");
 	}
 
-	display($dbg_mon,0,"thread exited abnormally!!");
+	$monitors = undef;
+	$monitor_groups = [];
+	$running = 0;
+	$started = 0;
+	$stopping = 0;
+	$paused = 0;
+
+	# program used to crash if thread exits
+    #
+	# while (0)
+	# {
+	# 	warning($dbg_thread,0,"STOPPED MONITOR DUE TO ERROR!!");
+	# 	sleep(10)
+	# }
+
+	display($dbg_thread,0,"thread {exiting}");
 }
 
 
@@ -427,7 +324,7 @@ sub run
 
 sub monitorStarted
 {
-	return $started;
+	return $running && $started;
 }
 
 
@@ -446,15 +343,15 @@ sub monitorInit
 sub monitorStart
 {
 	display($dbg_mon,0,"monitor::start()");
-
 	return !error("already running")
 		if $running;
 
+	$running = 1;
 	$started = 0;
 	$stopping = 0;
 	$paused = 0;
 
-	if (!$thread)
+	# if (!$thread)
 	{
 		display($dbg_mon,0,"starting thread");
 		$thread = threads->create(\&run);
@@ -462,7 +359,6 @@ sub monitorStart
 		display($dbg_mon,0,"thread started");
 	}
 
-	$running = 1;
 	display($dbg_mon,0,"monitor::start() returning");
 	return 1;
 }
