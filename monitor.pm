@@ -39,7 +39,6 @@ use warnings;
 use threads;
 use threads::shared;
 use Win32::ChangeNotify;
-# use Win32::IPC qw(wait_any);
 use Time::HiRes qw(sleep time);
 use apps::gitUI::repos;
 use apps::gitUI::repoGit;
@@ -114,6 +113,67 @@ my $paused:shared = 0;			# state
 
 my $PAUSE_TIMEOUT = 2;
 
+
+#--------------------------------------
+# API
+#--------------------------------------
+
+sub monitorStarted
+{
+	return $running && $started;
+}
+
+
+sub monitorInit
+{
+	my ($callback) = @_;
+	display($dbg_mon,0,"monitorInit()");
+	return !error("callback not specified")
+		if !$callback;
+	$the_callback = $callback,
+	return monitorStart();
+}
+
+
+sub monitorStart
+{
+	display($dbg_mon,0,"monitor::start()");
+	return !error("already running")
+		if $running;
+
+	$running = 1;
+	$started = 0;
+	$stopping = 0;
+	$paused = 0;
+
+	# if (!$thread)
+	{
+		display($dbg_mon,0,"starting thread");
+		$thread = threads->create(\&run);
+		$thread->detach();
+		display($dbg_mon,0,"thread started");
+	}
+
+	display($dbg_mon,0,"monitor::start() returning");
+	return 1;
+}
+
+
+sub monitorStop
+{
+	display($dbg_mon,0,"monitor::stop()");
+	return error("monitor not running")
+		if !$running;
+	$stopping = 1;
+	while ($running)
+	{
+		display($dbg_mon,0,"waiting for monitor thread to stop ...");
+		sleep(0.2);
+	}
+	display($dbg_thread,0,"monitor stopped()");
+}
+
+
 sub monitorPause
 {
 	my ($p) = @_;
@@ -144,15 +204,11 @@ sub monitorPause
 
 
 
-
 #------------------------------------------------------
 # run()
 #------------------------------------------------------
 
 sub run
-	# we never actually stop the monitor due to problems with threads.
-	# rather we tell it to stop and it clears the monitor list, and
-	# rebuilds it on started
 {
 	display($dbg_thread,0,"monitor::run()");
 
@@ -170,7 +226,7 @@ sub run
 	my $rslt = 1;
 	while (1)
 	{
-		display($dbg_thread+1,0,"thread top");
+		display($dbg_thread+1,0,"thread {top}");
 
 		if ($stopping)
 		{
@@ -313,102 +369,10 @@ sub run
 	# }
 
 	display($dbg_thread,0,"thread {exiting}");
-}
+
+}	# monitor::run()
 
 
-
-#--------------------------------------
-# API
-#--------------------------------------
-
-
-sub monitorStarted
-{
-	return $running && $started;
-}
-
-
-sub monitorInit
-{
-	my ($callback) = @_;
-	display($dbg_mon,0,"monitorInit()");
-	return !error("callback not specified")
-		if !$callback;
-	$the_callback = $callback,
-	return monitorStart();
-}
-
-
-
-sub monitorStart
-{
-	display($dbg_mon,0,"monitor::start()");
-	return !error("already running")
-		if $running;
-
-	$running = 1;
-	$started = 0;
-	$stopping = 0;
-	$paused = 0;
-
-	# if (!$thread)
-	{
-		display($dbg_mon,0,"starting thread");
-		$thread = threads->create(\&run);
-		$thread->detach();
-		display($dbg_mon,0,"thread started");
-	}
-
-	display($dbg_mon,0,"monitor::start() returning");
-	return 1;
-}
-
-
-sub monitorStop
-{
-	display($dbg_mon,0,"monitor::stop()");
-	return error("monitor not running")
-		if !$running;
-	$stopping = 1;
-	while ($running)
-	{
-		display($dbg_mon,0,"waiting for monitor thread to stop ...");
-		sleep(0.2);
-	}
-	display($dbg_thread,0,"monitor stopped()");
-}
-
-
-
-#---------------------------------------------
-# test main
-#---------------------------------------------
-
-if (0)
-{
-	my $chg_num:shared = 0;
-	sub callback
-	{
-		my ($repo) = @_;
-		$chg_num++;
-		print "CHANGE($chg_num) $repo->{path}\n";
-	}
-
-	if (parseRepos())
-	{
-		my $mon = apps::gitUI::monitor->new(\&callback);
-		if ($mon)
-		{
-			if ($mon->start())
-			{
-				while (1)
-				{
-					sleep(1);
-				}
-			}
-		}
-	}
-}
 
 
 

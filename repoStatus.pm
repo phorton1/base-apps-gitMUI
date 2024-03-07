@@ -5,7 +5,8 @@
 # changes and local submodules.
 #
 # uses same notifyRepoChanged() method as the monitor
-# thread.
+# thread and TODO probably should be moved to monitorStatus.pm
+# as part of the monitor state machine ...
 #
 # can be restarted in the middle of an existing 'update'
 #
@@ -343,56 +344,14 @@ sub initRepoStatus
 	$repo->{save_BEHIND} 	= $repo->{BEHIND};
 	$repo->{save_GITHUB_ID} = $repo->{GITHUB_ID} || '';
 
-	# $repo->{save_AHEAD} 	= $repo->{AHEAD};
-	# $repo->{save_REBASE} 	= $repo->{REBASE};
-	# $repo->{save_HEAD_ID} 	= $repo->{HEAD_ID};
-	# $repo->{save_MASTER_ID} = $repo->{MASTER_ID};
-	# $repo->{save_REMOTE_ID} = $repo->{REMOTE_ID};
-	# $repo->{save_REMOTE_COMMITS} = $repo->{remote_commits};
-
-	# $repo->{AHEAD} = 0;
-	# $repo->{REBASE} = 0;
-
 	$repo->{BEHIND} = 0;
 	$repo->{found_REMOTE_ID_on_github} = 0;
-
-	# delete $repo->{local_commits};
-	# done by gitStart()
 
 	delete $repo->{remote_commits};
 	return gitStart($repo);
 }
 
 
-# sub checkChanged
-# {
-# 	my ($numeric,$pchanged,$repo,$field) = @_;
-# 	my $save_field = "save_$field";
-# 	my $val = $repo->{$field};
-# 	my $save_val = $repo->{$save_field};
-# 	my $eq = $numeric ?
-# 		($val == $save_val) :
-# 		($val eq $save_val);
-# 	if (!$eq)
-# 	{
-# 		$$pchanged = 1;
-# 		display($dbg_notify,0,"changed($field) from $save_val to $val on repo($repo->{path})",0,$UTILS_COLOR_CYAN);
-# 	}
-# }
-
-#	sub checkRemoteCommitsChanged
-#		# if two subsequent events lists return the same
-#		# number of events for a repo, I consider it unchanged
-#	{
-#		my ($pchanged,$repo) = @_;
-#		my $remote_commits = $repo->{remote_commits};
-#		my $saved_commits = $repo->{save_REMOTE_COMMITS};
-#		$$pchanged = 1 if
-#			($remote_commits && !$saved_commits) ||
-#			(!$remote_commits && $saved_commits) ||
-#			($remote_commits && scalar(@$remote_commits) != scalar(@$saved_commits));
-#		delete $repo->{save_REMOTE_COMMITS};
-#	}
 
 
 sub finishRepoStatus
@@ -413,15 +372,6 @@ sub finishRepoStatus
 			_lim($repo->{GITHUB_ID},8).") for $repo->{path}",
 			0,$UTILS_COLOR_CYAN) if $repo->{save_GITHUB_ID};
 	}
-
-	# checkChanged(1,\$changed,$repo,'AHEAD');
-	# checkChanged(1,\$changed,$repo,'BEHIND');
-	# checkChanged(1,\$changed,$repo,'REBASE');
-	# checkChanged(0,\$changed,$repo,'HEAD_ID');
-	# checkChanged(0,\$changed,$repo,'MASTER_ID');
-	# checkChanged(0,\$changed,$repo,'REMOTE_ID');
-	# checkChanged(0,\$changed,$repo,'GITHUB_ID');
-	# checkRemoteCommitsChanged(\$changed,$repo);
 
 	delete $repo->{save_BEHIND};
 	delete $repo->{save_GITHUB_ID};
