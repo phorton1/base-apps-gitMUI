@@ -32,6 +32,7 @@ use apps::gitUI::monitor;
 use apps::gitUI::pathWindow;
 use apps::gitUI::reposWindow;
 use apps::gitUI::commitWindow;
+use apps::gitUI::submoduleWindow;
 use apps::gitUI::progressDialog;
 use apps::gitUI::dialogDisplay;
 use base qw(Pub::WX::Frame);
@@ -144,6 +145,14 @@ sub createPane
 		$book ||= $this->{book};
         return apps::gitUI::commitWindow->new($this,$id,$book,$data);
 	}
+	elsif ($id == $ID_SUBMODULES_WINDOW)
+	{
+		my $pane = $this->activateSingleInstancePane($id,$book,$data);
+		return $pane if $pane;
+		$book ||= $this->{book};
+        return apps::gitUI::submoduleWindow->new($this,$id,$book,$data);
+	}
+
     return $this->SUPER::createPane($id,$book,$data);
 }
 
@@ -231,11 +240,9 @@ sub onMonitorEvent
 	{
 		for my $pane (@{$this->{panes}})
 		{
-			display($dbg_mon,1,"pane($pane) can=".$pane->can("notifyRepoChanged"));
-			if ($pane && $pane->can("notifyRepoChanged"))
-			{
-				$pane->notifyRepoChanged($repo);
-			}
+			my $can = $pane && $pane->can("notifyRepoChanged") ? 1 : 0;
+			display($dbg_mon,1,"pane($pane) can($can)");
+			$pane->notifyRepoChanged($repo) if $can;
 		}
 	}
 }
