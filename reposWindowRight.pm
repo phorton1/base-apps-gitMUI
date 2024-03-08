@@ -144,16 +144,20 @@ sub onUpdateUI
 		$repo &&
 		$repo->canPush();
 	$enable = 1 if $id == $COMMAND_PULL_LOCAL &&
-		$repo &&
-		$repo->canPull();
+		monitorRunning() &&
+		$repo && !$repo->{AHEAD};
 	$enable = 1 if $id == $COMMAND_UPDATE_SUBMODULES &&
 		monitorRunning() && !$in_update_submodules;
+
+	# allow pull on individual repo even
+	# it is not known to be BEHIND
 
 	if ($id == $COMMAND_PULL_LOCAL)
 	{
 		my $button_title =
-			$enable && $repo->needsStash() ?
-			'Stash+Pull' : 'Pull';
+			$repo && $repo->needsStash() ? 'Stash+Pull' :
+			$repo && $repo->canPull() ? 'Needs Pull' :
+			'Pull';
 		$event->SetText($button_title) if
 			$event->GetText() ne $button_title;
 	}

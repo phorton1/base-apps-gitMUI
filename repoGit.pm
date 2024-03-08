@@ -1021,6 +1021,12 @@ sub gitPull
 		my $exit_code = $? || 0;
 		my $msg = "rebase exit_code($exit_code) text($text)";
 		display($dbg_pull+1,2,$msg);
+		if ($text =~ /Current branch $branch is up to date/)
+		{
+			display($dbg_pull,1,"gitPull() no changes returning 1");
+			gitError($repo,"Repo is up to date!");
+			return 1;
+		}
 		if ($exit_code || $text !~ /Successfully rebased and updated/)
 		{
 			gitError($repo,$msg);
@@ -1039,7 +1045,6 @@ sub gitPull
 	setCanPushPull($repo);
 	apps::gitUI::Frame::monitor_callback({ repo=>$repo })
 		if getAppFrame();
-
 
 	my $parent_repo = $repo->{parent_repo};
 	if ($AUTO_UPDATE_SUBMODULE_PARENTS && $rslt && $parent_repo)
