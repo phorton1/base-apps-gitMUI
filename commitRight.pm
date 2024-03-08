@@ -22,7 +22,7 @@ use apps::gitUI::repos;
 use apps::gitUI::myTextCtrl;
 use apps::gitUI::myHyperlink;
 use apps::gitUI::repoGit;
-use apps::gitUI::repoStatus;
+use apps::gitUI::monitor;
 use apps::gitUI::repoHistory;
 use apps::gitUI::Resources;
 use Pub::Utils;
@@ -232,14 +232,14 @@ sub onButton
 
 		display($dbg_cmds,0,"COMMIT_BUTTON doing commit on repos");
 
-		freezeMonitors(1);
+		monitorPause(1);
 		for my $repo (@$repo_list)
 		{
 			my $rslt = $repo->canCommit() ?
 				gitCommit($repo,$commit_msg) : 1;
 			last if !$rslt;
 		}
-		freezeMonitors(0);
+		monitorPause(0);
 	}
 }
 

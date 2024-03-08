@@ -117,9 +117,10 @@ The gitStatus process is run at program startup on a Thread.
 The gitStatus 'monitor' is built to wait until the disk **monitor**
 is started.
 
-An explicit command, repoStatusStart() may be called
+An explicit command, monitorUpdate() may be called
 to invoke a manual refresh of the status, and is generally only
-called if repoStatusBusy() returns false.
+called if montiorRunning() returns true and monitorBus() returns
+false.
 
 
 ## Refresh Status, Push, and Pull Buttons in Info Window

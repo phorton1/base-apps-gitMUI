@@ -25,7 +25,6 @@ use Pub::WX::Dialogs;
 use apps::gitUI::repo;
 use apps::gitUI::repos;
 use apps::gitUI::reposGithub;
-use apps::gitUI::repoStatus;
 use apps::gitUI::utils;
 use apps::gitUI::Resources;
 use apps::gitUI::command;
@@ -105,7 +104,6 @@ sub new
 	EVT_COMMAND($this, -1, $MONITOR_EVENT, \&onMonitorEvent );
 
 	return if !monitorInit(\&monitor_callback);
-	return if !repoStatusInit(\&monitor_callback);
 
 	return $this;
 }
@@ -158,6 +156,23 @@ sub onOpenWindowById
 	$this->createPane($window_id);
 }
 
+
+sub onUpdateUI
+{
+	my ($this,$event) = @_;
+	my $id = $event->GetId();
+	my $enable = 0;
+
+	$enable = 1 if $id == $ID_COMMAND_RESCAN && monitorRunning();
+	$enable = 1 if $id == $ID_COMMAND_REFRESH_STATUS && monitorRunning() && !monitorBusy();
+	$enable = 1 if $id == $ID_COMMAND_REBUILD_CACHE && monitorRunning() && !monitorBusy();
+	$enable = 1 if $id == $ID_COMMAND_PUSH_ALL && canPushRepos();
+	$enable = 1 if $id == $ID_COMMAND_PULL_ALL && canPullRepos();
+
+	$event->Enable($enable);
+}
+
+
 sub onCommand
 {
 	my ($this,$event) = @_;
@@ -193,26 +208,10 @@ sub onCommand
 	}
 	elsif ($id == $ID_COMMAND_REFRESH_STATUS)
 	{
-		repoStatusStart();
+		monitorUpdate();
 	}
 
 }
-
-sub onUpdateUI
-{
-	my ($this,$event) = @_;
-	my $id = $event->GetId();
-	my $enable = 0;
-
-	$enable = 1 if $id == $ID_COMMAND_RESCAN && monitorStarted();
-	$enable = 1 if $id == $ID_COMMAND_REFRESH_STATUS && monitorStarted() && !repoStatusBusy();
-	$enable = 1 if $id == $ID_COMMAND_REBUILD_CACHE && monitorStarted();
-	$enable = 1 if $id == $ID_COMMAND_PUSH_ALL && canPushRepos();
-	$enable = 1 if $id == $ID_COMMAND_PULL_ALL && canPullRepos();
-
-	$event->Enable($enable);
-}
-
 
 
 #------------------------------

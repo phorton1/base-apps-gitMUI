@@ -913,7 +913,7 @@ sub gitPush
 
 	gitStart($repo,$git_repo);
 	$repo->{BEHIND} = 0 if $rslt;
-		# pre-empt the next repoStatus() call
+		# pre-empt the next monitorUpdate() call
 	setCanPushPull($repo);
 	apps::gitUI::Frame::monitor_callback({ repo=>$repo })
 		if getAppFrame();
@@ -986,14 +986,6 @@ sub gitPull
 
 	# Do the fetch.  If it has any problems, they
 	# will be reported via the exception
-
-
-	# This is now freezeMonitors() in the command methods
-	# that call gitXXX methods
-	# apps::gitUI::monitor::monitorPause(1);
-		# should be done on all big operations
-		# and we should also stop the repoStatus  monitor
-
 
 	my $rslt;
 	eval
@@ -1090,7 +1082,6 @@ sub gitPull
 		}
 	}
 
-	# apps::gitUI::monitor::monitorPause(0);
 	display($dbg_pull,1,"gitPull() returning rslt="._def($rslt));
 	return $rslt;
 

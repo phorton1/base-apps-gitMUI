@@ -18,7 +18,6 @@ use Wx::Event qw(
 use Pub::Utils;
 use apps::gitUI::utils;
 use apps::gitUI::repos;
-use apps::gitUI::repoStatus;
 use apps::gitUI::repoHistory;
 use apps::gitUI::monitor;
 use apps::gitUI::myTextCtrl;
@@ -140,7 +139,7 @@ sub onUpdateUI
 
 	my $enable = 0;
 	$enable = 1 if $id == $ID_COMMAND_REFRESH_STATUS &&
-		monitorStarted() && !repoStatusBusy();
+		monitorRunning() && !monitorBusy();
 	$enable = 1 if $id == $COMMAND_PUSH_LOCAL &&
 		$repo &&
 		$repo->canPush();
@@ -148,7 +147,7 @@ sub onUpdateUI
 		$repo &&
 		$repo->canPull();
 	$enable = 1 if $id == $COMMAND_UPDATE_SUBMODULES &&
-		monitorStarted() && !$in_update_submodules;
+		monitorRunning() && !$in_update_submodules;
 
 	if ($id == $COMMAND_PULL_LOCAL)
 	{
@@ -244,7 +243,7 @@ sub doUpdateSubmodules
 	my ($this) = @_;
 	display(0,0,"doUpdateSubmodules()");
 	$in_update_submodules = 1;
-	freezeMonitors(1);
+	monitorPause(1);
 	my $repo_list = getRepoList();
 	for my $sub (@$repo_list)
 	{
@@ -315,7 +314,7 @@ sub doUpdateSubmodules
 
 		last if !$rslt;
 	}
-	freezeMonitors(0);
+	monitorPause(0);
 	$in_update_submodules = 0;
 }
 

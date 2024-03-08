@@ -14,7 +14,7 @@ use Pub::Utils;
 use apps::gitUI::repo;
 use apps::gitUI::utils;
 use apps::gitUI::repoGit;
-use apps::gitUI::repoStatus;
+use apps::gitUI::monitor;
 use apps::gitUI::Resources;
 use apps::gitUI::progressDialog;
 use base qw(Pub::WX::Frame);
@@ -201,7 +201,7 @@ sub threadedCommand
 	display($dbg_cmds+1,1,"data("._def($data).")");
 		# data is for 'tags'
 
-	freezeMonitors(1);
+	monitorPause(1);
 		# stop the monitors ...
 
 	my $rslt = 1;
@@ -247,7 +247,7 @@ sub threadedCommand
 		{ done => 1 };
 	$this->sendThreadEvent( $params );
 
-	freezeMonitors(0);
+	monitorPause(0);
 
 	display($dbg_cmds,0,"threadedCommand() finished");
 
