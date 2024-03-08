@@ -624,7 +624,7 @@ sub oneEvent
 		if !$head;
 	if (!$commits || !@$commits)
 	{
-		warning(0,0,"No commits in event($event_id) path($repo->{path})");
+		warning($dbg_events,-2,"No commits in event($event_id) path($repo->{path})");
 		return 1;
 	}
 

@@ -719,7 +719,7 @@ sub toTextCtrl
 		$this->contentArray($text_ctrl,0,'notes');
 	}
 
-	# COMMIT INFORMATION for debugging repoStatus visible without scrolling
+	# COMMIT INFORMATION for debugging visible without scrolling
 
 	$text_ctrl->addLine();
 	$this->contentLine($text_ctrl,1,'HEAD_ID');

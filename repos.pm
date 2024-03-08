@@ -195,7 +195,7 @@ sub parseRepos
 			{
 				my ($rel_path,$sub_path) = ($1,$2);
 				my $path = makePath($repo->{path},$rel_path);
-				repoWarning(undef,0,1,"SUBMODULE($repo_num, $repo->{path}) = $rel_path ==> $sub_path");
+				repoWarning(undef,$dbg_parse+1,1,"SUBMODULE($repo_num, $repo->{path}) = $rel_path ==> $sub_path");
 				my $sub_module = apps::gitUI::repo->new(
 					$repo_num++,
 					$path,
