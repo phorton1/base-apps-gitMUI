@@ -87,7 +87,7 @@ sub new
 
 	$this->{what_ctrl} = Wx::StaticText->new($top_panel,-1,'',[5,5],[$FILENAME_LEFT-10,20]);
 	my $hyperlink = $this->{hyperlink} = apps::gitUI::myHyperlink->new($top_panel,-1,'',[$FILENAME_LEFT,5]);
-	my $diff_ctrl = $this->{diff_ctrl} = apps::gitUI::myTextCtrl->new($top_panel);
+	my $diff_ctrl = $this->{diff_ctrl} = apps::gitUI::myTextCtrl->new($top_panel,$ID_COMMIT_WINDOW);
 
 	Wx::Button->new($bottom_panel,$ID_COMMAND_RESCAN,'Rescan',		[5,5],	[65,20]);
 	Wx::Button->new($bottom_panel,$COMMAND_COMMIT,'Commit',			[5,30],	[65,20]);
@@ -476,7 +476,7 @@ sub notifyItemSelected
 	}
 	else
 	{
-		$repo->toTextCtrl($diff_ctrl);
+		$repo->toTextCtrl($diff_ctrl,$ID_COMMIT_WINDOW);
 		historyToTextCtrl($diff_ctrl,$repo,0);
 	}
 

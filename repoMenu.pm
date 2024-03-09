@@ -20,12 +20,14 @@ my $dbg_menu = 1;		# context menu and commands
 
 
 my ($ID_OPEN_INFO,
+	$ID_OPEN_SUBS,
 	$ID_OPEN_EXPLORER,
 	$ID_OPEN_GITUI,
 	$ID_BRANCH_HISTORY,
 	$ID_ALL_HISTORY ) = (19000..19999);
 my $menu_desc = {
 	$ID_OPEN_INFO		=> ['Info',				'Open the repository in the Info Window' ],
+	$ID_OPEN_SUBS		=> ['Subs',				'Open the repository in the Subs Window' ],
 	$ID_OPEN_EXPLORER	=> ['Explorer',			'Open the repository in the Windows Explorer' ],
 	$ID_OPEN_GITUI		=> ['GitGUI',			'Open the repository in original GitGUI' ],
 	$ID_BRANCH_HISTORY	=> ['Branch History',	'Show Branch History' ],
@@ -42,8 +44,8 @@ BEGIN {
 
 sub addRepoMenu
 {
-	my ($this,$is_repos_window) = @_;
-	$this->{is_repos_window} = $is_repos_window;
+	my ($this,$window_id) = @_;
+	$this->{window_id} = $window_id;
 	EVT_MENU_RANGE($this, $ID_OPEN_INFO, $ID_ALL_HISTORY, \&onRepoMenu);
 }
 
@@ -51,12 +53,17 @@ sub addRepoMenu
 sub popupRepoMenu
 {
 	my ($this,$repo) = @_;
-	display($dbg_menu,1,"popupRepoMenu)($repo->{path})");
+	display($dbg_menu,1,"popupRepoMenu($this->{window_id},$repo->{path})");
 
 	my $menu = Wx::Menu->new();
 	foreach my $id ($ID_OPEN_INFO..$ID_ALL_HISTORY)
 	{
-		next if $id == $ID_OPEN_INFO && $this->{is_repos_window};
+		next if $id == $ID_OPEN_INFO &&
+			$this->{window_id} == $ID_INFO_WINDOW;
+		next if $id == $ID_OPEN_SUBS && (
+			$this->{window_id} == $ID_SUBS_WINDOW ||
+			(!$repo->{parent_repo} && !$repo->{used_in}));
+
 		my $desc = $menu_desc->{$id};
 		my ($text,$hint) = @$desc;
 		$menu->Append($id,$text,$hint,wxITEM_NORMAL);
@@ -79,6 +86,10 @@ sub onRepoMenu
 	if ($command_id == $ID_OPEN_INFO)
 	{
 		getAppFrame->createPane($ID_INFO_WINDOW,undef,{repo_path=>$repo->{path}});
+	}
+	elsif ($command_id == $ID_OPEN_SUBS)
+	{
+		getAppFrame->createPane($ID_SUBS_WINDOW,undef,{repo_path=>$repo->{path}});
 	}
 	elsif ($command_id == $ID_OPEN_EXPLORER)
 	{

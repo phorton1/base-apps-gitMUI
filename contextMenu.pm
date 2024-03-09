@@ -1,7 +1,9 @@
 #---------------------------------------------
 # apps::gitUI::contextMenu;
 #---------------------------------------------
-# Add-in class for Context menu for files
+# Add-in class for Context menu for myTextCtrl,
+# uses {repo_context} and {window_id} from the
+# text control
 
 package apps::gitUI::contextMenu;
 use strict;
@@ -21,7 +23,8 @@ my $dbg_menu = 0;		# context menu and commands
 
 
 my ($ID_COPY,				# any
-	$ID_OPEN_INFO,		# repo
+	$ID_OPEN_INFO,			# repo
+	$ID_OPEN_SUBS,			# repo
 	$ID_OPEN_GITUI,			# repo
 	$ID_BRANCH_HISTORY,		# repo
 	$ID_ALL_HISTORY,		# repo
@@ -34,6 +37,7 @@ my ($ID_COPY,				# any
 my $menu_desc = {
 	$ID_COPY            => ['Copy',				'Copy selected region to clipboard' ],
 	$ID_OPEN_INFO		=> ['Info',				'Open the repository in the Info Window' ],
+	$ID_OPEN_SUBS       => ['Subs',				'Open the repository in the Subs Window' ],
 	$ID_OPEN_GITUI		=> ['GitGUI',			'Open the repository in original GitGUI' ],
 	$ID_BRANCH_HISTORY	=> ['Branch History',	'Show Branch History' ],
 	$ID_ALL_HISTORY		=> ['All History',		'Show All History' ],
@@ -71,18 +75,32 @@ sub popupContextMenu
 	$this->{popup_path} = $path;
 
 	my $repo_context = $this->{repo_context};
-	my $is_this_repo = $repo_context && $repo &&
-		$repo->{id} eq $repo_context->{id};
+	my $same_repo = $repo_context && $repo &&
+		$repo->{path} eq $repo_context->{path};
+
+	my $is_this_info = $same_repo &&
+		$this->{window_id} == $ID_INFO_WINDOW;
+	my $is_this_sub = $same_repo &&
+		$this->{window_id} == $ID_SUBS_WINDOW;
+
+	# I don't quite see how we are limiting the calls
 
 	my $menu = Wx::Menu->new();
 	foreach my $id ($ID_COPY..$ID_OPEN_IN_BROWSER)
 	{
 		next if $is_url && $id != $ID_OPEN_IN_BROWSER;
 		next if $id == $ID_COPY && (!$this->can('canCopy') || !$this->canCopy());
-		next if $id == $ID_OPEN_INFO && $is_this_repo;
-		next if $id > $ID_COPY && $id <= $ID_ALL_HISTORY && !$repo;
+
+		next if $id == $ID_OPEN_GITUI && !$repo;
+		next if $id == $ID_OPEN_INFO && (!$repo || $is_this_info);
+		next if $id == $ID_OPEN_SUBS && (!$repo || $is_this_sub);
+		next if $id == $ID_BRANCH_HISTORY && !$repo;
+		next if $id == $ID_ALL_HISTORY && !$repo;
+
 		next if $id >= $ID_OPEN_IN_KOMODO && !$path;
 		next if $id == $ID_OPEN_EXPLORER && !$repo && !$path;
+
+		next if $path eq 'MODULES' && $id != $ID_OPEN_SUBS;
 
 		my $desc = $menu_desc->{$id};
 		my ($text,$hint) = @$desc;
@@ -111,9 +129,13 @@ sub onContextMenu
 	{
 		$this->doCopy() if $this->can('doCopy');
 	}
-	if ($command_id == $ID_OPEN_INFO)
+	elsif ($command_id == $ID_OPEN_INFO)
 	{
 		getAppFrame->createPane($ID_INFO_WINDOW,undef,{repo_path=>$repo->{path}});
+	}
+	elsif ($command_id == $ID_OPEN_SUBS)
+	{
+		getAppFrame->createPane($ID_SUBS_WINDOW,undef,{repo_path=>$repo->{path}});
 	}
 	elsif ($command_id == $ID_OPEN_GITUI)
 	{

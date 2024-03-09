@@ -32,7 +32,6 @@ use apps::gitUI::monitor;
 use apps::gitUI::pathWindow;
 use apps::gitUI::infoWindow;
 use apps::gitUI::commitWindow;
-use apps::gitUI::submoduleWindow;
 use apps::gitUI::progressDialog;
 use apps::gitUI::dialogDisplay;
 use base qw(Pub::WX::Frame);
@@ -133,7 +132,7 @@ sub createPane
 	    $book ||= $this->{book};
         return apps::gitUI::pathWindow->new($this,$id,$book,$data);
     }
-	elsif ($id == $ID_INFO_WINDOW)
+	elsif ($id == $ID_INFO_WINDOW || $id == $ID_SUBS_WINDOW)
 	{
 		my $pane = $this->activateSingleInstancePane($id,$book,$data);
 		return $pane if $pane;
@@ -144,13 +143,6 @@ sub createPane
 	{
 		$book ||= $this->{book};
         return apps::gitUI::commitWindow->new($this,$id,$book,$data);
-	}
-	elsif ($id == $ID_SUBMODULES_WINDOW)
-	{
-		my $pane = $this->activateSingleInstancePane($id,$book,$data);
-		return $pane if $pane;
-		$book ||= $this->{book};
-        return apps::gitUI::submoduleWindow->new($this,$id,$book,$data);
 	}
 
     return $this->SUPER::createPane($id,$book,$data);

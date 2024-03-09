@@ -49,7 +49,7 @@ sub new
 
 	$this->populate();
 
-	$this->addRepoMenu();
+	$this->addRepoMenu($ID_PATH_WINDOW);
 	EVT_SIZE($this, \&onSize);
 	return $this;
 }

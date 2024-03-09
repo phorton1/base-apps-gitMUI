@@ -14,6 +14,7 @@ use threads::shared;
 use Time::HiRes qw(sleep);
 use Pub::Utils;
 use Pub::Prefs;
+use apps::gitUI::Resources;
 use apps::gitUI::utils;
 
 
@@ -250,13 +251,16 @@ sub needsStash
 
 sub pathWithinSection
 	# for display only
+	# if !long (default) submodules show as ++rel_path,
+	# otherwise they show as their path within the section
 {
-	my ($this) = @_;
+	my ($this,$long) = @_;
+	$long ||= 0;
 	my $MAX_DISPLAY_PATH = 28;
 		# not including elipses
 
 	# submodules show ++ name
-	my $path = $this->{parent_repo} ?
+	my $path = $this->{parent_repo} && !$long ?
 		"++ $this->{rel_path}" :
 		$this->{path};
 
@@ -482,7 +486,7 @@ sub checkGitConfig
 
 sub contentLine
 {
-	my ($this,$text_ctrl,$bold,$key,$use_label) = @_;
+	my ($this,$text_ctrl,$bold,$key,$use_label,$label_context) = @_;
 	$use_label ||= '';
 	my $label = $use_label || $key;
 	my $is_main_module_ref =
@@ -521,7 +525,10 @@ sub contentLine
 	}
 
 	my $line = $text_ctrl->addLine();
-	$text_ctrl->addPart($line, 0, $color_black, pad($label,12)." = " );
+	my $fill = pad("",12-length($label));
+
+	$text_ctrl->addPart($line, 0, $color_black, $label, $label_context);
+	$text_ctrl->addPart($line, 0, $color_black, $fill." = ");
 	$text_ctrl->addPart($line, $bold, $color, $value, $context );
 }
 
@@ -656,7 +663,7 @@ sub addTextForHashNum
 
 sub toTextCtrl
 {
-	my ($this,$text_ctrl) = @_;
+	my ($this,$text_ctrl,$window_id) = @_;
 	my $content = [];
 
 	$text_ctrl->addLine();
@@ -666,9 +673,11 @@ sub toTextCtrl
 	my $kind =
 		$this->{parent_repo} ? "SUBMODULE " :
 		$this->{used_in} ? "MAIN_MODULE " : 'REPO';
+	my $sub_context = $window_id != $ID_SUBS_WINDOW && (
+		$this->{parent_repo} || $this->{used_in}) ?
+		{ repo=>$this, path=>'MODULES'} : '';
 
-	# $this->contentLine($text_ctrl,0,'num');
-	$this->contentLine($text_ctrl,1,'path',$kind);
+	$this->contentLine($text_ctrl,1,'path',$kind,$sub_context);
 	$this->contentLine($text_ctrl,1,'id');
 	$this->contentLine($text_ctrl,0,'branch');
 	$this->contentLine($text_ctrl,1,'private');
@@ -707,8 +716,11 @@ sub toTextCtrl
 
 	if ($this->{parent_repo})
 	{
+		my $main_module = apps::gitUI::repos::getRepoById($this->{id});
+		my $sub_context = { repo=>$main_module, path=>'MODULES'};
+
 		$text_ctrl->addLine();
-		$this->contentLine($text_ctrl,1,'id','MAIN_MODULE');
+		$this->contentLine($text_ctrl,1,'id','MAIN_MODULE',$sub_context);
 		$this->contentLine($text_ctrl,1,'parent_repo');
 		$this->contentLine($text_ctrl,1,'rel_path');
 	}

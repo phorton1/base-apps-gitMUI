@@ -73,8 +73,8 @@ my $font_fixed_bold = Wx::Font->new(9,wxFONTFAMILY_MODERN,wxFONTSTYLE_NORMAL,wxF
 
 sub new
 {
-    my ($class,$parent) = @_;
-	display($dbg_ctrl,0,"new myTextCtrl()");
+    my ($class,$parent,$window_id) = @_;
+	display($dbg_ctrl,0,"new myTextCtrl($window_id)");
 		# $parent) frame="._def($parent->{frame}));
 
     my $this = $class->SUPER::new($parent);	# ,-1,[0,0],[100,100],wxVSCROLL | wxHSCROLL);
@@ -84,6 +84,7 @@ sub new
 
     $this->{parent} = $parent;
 	$this->{frame} = $parent->{frame};
+	$this->{window_id} = $window_id;
 	$this->{width} = 0;
 	$this->{height} = 0;
 
@@ -1002,34 +1003,6 @@ sub mouseOver
 		$this->refreshScrolled($hit->{rect});
 		$hit->{part}->{hit} = $hit;
 		$status = $this->getClickFunction($hit,0);
-
-		# OLD
-		#
-		# my $context = $hit->{part}->{context};
-    	# if ($context->{path})
-		# {
-		# 	$status = "path: $context->{path}";
-		# }
-		# elsif ($context->{filename})
-		# {
-		# 	$status = "filename: $context->{filename}";
-		# }
-		# elsif ($context->{repo_path})
-		# {
-		# 	$status = "repo_path: $context->{repo_path}";
-		# }
-		# elsif ($context->{repo})
-		# {
-		# 	my $repo = $context->{repo};
-		# 	if ($context->{file})
-		# 	{
-		# 		$status = "repo_file: $repo->{path}$context->{file}";
-		# 	}
-		# 	else
-		# 	{
-		# 		$status = "repo: $repo->{id} = $repo->{path}";
-		# 	}
-		# }
 	}
 
 	$this->{hit} = $hit;
@@ -1069,6 +1042,10 @@ sub mouseClick
 	{
 		$this->{frame}->createPane($ID_INFO_WINDOW,undef,{repo_path=>$path});
 	}
+	elsif ($path =~ s/^SUB //)
+	{
+		$this->{frame}->createPane($ID_SUBS_WINDOW,undef,{repo_path=>$path});
+	}
 	elsif ($path =~ s/^EXPLORE //)
 	{
 		execExplorer($path);
@@ -1091,6 +1068,7 @@ sub getClickFunction
 	# path = https:// == 'shell start' a Browser
 	# path = md,gif,png,jpg,jpeg,pdf - shell
 	# path = txt,pm,pl,cpp,c,h - komodo
+	# path = 'SUBMODULE' = go to the repo in the SUBS window
 	# repo - show repo details if not in that window, open gitUI otherwise
 	# otherwise, show in explorer
 
@@ -1126,8 +1104,9 @@ sub getClickFunction
 		# require that we do not call event->Skip() from the click event
 		# in order to activate the infoWindow.
 
-		return $is_this_repo ?
-			"GITUI $repo->{path}" :
+		return
+			$path eq 'MODULES' ? "SUB $repo->{path}" :
+			$is_this_repo ? "GITUI $repo->{path}" :
 			"INFO $repo->{path}";
 	}
 	elsif ($path)

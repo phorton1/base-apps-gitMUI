@@ -1,9 +1,11 @@
 #------------------------------------------------------------
 # apps::gitUI::infoWindow
 #------------------------------------------------------------
-# A window that shows all repos on the left, and details on the right.
-# Has a command pane for future use like:
-#		Check/Update Document Links
+# A window that shows a list of repos on the left,
+# 	and details on the right.
+# Operates in two modes based on creation ID
+#	$ID_INFO_WINDOW = list of all repos, sorted with spaces
+#   $ID_SUBS_WINDOW = list of MAIN_MODULES, with SUBMODULES under them
 
 
 package apps::gitUI::infoWindow;
@@ -18,6 +20,7 @@ use Wx::Event qw(
 use Pub::Utils;
 use Pub::WX::Window;
 use apps::gitUI::utils;
+use apps::gitUI::Resources;
 use apps::gitUI::infoWindowList;
 use apps::gitUI::infoWindowRight;
 use base qw(Pub::WX::Window);
@@ -52,7 +55,7 @@ sub new
 	# the 'data' member is the name of the connection information
 {
 	my ($class,$frame,$id,$book,$data) = @_;
-	display($dbg_life,0,"infoWindow:new("._def($data).")");
+	display($dbg_life,0,"infoWindow:new($id,"._def($data).")");
 	$data ||= {};
 
 	# use $data if provided
@@ -61,13 +64,14 @@ sub new
 
 	# construct $this and set data members
 
-	my $name = 'Info';
+	my $name = $id == $ID_SUBS_WINDOW ? 'Subs' : 'Info';
 	my $this = $class->SUPER::new($book,$id);
 	$this->MyWindow($frame,$book,$id,$name,$data);
 
 	$this->{name} = $name;
 	$this->{data} = $data;
 	$this->{left_width} = $left_width;
+	$this->{sub_mode} = $id == $ID_SUBS_WINDOW ? 1 : 0;
 
 	# Create splitter and child windows
 	# We set a minimum pane size of 20 pixels merely
@@ -84,7 +88,7 @@ sub new
     $vert_splitter->SplitVertically($left,$right,300);
 
 	$this->doLayout();
-	$left->selectRepo($data->{repo_path}) if $data->{repo_path};
+	$left->selectObject($data->{repo_path}) if $data->{repo_path};
 
     EVT_SIZE($this,\&onSize);
 	EVT_SPLITTER_SASH_POS_CHANGED($this, $ID_SPLITTER_VERT, \&onSashPosChanged);
@@ -105,7 +109,7 @@ sub setPaneData
 	{
 		mergeHash($this->{data},$data);
 		my $repo_path = $data->{repo_path};
-		$this->{left}->selectRepo($repo_path) if $repo_path;
+		$this->{left}->selectObject($repo_path) if $repo_path;
 	}
 }
 

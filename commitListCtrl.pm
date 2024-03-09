@@ -46,6 +46,7 @@ use apps::gitUI::utils;
 use apps::gitUI::repos;
 use apps::gitUI::repoGit;
 use apps::gitUI::repoMenu;
+use apps::gitUI::Resources;
 use apps::gitUI::monitor;	# for $MONITOR_NOTIFY_EVERY_CHANGE
 use base qw(Wx::ScrolledWindow apps::gitUI::repoMenu);
 
@@ -133,7 +134,7 @@ sub new
 	EVT_RIGHT_DOWN($this,\&onRightDown);
 	EVT_MENU_RANGE($this, $ID_REVERT_CHANGES, $ID_OPEN_IN_NOTEPAD, \&onItemMenu);
 
-	$this->addRepoMenu();
+	$this->addRepoMenu($ID_COMMIT_WINDOW);
 
 	return $this;
 }
@@ -648,7 +649,7 @@ sub notifyRepoSelected
 	$this->{notify_item} = '';
 	$this->{parent}->{parent}->{right}->notifyItemSelected({
 		is_staged => $this->{is_staged},
-		repo =>$repo,
+		repo => $repo,
 		item => '' });
 }
 

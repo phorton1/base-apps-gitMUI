@@ -1,16 +1,16 @@
-
-# NEEDS:
-# -	THIS and the pathWindow should really not be multiple instance.
-# - THIS window's hyperlink should have and show the notion of a "selected" repo
-# - Pub::Wx::Frame() should have createOrActivateWindow({data})
-# - THIS windows onSetData() method would select the repo and scroll as necessary
-# - The repoMenu would include the menu item IF not from THIS window
-
 #-------------------------------------------
 # apps::gitUI::infoWindowList
 #-------------------------------------------
-# The left portion of the infoWindow showing a list of repos
-# Largely cut-and-past from pathWindow.pm
+# The left portion of the infoWindow sections
+# containing lists of repos. Based on {sub_mode}
+# these will be the entire list of repos, with
+# possibly unclickable black section headers,
+# or groups of Submodules with a clickable colored
+# header.
+#
+# The addition of a clickable header is a big change,
+# requiring a new toTextCtrl() method for subGroups.
+
 
 package apps::gitUI::infoWindowList;
 use strict;
@@ -29,6 +29,7 @@ use apps::gitUI::repos;
 use apps::gitUI::utils;
 use apps::gitUI::myHyperlink;
 use apps::gitUI::repoMenu;
+use apps::gitUI::Resources;
 use base qw(Wx::ScrolledWindow apps::gitUI::repoMenu);
 
 my $dbg_life = 0;
@@ -39,7 +40,9 @@ my $dbg_sel = -2;
 
 
 
-my $BASE_ID = 1000;
+my $REPO_BASE_ID = 10000;
+my $SUB_BASE_ID = 1000;
+
 
 my $LINE_HEIGHT   = 18;
 
@@ -57,13 +60,15 @@ sub new
 	display($dbg_life,0,"new infoWindowList()");
 
     my $this = $class->SUPER::new($splitter,-1,[0,0],[-1,-1]);
-	$this->addRepoMenu(1);
-		# 1 == this is the infoWindow
 
 	$this->{parent} = $parent;
 	$this->{frame} = $parent->{frame};
+	$this->{sub_mode} = $parent->{sub_mode};
+
 	$this->{ctrls} = [];
 	$this->{ctrls_by_path} = {};
+	$this->{groups} = [];
+	$this->{groups_by_id} = {};
 	$this->{selected_path} = '';
 	$this->{bold_font} = $this->GetFont();
 	$this->{bold_font}->SetWeight(wxFONTWEIGHT_BOLD);
@@ -77,6 +82,9 @@ sub new
 
 	$this->SetBackgroundColour($color_white);
 	$this->populate();
+	$this->addRepoMenu($this->{sub_mode}?
+		$ID_SUBS_WINDOW :
+		$ID_INFO_WINDOW);
 
 	EVT_SIZE($this, \&onSize);
 	return $this;
@@ -84,11 +92,14 @@ sub new
 }
 
 
-sub repoFromCtrlId
+sub objFromCtrlId
 {
-	my ($ctrl_id) = @_;
+	my ($this,$ctrl_id) = @_;
 	my $repo_list = getRepoList();
-	return $repo_list->[$ctrl_id-$BASE_ID];
+	my $obj = ($ctrl_id >= $REPO_BASE_ID) ?
+		$repo_list->[$ctrl_id-$REPO_BASE_ID] :
+		$this->{groups}->[$ctrl_id-$SUB_BASE_ID];
+	return $obj;
 }
 
 
@@ -97,8 +108,8 @@ sub onEnterLink
 	my ($ctrl,$event) = @_;
 	my $this = $ctrl->GetParent();
 	my $ctrl_id = $event->GetId();
-	my $repo = repoFromCtrlId($ctrl_id);
-	$this->{frame}->SetStatusText("INFO $repo->{path}");
+	my $obj = $this->objFromCtrlId($ctrl_id);
+	$this->{frame}->SetStatusText($obj->{path});
 	$ctrl->SetFont($this->{bold_font});
 	$ctrl->Refresh();
 	$event->Skip();
@@ -110,12 +121,10 @@ sub onLeaveLink
 	my ($ctrl,$event) = @_;
 	my $this = $ctrl->GetParent();
 	my $ctrl_id = $event->GetId();
-	my $repo = repoFromCtrlId($ctrl_id);
-	my $path = $repo->{path};
-
+	my $obj = $this->objFromCtrlId($ctrl_id);
 	$this->{frame}->SetStatusText('');
 	$ctrl->SetFont($this->GetFont())
-		if $repo->{path} ne $this->{selected_path};
+		if $obj->{path} ne $this->{selected_path};
 	$ctrl->Refresh();
 	$event->Skip();
 }
@@ -125,17 +134,19 @@ sub onRightDown
 {
 	my ($ctrl,$event) = @_;
 	my $this = $ctrl->GetParent();
-	my $event_id = $event->GetId();
-	my $repo = repoFromCtrlId($event_id);
-	display($dbg_life,0,"onRightDown($repo->{path}");
-	$this->popupRepoMenu($repo);
+	my $ctrl_id = $event->GetId();
+	my $obj = $this->objFromCtrlId($ctrl_id);
+	display($dbg_life,0,"onRightDown($obj->{path})");
+	$this->popupRepoMenu($obj) if !$obj->{is_subgroup};
 }
 
 
-sub selectRepo
+
+sub selectObject
+	# Works with either paths to repo objects, or id's of subgroup 'section' object.
 {
 	my ($this,$path) = @_;
-	display($dbg_sel,0,"selectRepo($path)");
+	display($dbg_sel,0,"selectObject($path)");
 
 	# $this->{parent}->SetFocus();
 		# switch to the infoWindow if called
@@ -144,9 +155,6 @@ sub selectRepo
 	my $ctrl = $this->{ctrls_by_path}->{$path};
 	return !error("Could not find ctrl($path)")
 		if !$ctrl;
-	my $repo = getRepoByPath($path);
-	return !error("Could not find repo($path)")
-		if !$repo;
 
 	my $selected_path = $this->{selected_path};
 	if ($selected_path && $selected_path ne $path)
@@ -189,10 +197,13 @@ sub selectRepo
 		$this->Update();
 	}
 
-	display($dbg_sel+1,1,"finishing select($path)=$repo->{id}");
-	$this->{frame}->SetStatusText("$path == $repo->{id}");
-	$this->{parent}->{right}->notifyRepoSelected($repo);
+	my $ctrl_id = $ctrl->GetId();
+	my $obj = $this->objFromCtrlId($ctrl_id);
 
+	display($dbg_sel+1,1,"finishing selectObject($path)");
+	$this->{frame}->SetStatusText($obj->{path});
+	$this->{parent}->{right}->notifyObjectSelected($obj);
+	$this->Refresh();
 }
 
 
@@ -202,10 +213,13 @@ sub onLeftDown
 	my ($ctrl,$event) = @_;
 	my $this = $ctrl->GetParent();
 	my $ctrl_id = $event->GetId();
-	my $repo = repoFromCtrlId($ctrl_id);
-	$this->selectRepo($repo->{path});
+	my $obj = $this->objFromCtrlId($ctrl_id);
+	display($dbg_life,0,"onLeftDown($obj->{path})");
+	$this->selectObject($obj->{path});
 	$event->Skip();
 }
+
+
 
 
 sub onSize
@@ -254,13 +268,16 @@ sub populate
 
 	display($dbg_pop,0,"populate()");
 
-	my $sections = groupReposBySection();
+	my $sections = $this->{sub_mode} ?
+		groupReposAsSubmodules() :
+		groupReposBySection();
 	$this->DestroyChildren();
 	$this->{ctrls} = [];
 	$this->{ctrls_by_path} = {};
 
 	my $ypos = 5;
 
+	my $group_num = 0;
 	my $page_started = 0;
 	for my $section (@$sections)
 	{
@@ -271,40 +288,68 @@ sub populate
 
 		for my $repo (@{$section->{repos}})
 		{
+			# In {sub_mode} the sections contain the following fields:
+			#
+			#		name == the id of the main submodule repository
+			#		id == ditto
+			#		path == ditto
+			#
+			# This snippet will always be trigger in {sub_mode} as the
+			# id will never be equal to the path.
+			# A ctrl is created using $SUB_BASE_ID, with both the path, and
+			# the display being passed in as that ID.
+
 			if (!$section_started && $section->{name} ne $repo->{path})
 			{
-				display($dbg_pop,1,"staticText($section->{name})");
-				Wx::StaticText->new($this,-1,$section->{name},[5,$ypos]);
+				if ($this->{sub_mode})
+				{
+					my $color = $color_black;
+					my $id_num = $SUB_BASE_ID + $group_num;
+					$this->newCtrl($ypos,$section->{path},$id_num,$section->{name},$color);
+					push @{$this->{groups}},$section;
+					$this->{groups_by_id}->{$section->{name}} = $section;
+				}
+				else
+				{
+					display($dbg_pop,1,"staticText($section->{name})");
+					Wx::StaticText->new($this,-1,$section->{name},[5,$ypos]);
+				}
 				$ypos += $LINE_HEIGHT;
 			}
 
-			my $id_num = $repo->{num} + $BASE_ID;
-			my $display_name = $repo->pathWithinSection();
-			display($dbg_pop,1,"hyperLink($id_num,$display_name)");
-
 			my $color = linkDisplayColor($repo);
-			my $ctrl = apps::gitUI::myHyperlink->new(
-				$this,
-				$id_num,
-				$display_name,
-				[5,$ypos],
-				[-1,-1],
-				$color);
-			push @{$this->{ctrls}},$ctrl;
-			$this->{ctrls_by_path}->{$repo->{path}} = $ctrl;
+			my $id_num = $REPO_BASE_ID + $repo->{num};
+			my $display_name = $repo->pathWithinSection($this->{sub_mode});
+			$this->newCtrl($ypos,$repo->{path},$id_num,$display_name,$color);
 			$ypos += $LINE_HEIGHT;
-
 			$section_started = 1;
-			EVT_LEFT_DOWN($ctrl, \&onLeftDown);
-			EVT_RIGHT_DOWN($ctrl, \&onRightDown);
-			EVT_ENTER_WINDOW($ctrl, \&onEnterLink);
-			EVT_LEAVE_WINDOW($ctrl, \&onLeaveLink);
 		}
+		$group_num++;
 	}
 
 	$this->{ysize} = $ypos + $LINE_HEIGHT;
 	$this->SetVirtualSize([1000,$this->{ysize}]);
 	$this->Refresh();
+}
+
+
+sub newCtrl
+{
+	my ($this,$ypos,$path,$id_num,$display_name,$color) = @_;
+	display($dbg_pop,1,"hyperLink($id_num,$display_name)");
+	my $ctrl = apps::gitUI::myHyperlink->new(
+		$this,
+		$id_num,
+		$display_name,
+		[5,$ypos],
+		[-1,-1],
+		$color);
+	push @{$this->{ctrls}},$ctrl;
+	$this->{ctrls_by_path}->{$path} = $ctrl;
+	EVT_LEFT_DOWN($ctrl, \&onLeftDown);
+	EVT_RIGHT_DOWN($ctrl, \&onRightDown);
+	EVT_ENTER_WINDOW($ctrl, \&onEnterLink);
+	EVT_LEAVE_WINDOW($ctrl, \&onLeaveLink);
 }
 
 
@@ -317,12 +362,13 @@ sub notifyRepoChanged
 	my $path = $repo->{path};
 	display($dbg_notify,0,"$this notifyRepoChanged($path)");
 	my $ctrl = $this->{ctrls_by_path}->{$path};
+	return if $this->{sub_mode} && !$ctrl;
 	return error("Could not find ctrl($path)") if !$ctrl;
 	my $color = linkDisplayColor($repo);
 	$ctrl->SetForegroundColour($color);
 	$ctrl->Refresh();
 	$this->Refresh();
-	$this->{parent}->{right}->notifyRepoSelected($repo)
+	$this->{parent}->{right}->notifyObjectSelected($repo)
 		if $path eq $this->{selected_path};
 }
 
