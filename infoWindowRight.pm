@@ -27,7 +27,7 @@ use base qw(Wx::Window);
 
 
 my $dbg_life = 0;
-my $dbg_notify = 1;
+my $dbg_notify = 0;
 my $dbg_cmds = 0;
 
 
@@ -198,17 +198,11 @@ sub notifyObjectSelected
 	$this->{repo} = $repo;
 	$text_ctrl->setRepoContext($repo);
 
-	if ($repo)
-	{
-		$repo->toTextCtrl($text_ctrl, $this->{sub_mode} ?
-			$ID_SUBS_WINDOW :
-			$ID_INFO_WINDOW );
-		historyToTextCtrl($text_ctrl,$repo,0);
-	}
-	else
-	{
-		$text_ctrl->clearContent();
-	}
+	$obj->toTextCtrl($text_ctrl, $this->{sub_mode} ?
+		$ID_SUBS_WINDOW :
+		$ID_INFO_WINDOW );
+
+	historyToTextCtrl($text_ctrl,$repo,0) if $repo;
 
 	$text_ctrl->Refresh();
 	$this->{repo_name}->SetLabel($obj->{path});

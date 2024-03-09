@@ -5,11 +5,23 @@
 # containing lists of repos. Based on {sub_mode}
 # these will be the entire list of repos, with
 # possibly unclickable black section headers,
-# or groups of Submodules with a clickable colored
+# or groups of Submodules with a clickable
 # header.
 #
-# The addition of a clickable header is a big change,
-# requiring a new toTextCtrl() method for subGroups.
+# There is now a new thing in the system that looks
+# like a repo, but is not.  A subGroup starts off as
+# a 'section', created in repos::groupReposAsSubmodules().
+# It is differntiated by having an 'is_subgroup' member,
+# and starts with {name}, {path}, and {id} members all
+# being set to the id of the MAIN_MODULE for a subGroup.
+#
+# Because it represents a group of other repos, it must
+# be updated whenever any of the repos within it change.
+# I am thinking about making it an actual object (repoGroup.pm),
+# with orthognality to a repo, i.e. it can be Pushed, Pulled,
+# haveChanges, have a toTextCtrl method, and so on.
+
+
 
 
 package apps::gitUI::infoWindowList;
@@ -26,6 +38,7 @@ use Wx::Event qw(
 	EVT_LEAVE_WINDOW);
 use Pub::Utils;
 use apps::gitUI::repos;
+use apps::gitUI::repoGroup;
 use apps::gitUI::utils;
 use apps::gitUI::myHyperlink;
 use apps::gitUI::repoMenu;
@@ -303,11 +316,11 @@ sub populate
 			{
 				if ($this->{sub_mode})
 				{
-					my $color = $color_black;
+					my $color = $section->displayColor();
 					my $id_num = $SUB_BASE_ID + $group_num;
-					$this->newCtrl($ypos,$section->{path},$id_num,$section->{name},$color);
+					$this->newCtrl($ypos,$section->{id},$id_num,$section->{name},$color);
 					push @{$this->{groups}},$section;
-					$this->{groups_by_id}->{$section->{name}} = $section;
+					$this->{groups_by_id}->{$section->{id}} = $section;
 				}
 				else
 				{
@@ -361,15 +374,40 @@ sub notifyRepoChanged
 	my ($this,$repo) = @_;
 	my $path = $repo->{path};
 	display($dbg_notify,0,"$this notifyRepoChanged($path)");
+
+	if ($this->{sub_mode})
+	{
+		for my $group (@{$this->{groups}})
+		{
+			if ($group->matchesPath($path))
+			{
+				$group->setStatus();
+				my $group_path = $group->{path};	# actuall the id
+				my $color = $group->displayColor();
+				my $ctrl = $this->{ctrls_by_path}->{$group_path};
+				$ctrl->SetForegroundColour($color);
+				$ctrl->Refresh();
+				$this->{parent}->{right}->notifyObjectSelected($group)
+					if $group_path eq $this->{selected_path};
+			}
+		}
+	}
+
 	my $ctrl = $this->{ctrls_by_path}->{$path};
-	return if $this->{sub_mode} && !$ctrl;
-	return error("Could not find ctrl($path)") if !$ctrl;
-	my $color = linkDisplayColor($repo);
-	$ctrl->SetForegroundColour($color);
-	$ctrl->Refresh();
+	return error("Could not find ctrl($path)") if
+		!$this->{sub_mode} && !$ctrl;
+
+	if ($ctrl)
+	{
+		my $color = linkDisplayColor($repo);
+		$ctrl->SetForegroundColour($color);
+		$ctrl->Refresh();
+		$this->{parent}->{right}->notifyObjectSelected($repo)
+			if $path eq $this->{selected_path};
+	}
+
 	$this->Refresh();
-	$this->{parent}->{right}->notifyObjectSelected($repo)
-		if $path eq $this->{selected_path};
+
 }
 
 

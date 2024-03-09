@@ -58,7 +58,6 @@ BEGIN
 		setCanPushPull
 
 		groupReposBySection
-		groupReposAsSubmodules
 	);
 }
 
@@ -418,35 +417,6 @@ sub groupReposBySection
 	return $sections;
 }
 
-
-sub groupReposAsSubmodules
-{
-	my $sections = shared_clone([]);
-	my $group_num = 0;
-	for my $repo (@$repo_list)
-	{
-		my $subs = $repo->{used_in};
-		next if !$subs;
-		my $section = section($repo->{id});
-
-		$section->{num} = $group_num++;
-		$section->{is_subgroup} = 1;
-		$section->{id} = $repo->{id};
-		$section->{path} = $repo->{id};
-			# Overload concept of 'path' on a subGroup,
-			# to ease client code. Like a repo, a subGroup
-			# has a path and an id member.
-
-		push @$sections,$section;
-		push @{$section->{repos}},$repo;
-		for my $sub_path (@$subs)
-		{
-			my $sub_repo = getRepoByPath($sub_path);
-			push @{$section->{repos}},$sub_repo;
-		}
-	}
-	return $sections;
-}
 
 
 #--------------------------------------------------------------------
