@@ -185,10 +185,12 @@ sub populate
 
 		my $base_id = $GROUP_BASE_ID + ($group_num * $GROUP_ID_SPACE);
 		my $color = $color_black;
+		my $title = $repo->pathWithinSection();
+
 		my $ctrl = apps::gitUI::myHyperlink->new(
 			$this,
 			$base_id,
-			"GROUP($repo->{path})",
+			"GROUP $title",
 			[$LEFT_MARGIN,$ypos],
 			[-1,-1],
 			$color);
@@ -226,10 +228,12 @@ sub populate
 
 			my $id_num = $base_id + $ctrl_num;
 			my $color = linkDisplayColor($sub);
+			my $title = $sub->pathWithinSection();
+
 			my $ctrl = apps::gitUI::myHyperlink->new(
 				$this,
 				$id_num,
-				"SUB($sub->{path})",
+				$title,
 				[$INDENT_MARGIN,$ypos],
 				[-1,-1],
 				$color);

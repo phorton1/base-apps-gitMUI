@@ -98,9 +98,7 @@ sub onEnterLink
 	my $this = $ctrl->GetParent();
 	my $ctrl_id = $event->GetId();
 	my $repo = repoFromCtrlId($ctrl_id);
-	my $show = "$repo->{path} = $repo->{id}";
-
-	$this->{frame}->SetStatusText($show);
+	$this->{frame}->SetStatusText("INFO $repo->{path}");
 	$ctrl->SetFont($this->{bold_font});
 	$ctrl->Refresh();
 	$event->Skip();

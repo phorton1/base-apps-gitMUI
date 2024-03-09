@@ -67,7 +67,6 @@ sub repoPathFromIdNum
 {
 	my ($id_num) = @_;
 	my $repo_list = getRepoList();
-	# display(0,0,"repoPathFromId($id) num=".scalar(@$repo_list));
 	return $repo_list->[$id_num  - $BASE_ID]->{path};
 }
 
@@ -78,9 +77,8 @@ sub onEnterLink
 	my $event_id = $event->GetId();
 	my $this = $ctrl->GetParent();
 	my $repo = repoFromIdNum($event_id);
-	my $show = "$repo->{path} = $repo->{id}";
 	my $path = repoPathFromIdNum($event_id);
-	$this->{frame}->SetStatusText($show);
+	$this->{frame}->SetStatusText("INFO $repo->{path}");
 	my $font = Wx::Font->new($this->GetFont());
 	$font->SetWeight (wxFONTWEIGHT_BOLD );
 	$ctrl->SetFont($font);
@@ -107,7 +105,6 @@ sub onLeftDown
 	my $path = $repo->{path};
 	display($dbg_win,0,"onLeftDown($event_id,$path)");
 	$this->{frame}->createPane($ID_REPOS_WINDOW,undef,{repo_path=>$path});
-	# execNoShell('git gui',$path);
 }
 
 

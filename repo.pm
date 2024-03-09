@@ -483,29 +483,31 @@ sub checkGitConfig
 sub contentLine
 {
 	my ($this,$text_ctrl,$bold,$key,$use_label) = @_;
+	$use_label ||= '';
 	my $label = $use_label || $key;
 
 	my $value = $this->{$key} || '';
 	return if !defined($value) || $value eq '';
 
 	$value = $value->{path} if $key eq 'parent_repo';
-	$value = repoIdToPath($value)
-		if $use_label && $use_label eq 'MAIN_MODULE';
+	$value = repoIdToPath($value) if $use_label eq 'MAIN_MODULE';
 
 	my $context;
 	my $color = $color_blue;
-	if ($key eq 'path' ||
+
+	if ($key eq 'section_path')
+	{
+		$context = { path => $value };
+	}
+	elsif ($key eq 'path' ||
 		$key eq 'parent_repo' ||
-		($use_label && $use_label eq 'MAIN_MODULE'))
+		$use_label eq 'MAIN_MODULE')
 	{
 		$context = { repo_path => $value };
 		my $repo = apps::gitUI::repos::getRepoByPath($value);
 		$color = linkDisplayColor($repo);
 	}
-	$context = { path => $value } if
-		$key eq 'section_path';
-
-	if ($key eq 'parent' || $key eq 'id')
+	elsif ($key eq 'parent' || $key eq 'id')
 	{
 		my $clean = $value;
 		$clean =~ s/\(|\)//g;
@@ -535,11 +537,8 @@ sub contentArray
 	my $color = $color_blue;
 	for my $item (@$array)
 	{
-		my $value = $item;
-
 		my $context;
-		$context = { repo=>$this, file=>$value } if
-			$key eq 'docs';
+		my $value = $item;
 
 		if ($key eq 'uses' ||
 			$key eq 'used_by' ||
@@ -551,12 +550,18 @@ sub contentArray
 			my $repo = apps::gitUI::repos::getRepoByPath($value);
 			$color = linkDisplayColor($repo);
 		}
-
-
-		$context = { path => $value } if
-			$key eq 'needs';
-		$context = { repo_path => '/src/phorton1', file=>"/$value.md" } if
-			$key eq 'group';
+		elsif ($key eq 'docs')
+		{
+			$context = { repo=>$this, file=>$value };
+		}
+		elsif ($key eq 'needs')
+		{
+			$context = { path => $value };
+		}
+		elsif ($key eq 'group')
+		{
+			$context = { repo_path => '/src/phorton1', file=>"/$value.md" };
+		}
 
 		# GROUPS are recursive through USES and FRIEND.
 		# only the highest level repos need to be specified as groups.
