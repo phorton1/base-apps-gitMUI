@@ -120,7 +120,7 @@ sub onLeftDown
 	my $repo = $this->repoFromIdNum($event_id);
 	my $path = $repo->{path};
 	display($dbg_win,0,"onLeftDown($event_id,$path)");
-	$this->{frame}->createPane($ID_REPOS_WINDOW,undef,{repo_path=>$path});
+	$this->{frame}->createPane($ID_INFO_WINDOW,undef,{repo_path=>$path});
 }
 
 

@@ -20,7 +20,7 @@ BEGIN
 	our @EXPORT = ( qw(
 
 		$ID_PATH_WINDOW
-		$ID_REPOS_WINDOW
+		$ID_INFO_WINDOW
 		$ID_COMMIT_WINDOW
 		$ID_SUBMODULES_WINDOW
 		$ID_STATUS_WINDOW
@@ -46,7 +46,7 @@ our (
 
 	$ID_PATH_WINDOW,
 	$ID_COMMIT_WINDOW,
-	$ID_REPOS_WINDOW,
+	$ID_INFO_WINDOW,
 	$ID_SUBMODULES_WINDOW,
 	$ID_STATUS_WINDOW,
 
@@ -84,7 +84,7 @@ our (
 mergeHash($resources->{command_data},{
 	$ID_PATH_WINDOW			=> ['Paths',		'View all repositories by path grouped by sections'],
 	$ID_COMMIT_WINDOW       => ['Commit',		'A gitUI like window that allows staging, commit, and push' ],
-	$ID_REPOS_WINDOW		=> ['Repos',		'List of Repos with Details' ],
+	$ID_INFO_WINDOW			=> ['Info',			'List of Repos with Details' ],
 	$ID_SUBMODULES_WINDOW	=> ['Submodules',	'Show status of all submodules' ],
 	$ID_STATUS_WINDOW		=> ['Status',		'DOES PULLS! A tabular report of Repos showing their status vis-a-vis github' ],
 
@@ -110,7 +110,7 @@ my @main_menu = (
 
 unshift @{$resources->{view_menu}},(
 	$ID_PATH_WINDOW,
-	$ID_REPOS_WINDOW,
+	$ID_INFO_WINDOW,
 	$ID_COMMIT_WINDOW,
 	$ID_STATUS_WINDOW,
 	$ID_SUBMODULES_WINDOW,

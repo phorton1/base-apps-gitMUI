@@ -225,7 +225,7 @@ our $color_white         = Wx::Colour->new(0xFF, 0xFF, 0xFF);		# dialog: repoNot
 our $color_dark_cyan     = Wx::Colour->new(0x00, 0x80, 0x80);		# unused
 our $color_lime  	     = Wx::Colour->new(0x50, 0xA0, 0x00);		# hitory: tags
 our $color_light_grey    = Wx::Colour->new(0xF0, 0xF0, 0xF0);		# commitRight panel; dialog: repoDisplay
-our $color_medium_grey   = Wx::Colour->new(0xC0, 0xC0, 0xC0);		# reposWindowList selected item
+our $color_medium_grey   = Wx::Colour->new(0xC0, 0xC0, 0xC0);		# infoWindowList selected item
 
 our $color_git_staged    = Wx::Colour->new(0xA0, 0xFF, 0xA0);		# commitList(staged) green headeer
 our $color_git_unstaged  = Wx::Colour->new(0xff, 0xB0, 0xA0);		# commitList(unstqaged) orange header

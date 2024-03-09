@@ -43,7 +43,7 @@ use apps::gitUI::utils;
 
 my $AUTO_UPDATE_SUBMODULE_PARENTS = 0;
 	# THIS APPROACH IS "SO-SO".
-	# TRYING A PROTOTYPE OF ANOTHER APPROACH in reposWindowRight().
+	# TRYING A PROTOTYPE OF ANOTHER APPROACH in infoWindowRight().
 	# After a pull of a submodule, we will call gitChanges()
 	# on the parent module.  If it has exactly one unstaged
 	# change, and it is the submodule, we will Commit and

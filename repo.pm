@@ -485,12 +485,15 @@ sub contentLine
 	my ($this,$text_ctrl,$bold,$key,$use_label) = @_;
 	$use_label ||= '';
 	my $label = $use_label || $key;
+	my $is_main_module_ref =
+		$use_label eq 'MAIN_MODULE' &&
+		$key eq 'id';
 
 	my $value = $this->{$key} || '';
 	return if !defined($value) || $value eq '';
 
 	$value = $value->{path} if $key eq 'parent_repo';
-	$value = repoIdToPath($value) if $use_label eq 'MAIN_MODULE';
+	$value = repoIdToPath($value) if $is_main_module_ref;
 
 	my $context;
 	my $color = $color_blue;
@@ -501,7 +504,7 @@ sub contentLine
 	}
 	elsif ($key eq 'path' ||
 		$key eq 'parent_repo' ||
-		$use_label eq 'MAIN_MODULE')
+		$is_main_module_ref)
 	{
 		$context = { repo_path => $value };
 		my $repo = apps::gitUI::repos::getRepoByPath($value);
@@ -660,8 +663,12 @@ sub toTextCtrl
 
 	# MAIN FIELDS FIRST including the $short_status
 
+	my $kind =
+		$this->{parent_repo} ? "SUBMODULE " :
+		$this->{used_in} ? "MAIN_MODULE " : 'REPO';
+
 	# $this->contentLine($text_ctrl,0,'num');
-	$this->contentLine($text_ctrl,1,'path');
+	$this->contentLine($text_ctrl,1,'path',$kind);
 	$this->contentLine($text_ctrl,1,'id');
 	$this->contentLine($text_ctrl,0,'branch');
 	$this->contentLine($text_ctrl,1,'private');

@@ -967,7 +967,7 @@ sub onMouse
 
 	# eat the event if it's a click, so that
 	# the window changes appropriate if a link
-	# to the reposWindow is clicked from the commitWindow
+	# to the infoWindow is clicked from the commitWindow
 
 	my $do_skip = 1;
 	if ($hit && $lclick)
@@ -1067,7 +1067,7 @@ sub mouseClick
 	}
 	elsif ($path =~ s/^INFO //)
 	{
-		$this->{frame}->createPane($ID_REPOS_WINDOW,undef,{repo_path=>$path});
+		$this->{frame}->createPane($ID_INFO_WINDOW,undef,{repo_path=>$path});
 	}
 	elsif ($path =~ s/^EXPLORE //)
 	{
@@ -1124,7 +1124,7 @@ sub getClickFunction
 
 		# navigation clicks on the myTextCtrl in the commitRight window
 		# require that we do not call event->Skip() from the click event
-		# in order to activate the reposWindow.
+		# in order to activate the infoWindow.
 
 		return $is_this_repo ?
 			"GITUI $repo->{path}" :

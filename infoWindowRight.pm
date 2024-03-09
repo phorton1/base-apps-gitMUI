@@ -1,10 +1,10 @@
 #-------------------------------------------
-# apps::gitUI::reposWindowRight
+# apps::gitUI::infoWindowRight
 #-------------------------------------------
-# The right side of the reposWindow myTextCtrl display area
+# The right side of the infoWindow myTextCtrl display area
 # and a Pane with possible future command buttons
 
-package apps::gitUI::reposWindowRight;
+package apps::gitUI::infoWindowRight;
 use strict;
 use warnings;
 use threads;
@@ -57,7 +57,7 @@ my $in_update_submodules:shared = 0;
 sub new
 {
     my ($class,$parent,$splitter) = @_;
-	display($dbg_life,0,"new reposWindowRight()");
+	display($dbg_life,0,"new infoWindowRight()");
     my $this = $class->SUPER::new($splitter);
     $this->{parent} = $parent;
 
@@ -170,7 +170,7 @@ sub onButton
 {
 	my ($this,$event) = @_;
 	my $id = $event->GetId();
-	display($dbg_cmds,0,"reposWindowRight::onButton($id) repo=".($this->{repo}?$this->{repo}->{path}:'undef'));
+	display($dbg_cmds,0,"infoWindowRight::onButton($id) repo=".($this->{repo}?$this->{repo}->{path}:'undef'));
 
 	if ($id == $ID_COMMAND_REFRESH_STATUS)
 	{
@@ -198,7 +198,7 @@ sub onButton
 sub notifyRepoSelected
 {
 	my ($this,$repo) = @_;
-	display($dbg_notify,0,"reposWindowRight::notifyItemSelected($repo->{path}=$repo->{id} called");
+	display($dbg_notify,0,"infoWindowRight::notifyItemSelected($repo->{path}=$repo->{id} called");
 
 	my $path = $repo ? $repo->{path} : '';
 	my $text_ctrl = $this->{text_ctrl};
@@ -223,11 +223,7 @@ sub notifyRepoSelected
 	historyToTextCtrl($text_ctrl,$repo,0);
 	$text_ctrl->Refresh();
 
-	my $kind =
-		$repo->{parent_repo} ? "SUBMODULE " :
-		$repo->{used_in} ? "MAIN_MODULE " : '';
-
-	$this->{repo_name}->SetLabel($kind.$path);
+	$this->{repo_name}->SetLabel($path);
 	$this->{title_ctrl}->SetLabel("Repo[$repo->{num}]");
 }
 

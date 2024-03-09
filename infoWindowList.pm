@@ -7,12 +7,12 @@
 # - The repoMenu would include the menu item IF not from THIS window
 
 #-------------------------------------------
-# apps::gitUI::reposWindowList
+# apps::gitUI::infoWindowList
 #-------------------------------------------
-# The left portion of the reposWindow showing a list of repos
+# The left portion of the infoWindow showing a list of repos
 # Largely cut-and-past from pathWindow.pm
 
-package apps::gitUI::reposWindowList;
+package apps::gitUI::infoWindowList;
 use strict;
 use warnings;
 use threads;
@@ -54,11 +54,11 @@ BEGIN {
 sub new
 {
     my ($class,$parent,$splitter) = @_;
-	display($dbg_life,0,"new reposWindowList()");
+	display($dbg_life,0,"new infoWindowList()");
 
     my $this = $class->SUPER::new($splitter,-1,[0,0],[-1,-1]);
 	$this->addRepoMenu(1);
-		# 1 == this is the reposWindow
+		# 1 == this is the infoWindow
 
 	$this->{parent} = $parent;
 	$this->{frame} = $parent->{frame};
@@ -138,7 +138,7 @@ sub selectRepo
 	display($dbg_sel,0,"selectRepo($path)");
 
 	# $this->{parent}->SetFocus();
-		# switch to the reposWindow if called
+		# switch to the infoWindow if called
 		# from another window
 
 	my $ctrl = $this->{ctrls_by_path}->{$path};
@@ -310,7 +310,7 @@ sub populate
 
 
 sub notifyRepoChanged
-	# Called by reposWindow when the monitor
+	# Called by infoWindow when the monitor
 	# detects a change to a repo
 {
 	my ($this,$repo) = @_;

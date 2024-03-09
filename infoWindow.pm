@@ -1,12 +1,12 @@
 #------------------------------------------------------------
-# apps::gitUI::reposWindow
+# apps::gitUI::infoWindow
 #------------------------------------------------------------
 # A window that shows all repos on the left, and details on the right.
 # Has a command pane for future use like:
 #		Check/Update Document Links
 
 
-package apps::gitUI::reposWindow;
+package apps::gitUI::infoWindow;
 use strict;
 use warnings;
 use threads;
@@ -18,8 +18,8 @@ use Wx::Event qw(
 use Pub::Utils;
 use Pub::WX::Window;
 use apps::gitUI::utils;
-use apps::gitUI::reposWindowList;
-use apps::gitUI::reposWindowRight;
+use apps::gitUI::infoWindowList;
+use apps::gitUI::infoWindowRight;
 use base qw(Pub::WX::Window);
 
 
@@ -52,7 +52,7 @@ sub new
 	# the 'data' member is the name of the connection information
 {
 	my ($class,$frame,$id,$book,$data) = @_;
-	display($dbg_life,0,"reposWindow:new("._def($data).")");
+	display($dbg_life,0,"infoWindow:new("._def($data).")");
 	$data ||= {};
 
 	# use $data if provided
@@ -61,7 +61,7 @@ sub new
 
 	# construct $this and set data members
 
-	my $name = 'Repos';
+	my $name = 'Info';
 	my $this = $class->SUPER::new($book,$id);
 	$this->MyWindow($frame,$book,$id,$name,$data);
 
@@ -78,8 +78,8 @@ sub new
 	my $vert_splitter  = $this->{vert_splitter}  = Wx::SplitterWindow->new($this, 		   $ID_SPLITTER_VERT, [0, 0]);
 	$vert_splitter->SetMinimumPaneSize(20);
 
-	my $left = $this->{left} = apps::gitUI::reposWindowList->new($this,$vert_splitter);
-	my $right = $this->{right} = apps::gitUI::reposWindowRight->new($this,$vert_splitter);
+	my $left = $this->{left} = apps::gitUI::infoWindowList->new($this,$vert_splitter);
+	my $right = $this->{right} = apps::gitUI::infoWindowRight->new($this,$vert_splitter);
 
     $vert_splitter->SplitVertically($left,$right,300);
 
@@ -157,7 +157,7 @@ sub onSashPosChanged
 sub populate
 {
 	my ($this) = @_;
-	display($dbg_pop,0,"reposWindow::populate()");
+	display($dbg_pop,0,"infoWindow::populate()");
 	$this->{left}->populate();
 }
 

@@ -21,7 +21,7 @@ my $dbg_menu = 0;		# context menu and commands
 
 
 my ($ID_COPY,				# any
-	$ID_OPEN_DETAILS,		# repo
+	$ID_OPEN_INFO,		# repo
 	$ID_OPEN_GITUI,			# repo
 	$ID_BRANCH_HISTORY,		# repo
 	$ID_ALL_HISTORY,		# repo
@@ -33,7 +33,7 @@ my ($ID_COPY,				# any
 
 my $menu_desc = {
 	$ID_COPY            => ['Copy',				'Copy selected region to clipboard' ],
-	$ID_OPEN_DETAILS	=> ['Details',			'Open the repository in the Repos Window' ],
+	$ID_OPEN_INFO		=> ['Info',				'Open the repository in the Info Window' ],
 	$ID_OPEN_GITUI		=> ['GitGUI',			'Open the repository in original GitGUI' ],
 	$ID_BRANCH_HISTORY	=> ['Branch History',	'Show Branch History' ],
 	$ID_ALL_HISTORY		=> ['All History',		'Show All History' ],
@@ -79,7 +79,7 @@ sub popupContextMenu
 	{
 		next if $is_url && $id != $ID_OPEN_IN_BROWSER;
 		next if $id == $ID_COPY && (!$this->can('canCopy') || !$this->canCopy());
-		next if $id == $ID_OPEN_DETAILS && $is_this_repo;
+		next if $id == $ID_OPEN_INFO && $is_this_repo;
 		next if $id > $ID_COPY && $id <= $ID_ALL_HISTORY && !$repo;
 		next if $id >= $ID_OPEN_IN_KOMODO && !$path;
 		next if $id == $ID_OPEN_EXPLORER && !$repo && !$path;
@@ -111,9 +111,9 @@ sub onContextMenu
 	{
 		$this->doCopy() if $this->can('doCopy');
 	}
-	if ($command_id == $ID_OPEN_DETAILS)
+	if ($command_id == $ID_OPEN_INFO)
 	{
-		getAppFrame->createPane($ID_REPOS_WINDOW,undef,{repo_path=>$repo->{path}});
+		getAppFrame->createPane($ID_INFO_WINDOW,undef,{repo_path=>$repo->{path}});
 	}
 	elsif ($command_id == $ID_OPEN_GITUI)
 	{
