@@ -71,7 +71,6 @@ BEGIN
         $GIT_CB_TRANSFER
         $GIT_CB_REFERENCE
 
-		$repo_filename
 		$komodo_exe
 
 		repoPathToId

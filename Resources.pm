@@ -59,7 +59,6 @@ BEGIN
 	    $ID_CONTEXT_OPEN_IN_SHELL
 		$ID_CONTEXT_OPEN_IN_NOTEPAD
 
-
 		$ID_COMMIT_SPLITTER_VERT
 		$ID_COMMIT_SPLITTER_LEFT
 		$ID_COMMIT_SPLITTER_RIGHT
@@ -97,7 +96,7 @@ our (
 	$ID_COMMIT_WINDOW,
 	$ID_INFO_WINDOW,
 	$ID_SUBS_WINDOW,
-	$ID_STATUS_WINDOW,
+	$ID_STATUS_WINDOW,	# Not implemented yet
 
 	# UI Commands handled by gitUI.pm
 
@@ -146,7 +145,6 @@ our (
 	$ID_CONTEXT_OPEN_IN_NOTEPAD,	# path
 
 	# commands and IDs within windows
-
 
 	$ID_COMMIT_SPLITTER_VERT,
 	$ID_COMMIT_SPLITTER_LEFT,
@@ -211,7 +209,6 @@ unshift @{$resources->{view_menu}},(
 	$ID_PATH_WINDOW,
 	$ID_INFO_WINDOW,
 	$ID_COMMIT_WINDOW,
-	$ID_STATUS_WINDOW,
 	$ID_SUBS_WINDOW,
 	$ID_SEPARATOR,
 );
