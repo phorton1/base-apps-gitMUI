@@ -45,6 +45,8 @@ my $dbg_cmd = 0;
 	# onCommand
 my $dbg_mon = 1;
 	# monitor callback
+my $dbg_notify = 1;
+	# notifications to panes
 
 my $MONITOR_EVENT:shared = Wx::NewEventType;
 
@@ -178,6 +180,12 @@ sub onCommand
 {
 	my ($this,$event) = @_;
 	my $id = $event->GetId();
+	$this->onCommandId($id);
+}
+
+sub onCommandId
+{
+	my ($this,$id) = @_;
 	my $name = $resources->{command_data}->{$id}->[0];
 	display($dbg_cmd,0,"gitUI::Frame::onCommand($id,$name)");
 	if ($id == $ID_COMMAND_PUSH_ALL ||
@@ -186,6 +194,10 @@ sub onCommand
 		$id == $ID_COMMAND_PULL_SELECTED )
 	{
 		$this->doThreadedCommand($id);
+	}
+	elsif ($id == $ID_COMMAND_COMMIT_SELECTED_PARENTS)
+	{
+		$this->commitSelectedParents();
 	}
 	elsif ($id == $ID_COMMAND_RESCAN ||
 		   $id == $ID_COMMAND_REBUILD_CACHE)
@@ -211,13 +223,84 @@ sub onCommand
 	{
 		monitorUpdate();
 	}
-
 }
+
+
+
+
+sub commitSelectedParents
+{
+	my ($this) = @_;
+	display($dbg_cmd,0,"commitSelectedParents()");
+	monitorPause(1);
+	my $selected_repos = getSelectedCommitParentRepos();
+	for my $path (sort keys %$selected_repos)
+	{
+		my $repo = $selected_repos->{$path};
+		last if !$this->commitOneParent($repo);
+	}
+	monitorPause(0);
+}
+
+
+sub commitOneParent
+{
+	my ($this,$repo) = @_;
+	my $parent = $repo->{parent_repo};
+	warning($dbg_cmd,0,"commitOneParent($repo->{path},$parent->{path})");
+	$this->SetStatusText("commitOneParent: $repo->{path}");
+
+	my $parent_unstaged = $parent->{unstaged_changes};
+
+	my $commit = ${$repo->{local_commits}}[0];
+	my $commit_id = $commit->{sha};
+	my $commit_msg = $commit->{msg};
+	my $commit8 = _lim($commit_id,8);
+
+	my $found;
+	my $rel_path = $repo->{rel_path};
+	for my $path (keys %$parent_unstaged)
+	{
+		if ($path eq $rel_path)
+		{
+			$found = $parent_unstaged->{$path};
+			last;
+		}
+	}
+
+	my $msg = "submodule($rel_path) auto_commit($commit8) $commit_msg";
+	display(0,3,"msg=$msg");
+
+	my $rslt = gitIndex($parent,0,[$rel_path]);
+	$rslt &&= gitCommit($parent,$msg);
+	gitChanges($parent);
+
+	display($dbg_cmd,1,"AUTO-COMMIT-COMPLETED: $commit8."._lim($commit_msg,40))
+		if $rslt;
+	$this->notifyRepoChanged($repo);
+	return 1;
+}
+
 
 
 #------------------------------
 # monitor
 #------------------------------
+
+
+sub notifyRepoChanged
+{
+	my ($this,$repo) = @_;
+	display($dbg_notify,0,"notifyRepoChanged($repo->{path})");
+	for my $pane (@{$this->{panes}})
+	{
+		my $can = $pane && $pane->can("notifyRepoChanged") ? 1 : 0;
+		display($dbg_notify+1,1,"pane($pane) can($can)");
+		$pane->notifyRepoChanged($repo) if $can;
+	}
+}
+
+
 
 sub onMonitorEvent
 {
@@ -228,16 +311,9 @@ sub onMonitorEvent
 	my $show = $data->{status} || $repo->{path};
 	$this->SetStatusText("monitor: $show");
 	display($dbg_mon,0,"onMonitorEvent($is_repo,$show)");
-	if ($is_repo)
-	{
-		for my $pane (@{$this->{panes}})
-		{
-			my $can = $pane && $pane->can("notifyRepoChanged") ? 1 : 0;
-			display($dbg_mon,1,"pane($pane) can($can)");
-			$pane->notifyRepoChanged($repo) if $can;
-		}
-	}
+	$this->notifyRepoChanged($repo) if $repo;
 }
+
 
 
 sub monitor_callback

@@ -76,6 +76,8 @@ my $dbg_update = 0;
 	# debug update
 my $dbg_events = 1;
 	# show event details
+my $dbg_chgs = 1;
+	# show notifies when gitChanges returns value
 
 
 
@@ -135,8 +137,8 @@ my $monitor_groups;
 my $monitor_state:shared = $MONITOR_STATE_NONE;
 
 my $etag = '';
-my $can_update = 1;
-my $last_update = 0;
+my $can_update:shared = 1;
+my $last_update:shared = 0;
 my $UPDATE_INTERVAL = $DEFAULT_UPDATE_INTERVAL;
 
 
@@ -219,8 +221,20 @@ sub monitorPause
 
 
 sub monitorUpdate
+	# $reset_timer merely resets the update timer so
+	# that the update will occur 3 seconds after the monitor is
+	# re-started as soon as possible after a series of
+	# pushes.
 {
-	display($dbg_mon,-1,"monitorUpdate()");
+	my ($reset_timer) = @_;
+	$reset_timer ||= 0;
+	display($dbg_mon,-1,"monitorUpdate($reset_timer)");
+	if ($reset_timer)
+	{
+		$last_update = time() - $UPDATE_INTERVAL + 3;
+		return;
+	}
+
 	return !error("attempt to monitorUpdate() in state ".monitorStateString($monitor_state)) if
 		$monitor_state == $MONITOR_STATE_NONE ||
 		$monitor_state == $MONITOR_STATE_STOPPED ||
@@ -430,6 +444,7 @@ sub doMonitorStartup
 		return 0 if !defined($rslt);
 		if ($rslt)
 		{
+			display($dbg_chgs,-2,"notifyRepoChanged(init,$repo->{path})");
 			setCanPushPull($repo);
 			&$the_callback({ repo=>$repo });
 		}
@@ -466,6 +481,7 @@ sub doMonitorRun
 			return 0 if !defined($rslt);
 			if ($rslt)
 			{
+				display($dbg_chgs,-2,"notifyRepoChanged($repo->{path})");
 				setCanPushPull($repo);
 				&$the_callback({ repo=>$repo });
 			}

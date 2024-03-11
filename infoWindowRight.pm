@@ -27,7 +27,7 @@ use base qw(Wx::Window);
 
 
 my $dbg_life = 0;
-my $dbg_notify = 0;
+my $dbg_notify = 1;
 my $dbg_cmds = 0;
 
 
@@ -42,11 +42,6 @@ my $TITLE_LEFT_MARGIN = 6;
 my $TITLE_WIDTH = 60;
 my $BUTTON_SPACE = 10;
 
-
-my ($COMMAND_PUSH_LOCAL,
-	$COMMAND_PULL_LOCAL, ) = (8323..9000);
-	# apparently local events are needed for
-	# update UI ?!?
 
 
 sub new
@@ -70,24 +65,31 @@ sub new
 
 	# Buttons added from right to left
 
+	my $commit_parent = $this->{commit_parent_button} =
+		Wx::Button->new($this,$INFO_RIGHT_COMMAND_COMMIT_PARENT,'CommitParent',	[0,5], [90,20]);
 	$this->{buttons} = [
-		Wx::Button->new($this,$ID_COMMAND_REFRESH_STATUS,	'Refresh',	[0,5],	[60,20]),
-		Wx::Button->new($this,$COMMAND_PUSH_LOCAL,			'Push',		[0,5],	[70,20]),
-		Wx::Button->new($this,$COMMAND_PULL_LOCAL,			'Pull',		[0,5],	[60,20]),
-		# Wx::Button->new($this,-1,						'Scan Docs',	[0,5],	[80,20]),
-		# Wx::Button->new($this,-1,						'Update Docs',	[0,5],	[80,20]),
+		Wx::Button->new($this,$ID_COMMAND_REFRESH_STATUS,		'Refresh',		[0,5],	[60,20]),
+		Wx::Button->new($this,$INFO_RIGHT_COMMAND_PUSH,			'Push',			[0,5],	[60,20]),
+		Wx::Button->new($this,$INFO_RIGHT_COMMAND_PULL,			'Pull',			[0,5],	[70,20]),
+		$commit_parent,
+		# Wx::Button->new($this,-1,	'Scan Docs',	[0,5],	[80,20]),
+		# Wx::Button->new($this,-1,	'Update Docs',	[0,5],	[80,20]),
 	];
+
+	$commit_parent->Hide();
 
 	$this->doLayout();
 
 	EVT_SIZE($this, \&onSize);
 	EVT_BUTTON($this, $ID_COMMAND_REFRESH_STATUS, 	\&onButton);
-	EVT_BUTTON($this, $COMMAND_PUSH_LOCAL,	\&onButton);
-	EVT_BUTTON($this, $COMMAND_PULL_LOCAL, 	\&onButton);
+	EVT_BUTTON($this, $INFO_RIGHT_COMMAND_PUSH,	\&onButton);
+	EVT_BUTTON($this, $INFO_RIGHT_COMMAND_PULL, 	\&onButton);
+	EVT_BUTTON($this, $INFO_RIGHT_COMMAND_COMMIT_PARENT, 	\&onButton);
 
 	EVT_UPDATE_UI($this, $ID_COMMAND_REFRESH_STATUS,\&onUpdateUI);
-	EVT_UPDATE_UI($this, $COMMAND_PUSH_LOCAL,	\&onUpdateUI);
-	EVT_UPDATE_UI($this, $COMMAND_PULL_LOCAL, \&onUpdateUI);
+	EVT_UPDATE_UI($this, $INFO_RIGHT_COMMAND_PUSH,	\&onUpdateUI);
+	EVT_UPDATE_UI($this, $INFO_RIGHT_COMMAND_PULL, \&onUpdateUI);
+	EVT_UPDATE_UI($this, $INFO_RIGHT_COMMAND_COMMIT_PARENT, \&onUpdateUI);
 
 	return $this;
 }
@@ -135,17 +137,20 @@ sub onUpdateUI
 	my $enable = 0;
 	$enable = 1 if $id == $ID_COMMAND_REFRESH_STATUS &&
 		monitorRunning() && !monitorBusy();
-	$enable = 1 if $id == $COMMAND_PUSH_LOCAL &&
+	$enable = 1 if $id == $INFO_RIGHT_COMMAND_PUSH &&
 		$repo &&
 		$repo->canPush();
-	$enable = 1 if $id == $COMMAND_PULL_LOCAL &&
+	$enable = 1 if $id == $INFO_RIGHT_COMMAND_PULL &&
 		monitorRunning() &&
 		$repo && !$repo->{AHEAD};
+	$enable = 1 if $id == $INFO_RIGHT_COMMAND_COMMIT_PARENT &&
+		monitorRunning() &&
+		$repo && $repo->canCommitParent();
 
 	# allow pull on individual repo even
 	# it is not known to be BEHIND
 
-	if ($id == $COMMAND_PULL_LOCAL)
+	if ($id == $INFO_RIGHT_COMMAND_PULL)
 	{
 		my $button_title =
 			$repo && $repo->needsStash() ? 'Stash+Pull' :
@@ -169,17 +174,29 @@ sub onButton
 	{
 		$this->{frame}->onCommand($event);
 	}
-	elsif ($id == $COMMAND_PUSH_LOCAL)
+	elsif ($id == $INFO_RIGHT_COMMAND_PUSH)
 	{
 		clearSelectedPushRepos();
-		setSelectedPushRepo($this->{repo});
+		$this->{repo}->{is_subgroup} ?
+			$this->{repo}->setSelectedPushRepos() :
+			setSelectedPushRepo($this->{repo});
 		$this->{frame}->doThreadedCommand($ID_COMMAND_PUSH_SELECTED);
 	}
-	elsif ($id == $COMMAND_PULL_LOCAL)
+	elsif ($id == $INFO_RIGHT_COMMAND_PULL)
 	{
 		clearSelectedPullRepos();
-		setSelectedPullRepo($this->{repo});
+		$this->{repo}->{is_subgroup} ?
+			$this->{repo}->setSelectedPullRepos() :
+			setSelectedPullRepo($this->{repo});
 		$this->{frame}->doThreadedCommand($ID_COMMAND_PULL_SELECTED);
+	}
+	elsif ($id == $INFO_RIGHT_COMMAND_COMMIT_PARENT)
+	{
+		clearSelectedCommitParentRepos();
+		$this->{repo}->{is_subgroup} ?
+			$this->{repo}->setSelectedCommitParentRepos() :
+			setSelectedCommitParentRepo($this->{repo});
+		$this->{frame}->onCommandId($ID_COMMAND_COMMIT_SELECTED_PARENTS);
 	}
 }
 
@@ -195,14 +212,16 @@ sub notifyObjectSelected
 	my $repo = $obj->{is_subgroup} ? '' : $obj;
 	my $kind = $obj->{is_subgroup} ? 'Group' : 'Repo';
 
-	$this->{repo} = $repo;
-	$text_ctrl->setRepoContext($repo);
+	$this->{repo} = $obj;
+	$this->{sub_mode} || $obj->{is_subgroup} || $obj->{parent_repo} ?
+		$this->{commit_parent_button}->Show() :
+		$this->{commit_parent_button}->Hide();
 
 	$obj->toTextCtrl($text_ctrl, $this->{sub_mode} ?
 		$ID_SUBS_WINDOW :
 		$ID_INFO_WINDOW );
-
-	historyToTextCtrl($text_ctrl,$repo,0) if $repo;
+	historyToTextCtrl($text_ctrl,$repo,0) if !$obj->{is_subgroup};
+	$text_ctrl->setRepoContext($obj);
 
 	$text_ctrl->Refresh();
 	$this->{repo_name}->SetLabel($obj->{path});

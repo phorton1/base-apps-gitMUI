@@ -29,11 +29,15 @@ use Wx::Event qw(
 	EVT_PAINT
 	EVT_IDLE
 	EVT_MOUSE_EVENTS
-	EVT_CHAR );
+	EVT_CHAR
+	EVT_BUTTON
+	EVT_UPDATE_UI );
 use Time::HiRes qw(sleep);
 use Pub::Utils;
 use apps::gitUI::utils;
+use apps::gitUI::monitor;
 use apps::gitUI::repos;
+use apps::gitUI::repoGroup;
 use apps::gitUI::Resources;
 use apps::gitUI::contextMenu;
 use base qw(Wx::ScrolledWindow apps::gitUI::contextMenu);
@@ -110,8 +114,82 @@ sub new
 	EVT_MOUSE_EVENTS($this, \&onMouse);
 	EVT_CHAR($this, \&onChar);
 
+	EVT_BUTTON($this, $INFO_RIGHT_COMMAND_SINGLE_PULL, \&onSingleButton);
+	EVT_BUTTON($this, $INFO_RIGHT_COMMAND_SINGLE_PUSH, \&onSingleButton);
+	EVT_BUTTON($this, $INFO_RIGHT_COMMAND_SINGLE_COMMIT_PARENT, \&onSingleButton);
+	EVT_UPDATE_UI($this, $INFO_RIGHT_COMMAND_SINGLE_PUSH, \&onSingleUpdateUI);
+	EVT_UPDATE_UI($this, $INFO_RIGHT_COMMAND_SINGLE_PULL, \&onSingleUpdateUI);
+	EVT_UPDATE_UI($this, $INFO_RIGHT_COMMAND_SINGLE_COMMIT_PARENT, \&onSingleUpdateUI);
+
 	return $this;
 }
+
+
+
+sub onSingleUpdateUI
+{
+	my ($this,$event) = @_;
+	my $id = $event->GetId();
+	my $ctrl = $event->GetEventObject();
+	my $repo = $ctrl->{repo};
+
+	my $enable = 0;
+	$enable = 1 if $id == $INFO_RIGHT_COMMAND_SINGLE_PUSH &&
+		$repo->canPush();
+	$enable = 1 if $id == $INFO_RIGHT_COMMAND_SINGLE_PULL &&
+		monitorRunning() &&
+		$repo && !$repo->{AHEAD};
+	$enable = 1 if $id == $INFO_RIGHT_COMMAND_SINGLE_COMMIT_PARENT &&
+		monitorRunning() &&
+		$repo && $repo->canCommitParent();
+
+
+	if ($id == $INFO_RIGHT_COMMAND_SINGLE_PULL)
+	{
+		my $button_title =
+			$repo->needsStash() ? 'Stash+Pull' :
+			$repo->canPull() ? 'Needs Pull' :
+			'Pull';
+		$event->SetText($button_title) if
+			$event->GetText() ne $button_title;
+	}
+	$event->Enable($enable);
+}
+
+
+sub onSingleButton
+{
+	my ($this,$event) = @_;
+	my $id = $event->GetId();
+	my $ctrl = $event->GetEventObject();
+	my $repo = $ctrl->{repo};
+
+	display($dbg_ctrl,0,"onSingleButton($id,$repo->{path})");
+
+	if ($id == $INFO_RIGHT_COMMAND_SINGLE_PUSH)
+	{
+		clearSelectedPushRepos();
+		setSelectedPushRepo($repo);
+		$this->{frame}->doThreadedCommand($ID_COMMAND_PUSH_SELECTED);
+	}
+	elsif ($id == $INFO_RIGHT_COMMAND_SINGLE_PULL)
+	{
+		clearSelectedPushRepos();
+		setSelectedPushRepo($repo);
+		$this->{frame}->doThreadedCommand($ID_COMMAND_PULL_SELECTED);
+	}
+	elsif ($id == $INFO_RIGHT_COMMAND_SINGLE_COMMIT_PARENT)
+	{
+		clearSelectedCommitParentRepos();
+		setSelectedCommitParentRepo($repo);
+		$this->{frame}->onCommandId($ID_COMMAND_COMMIT_SELECTED_PARENTS);
+	}
+}
+
+
+
+
+
 
 
 sub setRepoContext
@@ -141,8 +219,23 @@ sub clearContent
 	$this->{hits} = [];
 	$this->{width} = 0;
 	$this->{height} = 0;
+	$this->{repo_context} = '';
 	$this->init_drag();
+	$this->DestroyChildren();
 	$this->SetVirtualSize([$LEFT_MARGIN,0]);
+}
+
+
+sub nextYPos
+{
+	my ($this) = @_;
+	return scalar(@{$this->{content}}) * $LINE_HEIGHT;
+}
+
+sub getCharWidth
+{
+	my ($this) = @_;
+	return $CHAR_WIDTH;
 }
 
 

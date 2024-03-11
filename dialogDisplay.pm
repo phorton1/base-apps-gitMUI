@@ -225,12 +225,12 @@ use Wx::Event qw(
 	EVT_BUTTON);
 use Pub::Utils;
 use apps::gitUI::utils;
+use apps::gitUI::Resources;
 use base qw(Wx::Dialog);
 
 
 my $dbg_dlg = 0;
 
-my $ID_WINDOW = 18050;
 
 my $self;
 
@@ -251,7 +251,7 @@ sub new
 
     my $this = $class->SUPER::new(
 		$parent,
-		$ID_WINDOW,
+		$ID_DIALOG_DISPLAY,
 		$title,
 		[-1,-1],
 		[900,700],

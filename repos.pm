@@ -28,6 +28,7 @@ use apps::gitUI::utils;
 my $dbg_parse = 0;
 	# -1 for repos
 	# -2 for lines
+my $dbg_notify = 1;
 
 
 BEGIN
@@ -55,6 +56,11 @@ BEGIN
 		clearSelectedPullRepo
 		canPullSelectedRepos
 
+		getSelectedCommitParentRepos
+		clearSelectedCommitParentRepos
+		setSelectedCommitParentRepo
+		clearSelectedCommitParentRepo
+
 		setCanPushPull
 
 		groupReposBySection
@@ -69,6 +75,7 @@ my $repos_can_push = shared_clone({});
 my $repos_can_pull = shared_clone({});
 my $repos_do_push = shared_clone({});
 my $repos_do_pull = shared_clone({});
+my $repos_commit_parent = shared_clone({});
 
 
 #----------------------------------
@@ -116,7 +123,7 @@ sub clearSelectedPushRepos
 sub setSelectedPushRepo
 {
 	my ($repo) = @_;
-	$repos_do_push->{$repo->{path}} = 1;
+	$repos_do_push->{$repo->{path}} = $repo;
 }
 sub clearSelectedPushRepo
 {
@@ -141,7 +148,7 @@ sub clearSelectedPullRepos
 sub setSelectedPullRepo
 {
 	my ($repo) = @_;
-	$repos_do_pull->{$repo->{path}} = 1;
+	$repos_do_pull->{$repo->{path}} = $repo;
 }
 sub clearSelectedPullRepo
 {
@@ -154,15 +161,47 @@ sub canPullSelectedRepos
 }
 
 
+sub getSelectedCommitParentRepos
+{
+	return $repos_commit_parent;
+}
+sub clearSelectedCommitParentRepos
+{
+	$repos_commit_parent = shared_clone({});
+}
+sub setSelectedCommitParentRepo
+{
+	my ($repo) = @_;
+	$repos_commit_parent->{$repo->{path}} = $repo;
+}
+sub clearSelectedCommitParentRepo
+{
+	my ($repo) = @_;
+	delete $repos_commit_parent->{$repo->{path}};
+}
+
+
 sub setCanPushPull
 {
 	my ($repo) = @_;
+	display($dbg_notify,0,"setCanPushPull($repo->{path})");
 	$repo->canPush() ?
 		$repos_can_push->{$repo->{path}} = 1 :
 		delete $repos_can_push->{$repo->{path}};
 	$repo->canPull() ?
 		$repos_can_pull->{$repo->{path}} = 1 :
 		delete $repos_can_pull->{$repo->{path}};
+	$repo->setCanCommitParent() if $repo->{parent};
+
+	my $submodules = $repo->{submodules};
+	if ($submodules)
+	{
+		for my $path (@$submodules)
+		{
+			my $sub = getRepoByPath($path);
+			$sub->setCanCommitParent();
+		}
+	}
 }
 
 

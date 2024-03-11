@@ -19,6 +19,7 @@ use Wx::Event qw(
 use apps::gitUI::utils;
 use apps::gitUI::repo;
 use apps::gitUI::repos;
+use apps::gitUI::Resources;
 use apps::gitUI::commitListCtrl;
 use Pub::Utils;
 use base qw(Wx::Window);
@@ -35,7 +36,7 @@ BEGIN {
 
 
 my $PANE_TOP = 25;
-my $ID_DO_ALL = 1000;
+
 
 
 
@@ -54,7 +55,7 @@ sub new
 	$this->SetBackgroundColour(
 		$is_staged? $color_git_staged : $color_git_unstaged);
 
-	Wx::Button->new($this,$ID_DO_ALL,$is_staged ?
+	Wx::Button->new($this,$ID_COMMIT_LIST_STAGE_ALL,$is_staged ?
 		"Unstage All" : "Stage All", [5,2],[75,20]);
 	Wx::StaticText->new($this,-1, $is_staged ?
 		'Staged Changed (Will Commit)' : 'Unstaged Changes',
@@ -76,8 +77,12 @@ sub onButton
 {
 	my ($this,$event) = @_;
 	my $id = $event->GetId();
-	display($dbg_life,0,"ACTION_ON_ALL");
-	$this->{list_ctrl}->doAction();
+
+	if ($id == $ID_COMMIT_LIST_STAGE_ALL)
+	{
+		display($dbg_life,0,"ACTION_ON_ALL");
+		$this->{list_ctrl}->doAction();
+	}
 }
 
 

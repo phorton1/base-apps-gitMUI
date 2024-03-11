@@ -30,8 +30,6 @@ my $dbg_dlg = 0;
 my $dbg_update = 1;
 
 
-my $ID_WINDOW = 18000;
-my $ID_CANCEL = 4567;
 
 
 #------------------------------------------------
@@ -49,7 +47,7 @@ sub new
 
     my $this = $class->SUPER::new(
 		$parent,
-		$ID_WINDOW,
+		$ID_PROGRESS_DIALOG,
 		$title,
 		[-1,-1],
 		[480,180]);
@@ -88,9 +86,9 @@ sub new
 	$this->{ctrl_sub_status} ->Hide();
 	$this->{ctrl_sub_gauge}  ->Hide();
 
-    $this->{cancel_button} = Wx::Button->new($this,$ID_CANCEL,'Cancel',[380,115],[60,20]);
+    $this->{cancel_button} = Wx::Button->new($this,$ID_PROGRESS_CANCEL,'Cancel',[380,115],[60,20]);
 
-    EVT_BUTTON($this,$ID_CANCEL,\&onButton);
+    EVT_BUTTON($this,$ID_PROGRESS_CANCEL,\&onButton);
 
     $this->Show();
 	$this->update();
@@ -135,7 +133,7 @@ sub onButton
 	}
 	else
 	{
-		$this->EndModal($ID_CANCEL);
+		$this->EndModal($ID_PROGRESS_CANCEL);
 		$this->Destroy();
 	}
 	$event->Skip();

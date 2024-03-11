@@ -41,8 +41,6 @@ BEGIN {
 	);
 }
 
-my $ID_RIGHT_SPLITTER = 9292;
-my $COMMAND_COMMIT = 9293;
 
 
 my $PANE_TOP = 25;
@@ -68,7 +66,7 @@ sub new
 	$this->{diff_item} = '';
 	$this->{bottom_height} = $DEFAULT_COMMAND_AREA_HEIGHT;
 
-	my $right_splitter  = $this->{right_splitter}  = Wx::SplitterWindow->new($this, $ID_RIGHT_SPLITTER, [0, 0]);
+	my $right_splitter  = $this->{right_splitter}  = Wx::SplitterWindow->new($this, $ID_COMMIT_SPLITTER_RIGHT, [0, 0]);
 	$right_splitter->SetMinimumPaneSize($DEFAULT_COMMAND_AREA_HEIGHT);
 	# $right_splitter->{frame} = $this->{frame};
 	# if I wanted to be consistent
@@ -90,7 +88,7 @@ sub new
 	my $diff_ctrl = $this->{diff_ctrl} = apps::gitUI::myTextCtrl->new($top_panel,$ID_COMMIT_WINDOW);
 
 	Wx::Button->new($bottom_panel,$ID_COMMAND_RESCAN,'Rescan',		[5,5],	[65,20]);
-	Wx::Button->new($bottom_panel,$COMMAND_COMMIT,'Commit',			[5,30],	[65,20]);
+	Wx::Button->new($bottom_panel,$ID_COMMAND_COMMIT,'Commit',			[5,30],	[65,20]);
 	Wx::Button->new($bottom_panel,$ID_COMMAND_PUSH_ALL,'PushAll',	[5,55],	[65,20]);
 
 	$this->{commit_msg} = Wx::TextCtrl->new($bottom_panel, -1, '', [$COMMIT_MSG_LEFT,$COMMIT_MSG_TOP],[-1,-1],
@@ -102,11 +100,11 @@ sub new
 
 	EVT_SIZE($this, \&onSize);
 	EVT_BUTTON($this, $ID_COMMAND_RESCAN, \&onButton);
-	EVT_BUTTON($this, $COMMAND_COMMIT, \&onButton);
+	EVT_BUTTON($this, $ID_COMMAND_COMMIT, \&onButton);
 	EVT_BUTTON($this, $ID_COMMAND_PUSH_ALL, \&onButton);
-	EVT_UPDATE_UI($this, $COMMAND_COMMIT, \&onUpdateUI);
+	EVT_UPDATE_UI($this, $ID_COMMAND_COMMIT, \&onUpdateUI);
 	EVT_UPDATE_UI($this, $ID_COMMAND_PUSH_ALL, \&onUpdateUI);
-	EVT_SPLITTER_SASH_POS_CHANGED($this, $ID_RIGHT_SPLITTER, \&onSashPosChanged);
+	EVT_SPLITTER_SASH_POS_CHANGED($this, $ID_COMMIT_SPLITTER_RIGHT, \&onSashPosChanged);
 
     return $this;
 }
@@ -178,7 +176,7 @@ sub onUpdateUI
 	my $enable = 0;
 	$enable = 1 if $id == $ID_COMMAND_PUSH_ALL && canPushRepos();
 	$enable = 1 if $id == $ID_COMMAND_RESCAN && monitorStarted();
-	$enable = 1 if $id == $COMMAND_COMMIT && (
+	$enable = 1 if $id == $ID_COMMAND_COMMIT && (
 		$this->{parent}->canCommit() ||
 		$this->{commit_msg}->GetValue());
 	$event->Enable($enable);
@@ -197,7 +195,7 @@ sub onButton
 	{
 		$frame->onCommand($event);
 	}
-	if ($id == $COMMAND_COMMIT)
+	if ($id == $ID_COMMAND_COMMIT)
 	{
 		# determine if any repos are BEHIND or
 		# need REBASE-ing, and thus a commit would

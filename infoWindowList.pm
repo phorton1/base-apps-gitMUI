@@ -8,21 +8,18 @@
 # or groups of Submodules with a clickable
 # header.
 #
-# There is now a new thing in the system that looks
-# like a repo, but is not.  A subGroup starts off as
-# a 'section', created in repos::groupReposAsSubmodules().
-# It is differntiated by having an 'is_subgroup' member,
-# and starts with {name}, {path}, and {id} members all
-# being set to the id of the MAIN_MODULE for a subGroup.
+# The window is populated with a list of 'sections'
+# from repos.pm, or a list of subGroups from subGroups.pm.
+# subGroups present an orthognal API that looks like
+# a 'section', as well as looking like a 'repo' for use
+# by this infoWindowList, the infoWindowRight, and the
+# myTextCtrl.
 #
-# Because it represents a group of other repos, it must
-# be updated whenever any of the repos within it change.
-# I am thinking about making it an actual object (repoGroup.pm),
-# with orthognality to a repo, i.e. it can be Pushed, Pulled,
-# haveChanges, have a toTextCtrl method, and so on.
-
-
-
+# Note that the subGroups are kept in a separate set
+# of members with separate {ids}.
+#
+# PS, I think much of this ID_NUMBER complexity could go away
+# if I made the repo and/or path a member of the HyperLinks.
 
 package apps::gitUI::infoWindowList;
 use strict;
@@ -50,11 +47,6 @@ my $dbg_pop = 1;
 my $dbg_layout = 1;
 my $dbg_notify = 1;
 my $dbg_sel = -2;
-
-
-
-my $REPO_BASE_ID = 10000;
-my $SUB_BASE_ID = 1000;
 
 
 my $LINE_HEIGHT   = 18;
@@ -101,27 +93,30 @@ sub new
 
 	EVT_SIZE($this, \&onSize);
 	return $this;
-
 }
 
 
-sub objFromCtrlId
+sub onSize
 {
-	my ($this,$ctrl_id) = @_;
-	my $repo_list = getRepoList();
-	my $obj = ($ctrl_id >= $REPO_BASE_ID) ?
-		$repo_list->[$ctrl_id-$REPO_BASE_ID] :
-		$this->{groups}->[$ctrl_id-$SUB_BASE_ID];
-	return $obj;
+	my ($this,$event) = @_;
+	my $sz = $this->GetSize();
+    my $width = $sz->GetWidth();
+    my $height = $sz->GetHeight();
+	for my $ctrl (@{$this->{ctrls}})
+	{
+		$ctrl->SetSize([$width-10,$height]);
+	}
+	$this->SetVirtualSize([$width,$this->{ysize}]);
+    $event->Skip();
 }
 
 
 sub onEnterLink
 {
 	my ($ctrl,$event) = @_;
+	my $obj = $ctrl->{obj};
 	my $this = $ctrl->GetParent();
 	my $ctrl_id = $event->GetId();
-	my $obj = $this->objFromCtrlId($ctrl_id);
 	$this->{frame}->SetStatusText($obj->{path});
 	$ctrl->SetFont($this->{bold_font});
 	$ctrl->Refresh();
@@ -132,9 +127,9 @@ sub onEnterLink
 sub onLeaveLink
 {
 	my ($ctrl,$event) = @_;
+	my $obj = $ctrl->{obj};
 	my $this = $ctrl->GetParent();
 	my $ctrl_id = $event->GetId();
-	my $obj = $this->objFromCtrlId($ctrl_id);
 	$this->{frame}->SetStatusText('');
 	$ctrl->SetFont($this->GetFont())
 		if $obj->{path} ne $this->{selected_path};
@@ -146,17 +141,30 @@ sub onLeaveLink
 sub onRightDown
 {
 	my ($ctrl,$event) = @_;
+	my $obj = $ctrl->{obj};
 	my $this = $ctrl->GetParent();
 	my $ctrl_id = $event->GetId();
-	my $obj = $this->objFromCtrlId($ctrl_id);
 	display($dbg_life,0,"onRightDown($obj->{path})");
 	$this->popupRepoMenu($obj) if !$obj->{is_subgroup};
 }
 
 
+sub onLeftDown
+{
+	my ($ctrl,$event) = @_;
+	my $obj = $ctrl->{obj};
+	my $this = $ctrl->GetParent();
+	my $ctrl_id = $event->GetId();
+	display($dbg_life,0,"onLeftDown($obj->{path})");
+	$this->selectObject($obj->{path});
+	$event->Skip();
+}
+
+
 
 sub selectObject
-	# Works with either paths to repo objects, or id's of subgroup 'section' object.
+	# So named because it works with either the path to a subGroup
+	# or a path to a real repo.
 {
 	my ($this,$path) = @_;
 	display($dbg_sel,0,"selectObject($path)");
@@ -210,43 +218,12 @@ sub selectObject
 		$this->Update();
 	}
 
-	my $ctrl_id = $ctrl->GetId();
-	my $obj = $this->objFromCtrlId($ctrl_id);
+	my $obj = $ctrl->{obj};
 
 	display($dbg_sel+1,1,"finishing selectObject($path)");
 	$this->{frame}->SetStatusText($obj->{path});
 	$this->{parent}->{right}->notifyObjectSelected($obj);
 	$this->Refresh();
-}
-
-
-
-sub onLeftDown
-{
-	my ($ctrl,$event) = @_;
-	my $this = $ctrl->GetParent();
-	my $ctrl_id = $event->GetId();
-	my $obj = $this->objFromCtrlId($ctrl_id);
-	display($dbg_life,0,"onLeftDown($obj->{path})");
-	$this->selectObject($obj->{path});
-	$event->Skip();
-}
-
-
-
-
-sub onSize
-{
-	my ($this,$event) = @_;
-	my $sz = $this->GetSize();
-    my $width = $sz->GetWidth();
-    my $height = $sz->GetHeight();
-	for my $ctrl (@{$this->{ctrls}})
-	{
-		$ctrl->SetSize([$width-10,$height]);
-	}
-	$this->SetVirtualSize([$width,$this->{ysize}]);
-    $event->Skip();
 }
 
 
@@ -258,7 +235,6 @@ sub newCtrlSection
 {
 	my ($this,$section,$name) = @_;
 	display($dbg_pop,0,"newCtrlSection($section->{name})");
-
 	my $ctrl_section = {
 		section => $section,
 		ctrls   => [] };
@@ -266,13 +242,6 @@ sub newCtrlSection
 	return $ctrl_section;
 }
 
-
-sub addSectionCtrl
-{
-	my ($ctrl_section,$ctrl,$name) = @_;
-	display($dbg_pop,0,"addSectionCtrl($name)");
-	push @{$ctrl_section->{ctrls}},$ctrl;
-}
 
 
 sub populate
@@ -317,8 +286,7 @@ sub populate
 				if ($this->{sub_mode})
 				{
 					my $color = $section->displayColor();
-					my $id_num = $SUB_BASE_ID + $group_num;
-					$this->newCtrl($ypos,$section->{id},$id_num,$section->{name},$color);
+					$this->newCtrl($ypos,$section,$section->{id},$section->{name},$color);
 					push @{$this->{groups}},$section;
 					$this->{groups_by_id}->{$section->{id}} = $section;
 				}
@@ -331,9 +299,8 @@ sub populate
 			}
 
 			my $color = linkDisplayColor($repo);
-			my $id_num = $REPO_BASE_ID + $repo->{num};
 			my $display_name = $repo->pathWithinSection($this->{sub_mode});
-			$this->newCtrl($ypos,$repo->{path},$id_num,$display_name,$color);
+			$this->newCtrl($ypos,$repo,$repo->{path},$display_name,$color);
 			$ypos += $LINE_HEIGHT;
 			$section_started = 1;
 		}
@@ -348,15 +315,16 @@ sub populate
 
 sub newCtrl
 {
-	my ($this,$ypos,$path,$id_num,$display_name,$color) = @_;
-	display($dbg_pop,1,"hyperLink($id_num,$display_name)");
+	my ($this,$ypos,$obj,$path,$display_name,$color) = @_;
+	display($dbg_pop,1,"hyperLink($display_name)");
 	my $ctrl = apps::gitUI::myHyperlink->new(
 		$this,
-		$id_num,
+		-1,
 		$display_name,
 		[5,$ypos],
 		[-1,-1],
 		$color);
+	$ctrl->{obj} = $obj;
 	push @{$this->{ctrls}},$ctrl;
 	$this->{ctrls_by_path}->{$path} = $ctrl;
 	EVT_LEFT_DOWN($ctrl, \&onLeftDown);
@@ -373,7 +341,7 @@ sub notifyRepoChanged
 {
 	my ($this,$repo) = @_;
 	my $path = $repo->{path};
-	display($dbg_notify,0,"$this notifyRepoChanged($path)");
+	display($dbg_notify,0,"notifyRepoChanged($path)");
 
 	if ($this->{sub_mode})
 	{
@@ -381,6 +349,7 @@ sub notifyRepoChanged
 		{
 			if ($group->matchesPath($path))
 			{
+				display($dbg_notify,0,"groupChanged($path)");
 				$group->setStatus();
 				my $group_path = $group->{path};	# actuall the id
 				my $color = $group->displayColor();

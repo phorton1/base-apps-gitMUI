@@ -22,30 +22,18 @@ use apps::gitUI::Resources;
 my $dbg_menu = 0;		# context menu and commands
 
 
-my ($ID_COPY,				# any
-	$ID_OPEN_INFO,			# repo
-	$ID_OPEN_SUBS,			# repo
-	$ID_OPEN_GITUI,			# repo
-	$ID_BRANCH_HISTORY,		# repo
-	$ID_ALL_HISTORY,		# repo
-	$ID_OPEN_EXPLORER,		# repo, path
-	$ID_OPEN_IN_KOMODO,		# path
-	$ID_OPEN_IN_SHELL,		# path
-	$ID_OPEN_IN_NOTEPAD,	# path https://
-	$ID_OPEN_IN_BROWSER ) = (19000..19999);
-
 my $menu_desc = {
-	$ID_COPY            => ['Copy',				'Copy selected region to clipboard' ],
-	$ID_OPEN_INFO		=> ['Info',				'Open the repository in the Info Window' ],
-	$ID_OPEN_SUBS       => ['Subs',				'Open the repository in the Subs Window' ],
-	$ID_OPEN_GITUI		=> ['GitGUI',			'Open the repository in original GitGUI' ],
-	$ID_BRANCH_HISTORY	=> ['Branch History',	'Show Branch History' ],
-	$ID_ALL_HISTORY		=> ['All History',		'Show All History' ],
-	$ID_OPEN_EXPLORER	=> ['Explorer',			'Open in Windows Explorer' ],
-	$ID_OPEN_IN_KOMODO	=> ['Komodo',			'Open one or more items in Komodo Editor' ],
-	$ID_OPEN_IN_SHELL   => ['Shell',			'Open single item in the Windows Shell' ],
-	$ID_OPEN_IN_NOTEPAD => ['Notepad',			'Open single item in the Windows Notepad' ],
-	$ID_OPEN_IN_BROWSER => ['Browser',			'Open https:// url in System Browser' ],
+	$ID_CONTEXT_COPY            => ['Copy',				'Copy selected region to clipboard' ],
+	$ID_CONTEXT_OPEN_INFO		=> ['Info',				'Open the repository in the Info Window' ],
+	$ID_CONTEXT_OPEN_SUBS       => ['Subs',				'Open the repository in the Subs Window' ],
+	$ID_CONTEXT_OPEN_GITUI		=> ['GitGUI',			'Open the repository in original GitGUI' ],
+	$ID_CONTEXT_BRANCH_HISTORY	=> ['Branch History',	'Show Branch History' ],
+	$ID_CONTEXT_ALL_HISTORY		=> ['All History',		'Show All History' ],
+	$ID_CONTEXT_OPEN_EXPLORER	=> ['Explorer',			'Open in Windows Explorer' ],
+	$ID_CONTEXT_OPEN_IN_KOMODO	=> ['Komodo',			'Open one or more items in Komodo Editor' ],
+	$ID_CONTEXT_OPEN_IN_SHELL   => ['Shell',			'Open single item in the Windows Shell' ],
+	$ID_CONTEXT_OPEN_IN_NOTEPAD => ['Notepad',			'Open single item in the Windows Notepad' ],
+	$ID_CONTEXT_OPEN_IN_BROWSER => ['Browser',			'Open https:// url in System Browser' ],
 };
 
 
@@ -59,7 +47,7 @@ BEGIN {
 sub addContextMenu
 {
 	my ($this) = @_;
-	EVT_MENU_RANGE($this, $ID_COPY, $ID_OPEN_IN_BROWSER, \&onContextMenu);
+	EVT_MENU_RANGE($this, $ID_CONTEXT_COPY, $ID_CONTEXT_OPEN_IN_BROWSER, \&onContextMenu);
 }
 
 
@@ -86,29 +74,29 @@ sub popupContextMenu
 	# I don't quite see how we are limiting the calls
 
 	my $menu = Wx::Menu->new();
-	foreach my $id ($ID_COPY..$ID_OPEN_IN_BROWSER)
+	foreach my $id ($ID_CONTEXT_COPY..$ID_CONTEXT_OPEN_IN_BROWSER)
 	{
-		next if $is_url && $id != $ID_OPEN_IN_BROWSER;
-		next if $id == $ID_COPY && (!$this->can('canCopy') || !$this->canCopy());
+		next if $is_url && $id != $ID_CONTEXT_OPEN_IN_BROWSER;
+		next if $id == $ID_CONTEXT_COPY && (!$this->can('canCopy') || !$this->canCopy());
 
-		next if $id == $ID_OPEN_GITUI && !$repo;
-		next if $id == $ID_OPEN_INFO && (!$repo || $is_this_info);
-		next if $id == $ID_OPEN_SUBS && (!$repo || $is_this_sub);
-		next if $id == $ID_BRANCH_HISTORY && !$repo;
-		next if $id == $ID_ALL_HISTORY && !$repo;
+		next if $id == $ID_CONTEXT_OPEN_GITUI && !$repo;
+		next if $id == $ID_CONTEXT_OPEN_INFO && (!$repo || $is_this_info);
+		next if $id == $ID_CONTEXT_OPEN_SUBS && (!$repo || $is_this_sub);
+		next if $id == $ID_CONTEXT_BRANCH_HISTORY && !$repo;
+		next if $id == $ID_CONTEXT_ALL_HISTORY && !$repo;
 
-		next if $id >= $ID_OPEN_IN_KOMODO && !$path;
-		next if $id == $ID_OPEN_EXPLORER && !$repo && !$path;
+		next if $id >= $ID_CONTEXT_OPEN_IN_KOMODO && !$path;
+		next if $id == $ID_CONTEXT_OPEN_EXPLORER && !$repo && !$path;
 
-		next if $path eq 'MODULES' && $id != $ID_OPEN_SUBS;
+		next if $path eq 'MODULES' && $id != $ID_CONTEXT_OPEN_SUBS;
 
 		my $desc = $menu_desc->{$id};
 		my ($text,$hint) = @$desc;
 		$menu->Append($id,$text,$hint,wxITEM_NORMAL);
 		$menu->AppendSeparator()
-			if $id == $ID_COPY && ($repo || $path);
+			if $id == $ID_CONTEXT_COPY && ($repo || $path);
 		$menu->AppendSeparator()
-			if $id == $ID_ALL_HISTORY && $repo && $path;
+			if $id == $ID_CONTEXT_ALL_HISTORY && $repo && $path;
 	}
 	$this->PopupMenu($menu,[-1,-1]);
 }
@@ -125,52 +113,52 @@ sub onContextMenu
 
 	display($dbg_menu,0,"onContextMenu($command_id,$id,$path)");
 
-	if ($command_id == $ID_COPY)
+	if ($command_id == $ID_CONTEXT_COPY)
 	{
 		$this->doCopy() if $this->can('doCopy');
 	}
-	elsif ($command_id == $ID_OPEN_INFO)
+	elsif ($command_id == $ID_CONTEXT_OPEN_INFO)
 	{
 		getAppFrame->createPane($ID_INFO_WINDOW,undef,{repo_path=>$repo->{path}});
 	}
-	elsif ($command_id == $ID_OPEN_SUBS)
+	elsif ($command_id == $ID_CONTEXT_OPEN_SUBS)
 	{
 		getAppFrame->createPane($ID_SUBS_WINDOW,undef,{repo_path=>$repo->{path}});
 	}
-	elsif ($command_id == $ID_OPEN_GITUI)
+	elsif ($command_id == $ID_CONTEXT_OPEN_GITUI)
 	{
 		execNoShell('git gui',$repo->{path});
 	}
-	elsif ($command_id == $ID_BRANCH_HISTORY)
+	elsif ($command_id == $ID_CONTEXT_BRANCH_HISTORY)
 	{
 		execNoShell('gitk',$repo->{path});
 	}
-	elsif ($command_id == $ID_ALL_HISTORY)
+	elsif ($command_id == $ID_CONTEXT_ALL_HISTORY)
 	{
 		execNoShell('gitk --all',$repo->{path});
 	}
 
-	elsif ($command_id == $ID_OPEN_EXPLORER)
+	elsif ($command_id == $ID_CONTEXT_OPEN_EXPLORER)
 	{
 		$path ||= $repo->{path};
 		execExplorer($path);
 	}
 
-	elsif ($command_id == $ID_OPEN_IN_SHELL)
+	elsif ($command_id == $ID_CONTEXT_OPEN_IN_SHELL)
 	{
 		chdir $path;
 		system(1,"\"$path\"");
 	}
-	elsif ($command_id == $ID_OPEN_IN_NOTEPAD)
+	elsif ($command_id == $ID_CONTEXT_OPEN_IN_NOTEPAD)
 	{
 		execNoShell("notepad \"$path\"");
 	}
-	elsif ($command_id == $ID_OPEN_IN_KOMODO)
+	elsif ($command_id == $ID_CONTEXT_OPEN_IN_KOMODO)
 	{
 		my $command = $komodo_exe." \"$path\"";
 		execNoShell($command);
 	}
-	elsif ($command_id == $ID_OPEN_IN_BROWSER)
+	elsif ($command_id == $ID_CONTEXT_OPEN_IN_BROWSER)
 	{
 		my $command = "\"start $path\"";
 		system(1,$command);

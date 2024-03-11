@@ -241,8 +241,8 @@ sub linkDisplayColor
 			# errors or merge conflict
 		$repo->canPush() || $repo->{AHEAD} ? $color_orange :
 			# needs push
-		keys %{$repo->{unstaged_changes}} ? $color_magenta :
-			# unstaged changes
+		$repo->canCommitParent() || keys %{$repo->{unstaged_changes}} ?  $color_magenta :
+			# parent ready for commit unstaged changes
 		keys %{$repo->{staged_changes}} ? $color_magenta :
 			# can commit
 		$repo->{private} ? $color_blue :

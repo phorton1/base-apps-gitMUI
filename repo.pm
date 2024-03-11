@@ -143,8 +143,10 @@ sub new
 	{
 		$this->{parent_repo} = $parent_repo;
 		$this->{rel_path}	 = $rel_path;
-		# main_module =>
+		$this->{can_commit_parent} = 0;
+		$this->{first_time} = 1;
 
+		# main_module =>
 		# $this->{submodules} = shared_clone([]);
 		# $this->{used_in}	  = shared_clone([]);
 	}
@@ -245,6 +247,83 @@ sub needsStash
 		$this->canPull() &&
 		(keys %{$this->{staged_changes}} ||
 		 keys %{$this->{unstaged_changes}}) ? 1 : 0;
+}
+sub canCommitParent
+{
+	my ($this) = @_;
+	return $this->{can_commit_parent};
+}
+
+
+
+
+sub setCanCommitParent
+	# returns true if the SUBMODULE is in a state
+	# where it can commit a submodule change to its parent.
+	# Such a commit can only be done if the SUBMODULE itself
+	# is 'clean' and up-to-date with github
+{
+	my ($this) = @_;
+	my $parent = $this->{parent_repo};
+	return if !$parent;
+
+	display(0,0,"setCanCommitParent($this->{path},$parent->{path})");
+
+	my $num_changes =
+		scalar(keys %{$this->{staged_changes}}) +
+		scalar(keys %{$this->{unstaged_changes}});
+	my $parent_unstaged = $parent->{unstaged_changes};
+	my $num_parent_unstaged = scalar(keys %$parent_unstaged);
+
+	my $commit = ${$this->{local_commits}}[0];
+	my $commit_id = $commit->{sha};
+	my $master_matches = $commit_id eq $this->{MASTER_ID};
+
+	# Such a commit can only be done if the SUBMODULE itself
+	# is 'clean' (no pending changes) and up-to-date with github.
+	# and if the parent itself would allow it and has some untaged
+	# changes and only if the most recent commit IS the MASTER_ID
+
+	my $found = '';
+	my $repo_ok =
+		$this->{BEHIND} ||
+		$this->{REBASE} ||
+		$num_changes ||
+		$parent->{BEHIND} ||
+		$parent->{REBASE} ||
+		!$num_parent_unstaged ? 0 : 1;
+
+	# and only if we find an unstaged change for
+	# the submodule on the parent
+
+	if ($repo_ok && $num_parent_unstaged)
+	{
+		my $rel_path = $this->{rel_path};
+		display(0,0,"LOOKING FOR $rel_path in $num_parent_unstaged unstaged changes");
+
+		for my $fn (sort keys %$parent_unstaged)
+		{
+			display(0,0,"COMPARE $this->{path} $rel_path TO $parent->{path} CHANGE $fn");
+			if ($fn eq $rel_path)
+			{
+				$found = $parent_unstaged->{$fn};
+				last;
+			}
+		}
+	}
+
+	my $can_commit = $repo_ok && $found ? 1 : 0;
+
+	my $DBG_UI = 1;
+	# if ($DBG_UI && ($this->{first_time} || $this->{can_commit_parent} != $can_commit))
+	{
+		warning(0,0,"setCanCommitParent($this->{path}) = $can_commit");
+		display(0,1,"repo_ok($repo_ok) found($found)");
+		display(0,1,"BEHIND($this->{BEHIND}) REBASE($this->{REBASE}) changes($num_changes) master_matches($master_matches)");
+		display(0,1,"parent BEHIND($parent->{BEHIND}) REBASE($parent->{REBASE}) unstaged($num_parent_unstaged)");
+	}
+	$this->{first_time} = 0;
+	$this->{can_commit_parent} = $can_commit;;
 }
 
 
@@ -662,11 +741,10 @@ sub addTextForHashNum
 
 
 sub toTextCtrl
+	# text ctrl has been cleared by infoWindowRight
 {
 	my ($this,$text_ctrl,$window_id) = @_;
-	my $content = [];
-
-	$text_ctrl->addLine();
+	$text_ctrl->addLine();	# blank first line
 
 	# MAIN FIELDS FIRST including the $short_status
 
@@ -694,6 +772,8 @@ sub toTextCtrl
 	$short_status = $this->addTextForFxn($short_status,'canPush');
 	$short_status = $this->addTextForFxn($short_status,'canPull');
 	$short_status = $this->addTextForFxn($short_status,'needsStash');
+	$short_status = $this->addTextForFxn($short_status,'canCommitParent');
+
 
 	if ($short_status)
 	{

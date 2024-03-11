@@ -40,17 +40,6 @@ use apps::gitUI::repos;
 use apps::gitUI::utils;
 
 
-
-my $AUTO_UPDATE_SUBMODULE_PARENTS = 0;
-	# THIS APPROACH IS "SO-SO".
-	# TRYING A PROTOTYPE OF ANOTHER APPROACH in infoWindowRight().
-	# After a pull of a submodule, we will call gitChanges()
-	# on the parent module.  If it has exactly one unstaged
-	# change, and it is the submodule, we will Commit and
-	# Push(?) that change.  The main difficulty will be in
-	# making it work nice in the progress dialog with callbacks.
-	# TBD after checkin.
-
 my $STASH_UNTRACKED_FILES = 1;
 	# Whether, when pulling, to Stash untracked files.
 	# Pros: all submodules will be the same
@@ -68,7 +57,7 @@ my $dbg_index = 1;
 my $dbg_revert = 1;
 my $dbg_commit = 1;
 my $dbg_tag = 0;
-my $dbg_push = 1;
+my $dbg_push = 0;
 my $dbg_pull = 0;
 	# -1 to show diff details
 
@@ -282,6 +271,7 @@ sub gitChanges
 	# returns undef if any problems
 	# returns 0 if no new changes
 	# returns 1 if changes have changed
+	# only called from the monitor, which handles the callback
 {
 	my ($repo,$git_repo) = @_;
 	display($dbg_chgs,0,"gitChanges($repo->{path})");
@@ -371,7 +361,7 @@ sub gitChanges
 	my $changed = 0;
 	$changed++ if assignHashIfChanged($repo,'unstaged_changes',$new_unstaged_changes,$unstaged_changed);
 	$changed++ if assignHashIfChanged($repo,'staged_changes',$new_staged_changes,$staged_changed);
-	display($dbg_chgs,0,"gitChanges($repo->{path}) returning $changed");
+	display($dbg_chgs-$changed,0,"gitChanges($repo->{path}) returning $changed");
 	return $changed;
 }
 
@@ -501,8 +491,9 @@ sub addEXEFile
 
 sub gitIndex
 	# git add paths, or -A (all)
-	# Note that we manually generate a monitor_callback
-	# after adjusting repo hashes.
+	# Note that we manually call notifyRepoChanged() after we
+	# 	manually adjust the repo hashes, becuase the change would
+	#   NOT get caught in gitChanges otherwise.
 	# CHMOD NOTE:  Git::Raw does not have a 'chmod' function or
 	#   hooks which support setting the executable bit on new files
 	#   from windows, as is done with the pre-commit
@@ -583,7 +574,11 @@ sub gitIndex
 		$repo->{'staged_changes'} = shared_clone({});
 	}
 
-	apps::gitUI::Frame::monitor_callback({ repo=>$repo })
+	# it is a tossup if manually adjusting the hashes is a good idea
+	# PROS: theoretically faster response in the commit window
+	# CONS: lots of callbacks on big lists of commits
+
+	getAppFrame()->notifyRepoChanged($repo)
 		if getAppFrame();
 
 	display($dbg_index,0,"gitIndex() returning 1");
@@ -622,7 +617,7 @@ sub gitRevert
 	# Revert changes to unstaged files.
 	# My version always gets a list of paths.
 	# Implemented by doing a checkout from the $index
-	# WILL generate a monitor callback!
+	# Does NOT call notifyReposChanged() as we do NOT manually adjust the hashes
 {
 	my ($repo,$paths) = @_;
 	my $num_paths = @$paths;
@@ -664,8 +659,8 @@ sub gitRevert
 		# progres =>						# The callback receives a string containing the path of the file $path, an integer $completed_steps and an integer $total_steps.
 	};
 
-	# DO THE REVERT - WILL GENERATE A MONITOR EVENT
-	# returns undef
+	# DO THE REVERT - the monitor *should* generate
+	# a notifyCallback on gitChanges()
 
 	my $undef = $index->checkout( $opts );
 
@@ -728,8 +723,7 @@ sub gitCommit
 	$repo->{staged_changes} = shared_clone({});
 	gitStart($repo,$git_repo);
 	setCanPushPull($repo);
-
-	apps::gitUI::Frame::monitor_callback({ repo=>$repo })
+	getAppFrame()->notifyRepoChanged($repo)
 		if getAppFrame();
 
 	display($dbg_commit,0,"gitCommit() returning 1");
@@ -772,7 +766,9 @@ sub gitTag
 
 	# monitor_callback() for good measure
 
-	apps::gitUI::Frame::monitor_callback({ repo=>$repo })
+	gitStart($repo,$git_repo);
+	setCanPushPull($repo);
+	getAppFrame()->notifyRepoChanged($repo)
 		if getAppFrame();
 
 	display($dbg_tag,0,"gitTag($tag) returning 1");
@@ -909,14 +905,16 @@ sub gitPush
 
 	# We call gitStart() and generate an event in any case
 	# to keep the system as consistent as possible, but we only
-	# clear BEHIND if it worked.
+	# clear BEHIND if it worked. We tell the monitor to update as
+	# soon as possible after a push or pull
 
 	gitStart($repo,$git_repo);
 	$repo->{BEHIND} = 0 if $rslt;
 		# pre-empt the next monitorUpdate() call
 	setCanPushPull($repo);
-	apps::gitUI::Frame::monitor_callback({ repo=>$repo })
+	getAppFrame()->notifyRepoChanged($repo)
 		if getAppFrame();
+	apps::gitUI::monitor::monitorUpdate(1);
 
 	display($dbg_push,1,"gitPush() returning rslt="._def($rslt));
 	return $rslt;
@@ -1037,55 +1035,16 @@ sub gitPull
 
 	# We call gitStart() and generate an event in any case
 	# to keep the system as consistent as possible, but we only
-	# clear BEHIND if it worked.
+	# clear BEHIND if it worked. We tell the monitor to update as
+	# soon as possible after a push or pull
 
 	gitStart($repo,$git_repo);
 	$repo->{BEHIND} = 0 if $rslt;
 		# pre-empt the next repoStatus() call
 	setCanPushPull($repo);
-	apps::gitUI::Frame::monitor_callback({ repo=>$repo })
+	getAppFrame()->notifyRepoChanged($repo)
 		if getAppFrame();
-
-	my $parent_repo = $repo->{parent_repo};
-	if ($AUTO_UPDATE_SUBMODULE_PARENTS && $rslt && $parent_repo)
-	{
-		display($dbg_pull,1,"checking parent repo($parent_repo->{path})");
-		my $parent_chgs = gitChanges($parent_repo);
-			# We are 'eating' the gitChanges(), so WE need to notify
-			# if any changes.
-
-		my $unstaged = $parent_repo->{unstaged_changes};
-		if (!$parent_repo->{BEHIND} &&
-			!$parent_repo->{AHEAD} &&
-			!$parent_repo->{REBASE} &&
-			!scalar(keys %{$parent_repo->{staged_changes}}) &&
-			scalar(keys %$unstaged) == 1 &&
-			(keys %$unstaged)[0] eq $repo->{rel_path})
-		{
-			warning($dbg_pull,1,"ONLY CHANGE TO PARENT REPO IS UNSTAGED($repo->{rel_path})");
-
-			my $commit = ${$repo->{local_commits}}[0];
-			my $commit_id = $commit->{sha};
-			my $commit_msg = $commit->{msg};
-			my $commit8 = _lim($commit_id,8);
-
-			my $msg = "gitPull submodule($repo->{rel_path}) auto_commit($commit8) $commit_msg";
-
-			# stage, commit, and (?) push the change
-
-			$rslt = gitIndex($parent_repo,0);
-			$rslt &&= gitCommit($parent_repo,$msg);
-			# $rslt &&= gitPush($parent_repo, $user_cb_object, $user_cb);
-		}
-
-
-		if ($parent_chgs)
-		{
-			setCanPushPull($parent_repo);
-			apps::gitUI::Frame::monitor_callback({ repo=>$parent_repo })
-				if getAppFrame();
-		}
-	}
+	apps::gitUI::monitor::monitorUpdate(1);
 
 	display($dbg_pull,1,"gitPull() returning rslt="._def($rslt));
 	return $rslt;

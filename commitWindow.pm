@@ -12,6 +12,7 @@ use Wx qw(:everything);
 use Wx::Event qw(
 	EVT_SPLITTER_SASH_POS_CHANGED
 	EVT_SIZE );
+use apps::gitUI::Resources;
 use apps::gitUI::commitList;
 use apps::gitUI::commitRight;
 use Pub::Utils;
@@ -32,9 +33,6 @@ BEGIN {
 }
 
 
-my (
-	$ID_SPLITTER_VERT,
-	$ID_SPLITTER_LEFT ) = (9000..9100);
 
 
 my $MIN_LEFT_WIDTH 	        = 5;
@@ -84,8 +82,8 @@ sub new
 	# a closed position.  The actual minimums are set
 	# via onSashPosChanged() and doLayout();
 
-	my $vert_splitter  = $this->{vert_splitter}  = Wx::SplitterWindow->new($this, 		   $ID_SPLITTER_VERT, [0, 0]);
-	my $left_splitter  = $this->{left_splitter}  = Wx::SplitterWindow->new($vert_splitter, $ID_SPLITTER_LEFT, [0, 0]);
+	my $vert_splitter  = $this->{vert_splitter}  = Wx::SplitterWindow->new($this, 		   $ID_COMMIT_SPLITTER_VERT, [0, 0]);
+	my $left_splitter  = $this->{left_splitter}  = Wx::SplitterWindow->new($vert_splitter, $ID_COMMIT_SPLITTER_LEFT, [0, 0]);
 	$vert_splitter->SetMinimumPaneSize(20);
 	$left_splitter->SetMinimumPaneSize(20);
 
@@ -101,8 +99,8 @@ sub new
 	$this->doLayout();
 
     EVT_SIZE($this,\&onSize);
-	EVT_SPLITTER_SASH_POS_CHANGED($this, $ID_SPLITTER_VERT, \&onSashPosChanged);
-	EVT_SPLITTER_SASH_POS_CHANGED($this, $ID_SPLITTER_LEFT, \&onSashPosChanged);
+	EVT_SPLITTER_SASH_POS_CHANGED($this, $ID_COMMIT_SPLITTER_VERT, \&onSashPosChanged);
+	EVT_SPLITTER_SASH_POS_CHANGED($this, $ID_COMMIT_SPLITTER_LEFT, \&onSashPosChanged);
 
 	return $this;
 }
@@ -154,13 +152,13 @@ sub onSashPosChanged
     my $height = $sz->GetHeight();
 	display($dbg_splitters,0,"this($this) onSashPosChanged($id) pos($pos) width($width) height($height)");
 
-	if ($id == $ID_SPLITTER_VERT)
+	if ($id == $ID_COMMIT_SPLITTER_VERT)
 	{
 		$pos = $MIN_LEFT_WIDTH if $pos < $MIN_LEFT_WIDTH;
 		$pos = $width - $MIN_RIGHT_WIDTH if $pos > $width - $MIN_RIGHT_WIDTH;
 		$this->{left_width} = $pos
 	}
-	elsif ($id == $ID_SPLITTER_LEFT)
+	elsif ($id == $ID_COMMIT_SPLITTER_LEFT)
 	{
 		my $pct = (100*$pos) / $height;
 		$pct = $MIN_LEFT_TOP_PCT if $pct < $MIN_LEFT_TOP_PCT;

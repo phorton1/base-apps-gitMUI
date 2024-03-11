@@ -69,19 +69,13 @@ my $ACTION_DO_SELECTED = 2;			# do all selected files
 my $ACTION_DO_SINGLE_FILE = 3;		# do a single (unselected) file
 
 
-# watch out for conflicts with repoMenu.pm IDs
 
-my ($ID_REVERT_CHANGES,
-	$ID_OPEN_IN_KOMODO,
-	$ID_SHOW_EXPLORER,
-	$ID_OPEN_IN_SHELL,
-	$ID_OPEN_IN_NOTEPAD ) = (9000..9999);
 my $menu_desc = {
-	$ID_REVERT_CHANGES  => ['Revert',	'Revert changes to one or more items' ],
-	$ID_OPEN_IN_KOMODO	=> ['Komodo',	'Open one or more items in Komodo Editor' ],
-	$ID_SHOW_EXPLORER   => ['Explorer',	'Open single item in Windows Explorer' ],
-	$ID_OPEN_IN_SHELL   => ['Shell',	'Open single item in the Windows Shell' ],
-	$ID_OPEN_IN_NOTEPAD => ['Notepad',	'Open single item in the Windows Notepad' ],
+	$ID_COMMIT_CTRL_REVERT_CHANGES  => ['Revert',	'Revert changes to one or more items' ],
+	$ID_COMMIT_CTRL_OPEN_IN_KOMODO	=> ['Komodo',	'Open one or more items in Komodo Editor' ],
+	$ID_COMMIT_CTRL_SHOW_EXPLORER   => ['Explorer',	'Open single item in Windows Explorer' ],
+	$ID_COMMIT_CTRL_OPEN_IN_SHELL   => ['Shell',	'Open single item in the Windows Shell' ],
+	$ID_COMMIT_CTRL_OPEN_IN_NOTEPAD => ['Notepad',	'Open single item in the Windows Notepad' ],
 };
 
 
@@ -132,7 +126,7 @@ sub new
 		# We have to register DCLICK or else we 'lose'
 		# mouse down events.
 	EVT_RIGHT_DOWN($this,\&onRightDown);
-	EVT_MENU_RANGE($this, $ID_REVERT_CHANGES, $ID_OPEN_IN_NOTEPAD, \&onItemMenu);
+	EVT_MENU_RANGE($this, $ID_COMMIT_CTRL_REVERT_CHANGES, $ID_COMMIT_CTRL_OPEN_IN_NOTEPAD, \&onItemMenu);
 
 	$this->addRepoMenu($ID_COMMIT_WINDOW);
 
@@ -1091,14 +1085,14 @@ sub onRightDown
 	display($dbg_cmd,1,"buildMenu repo($repo->{path}) fn(".($item?$item->{fn}:'').")");
 
 	my $menu = Wx::Menu->new();
-	foreach my $ctrl_id ($ID_REVERT_CHANGES..$ID_OPEN_IN_NOTEPAD)
+	foreach my $ctrl_id ($ID_COMMIT_CTRL_REVERT_CHANGES..$ID_COMMIT_CTRL_OPEN_IN_NOTEPAD)
 	{
 		my $desc = $menu_desc->{$ctrl_id};
 		my ($text,$hint) = @$desc;
-		if ($ctrl_id != $ID_REVERT_CHANGES || !$this->{is_staged})
+		if ($ctrl_id != $ID_COMMIT_CTRL_REVERT_CHANGES || !$this->{is_staged})
 		{
 			$menu->Append($ctrl_id,$text,$hint,wxITEM_NORMAL);
-			$menu->AppendSeparator() if $ctrl_id == $ID_REVERT_CHANGES;
+			$menu->AppendSeparator() if $ctrl_id == $ID_COMMIT_CTRL_REVERT_CHANGES;
 		}
 	}
 	$this->PopupMenu($menu,[-1,-1]);
@@ -1127,20 +1121,20 @@ sub onItemMenu
 
 	display($dbg_cmd,0,"onItemMenu($this->{name},$command_id) repo($path) fn($fn) selected($selected) multiple($multiple)");
 
-	if ($command_id == $ID_SHOW_EXPLORER)
+	if ($command_id == $ID_COMMIT_CTRL_SHOW_EXPLORER)
 	{
 		execExplorer("$repo->{path}/$fn");
 	}
-	elsif ($command_id == $ID_OPEN_IN_SHELL)
+	elsif ($command_id == $ID_COMMIT_CTRL_OPEN_IN_SHELL)
 	{
 		chdir $repo->{path};
 		system(1,"\"$repo->{path}/$fn\"");
 	}
-	elsif ($command_id == $ID_OPEN_IN_NOTEPAD)
+	elsif ($command_id == $ID_COMMIT_CTRL_OPEN_IN_NOTEPAD)
 	{
 		execNoShell("notepad \"$repo->{path}/$fn\"");
 	}
-	elsif ($command_id == $ID_OPEN_IN_KOMODO)
+	elsif ($command_id == $ID_COMMIT_CTRL_OPEN_IN_KOMODO)
 	{
 		my $filenames = [];
 		if (!$multiple)
@@ -1170,7 +1164,7 @@ sub onItemMenu
 	# revert
 	#-----------------------
 
-	elsif ($command_id == $ID_REVERT_CHANGES)
+	elsif ($command_id == $ID_COMMIT_CTRL_REVERT_CHANGES)
 	{
 		if (!$multiple)
 		{
@@ -1227,7 +1221,7 @@ sub onItemMenu
 
 			}	# for each repo with selections
 		}	# if multiple files
-	}	# $ID_REVERT_CHANGES
+	}	# $ID_COMMIT_CTRL_REVERT_CHANGES
 }	# onCommand()
 
 

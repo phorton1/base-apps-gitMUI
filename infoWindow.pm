@@ -39,8 +39,6 @@ BEGIN {
 }
 
 
-my $ID_SPLITTER_VERT = 9000;
-
 
 my $MIN_LEFT_WIDTH 	        = 5;
 my $MIN_RIGHT_WIDTH         = 5;
@@ -79,7 +77,7 @@ sub new
 	# a closed position.  The actual minimums are set
 	# via onSashPosChanged() and doLayout();
 
-	my $vert_splitter  = $this->{vert_splitter}  = Wx::SplitterWindow->new($this, 		   $ID_SPLITTER_VERT, [0, 0]);
+	my $vert_splitter  = $this->{vert_splitter}  = Wx::SplitterWindow->new($this, 		   $ID_INFO_SPLITTER_VERT, [0, 0]);
 	$vert_splitter->SetMinimumPaneSize(20);
 
 	my $left = $this->{left} = apps::gitUI::infoWindowList->new($this,$vert_splitter);
@@ -91,7 +89,7 @@ sub new
 	$left->selectObject($data->{repo_path}) if $data->{repo_path};
 
     EVT_SIZE($this,\&onSize);
-	EVT_SPLITTER_SASH_POS_CHANGED($this, $ID_SPLITTER_VERT, \&onSashPosChanged);
+	EVT_SPLITTER_SASH_POS_CHANGED($this, $ID_INFO_SPLITTER_VERT, \&onSashPosChanged);
 
 	return $this;
 }
@@ -169,7 +167,7 @@ sub populate
 sub notifyRepoChanged
 {
 	my ($this,$repo) = @_;
-	display($dbg_pop,0,"notifyRepoChanged($repo->{path})");
+	display($dbg_notify,0,"notifyRepoChanged($repo->{path})");
 	$this->{left}->notifyRepoChanged($repo);
 }
 
