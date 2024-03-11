@@ -22,10 +22,11 @@ use apps::gitUI::myHyperlink;
 use base qw(Pub::WX::Window apps::gitUI::repoMenu);
 
 my $dbg_win = 0;
-my $dbg_pop = 1;
+my $dbg_pop = 0;
 my $dbg_layout = 1;
 my $dbg_notify = 1;
 
+my $USE_IDS_FOR_DISPLAY = 1;
 
 my $ROW_START 	 = 10;
 my $ROW_HEIGHT   = 18;
@@ -203,12 +204,17 @@ sub populate
 		{
 			if (!$started && $section->{name} ne $repo->{path})
 			{
-				display($dbg_pop,1,"staticText($section->{name})");
-				my $ctrl = Wx::StaticText->new($this,-1,$section->{name},[0,0]);
-				addSectionCtrl($ctrl_section,$ctrl,$section->{name});
+				my $name = $section->{name};
+				$name =~ s/^\/|^-//;
+				$name =~ s/\//-/g if $USE_IDS_FOR_DISPLAY;
+				display($dbg_pop,1,"staticText($name)");
+				my $ctrl = Wx::StaticText->new($this,-1,$name,[0,0]);
+				addSectionCtrl($ctrl_section,$ctrl,$name);
 			}
 
-			my $display_name = $repo->pathWithinSection();
+			my $display_name = $USE_IDS_FOR_DISPLAY ?
+				$repo->idWithinSection() :
+				$repo->pathWithinSection();
 			display($dbg_pop,1,"hyperLink($display_name)");
 
 			my $color = linkDisplayColor($repo);

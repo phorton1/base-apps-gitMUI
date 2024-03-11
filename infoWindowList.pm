@@ -48,6 +48,7 @@ my $dbg_layout = 1;
 my $dbg_notify = 1;
 my $dbg_sel = -2;
 
+my $USE_IDS_FOR_DISPLAY = 1;
 
 my $LINE_HEIGHT   = 18;
 
@@ -292,14 +293,19 @@ sub populate
 				}
 				else
 				{
-					display($dbg_pop,1,"staticText($section->{name})");
-					Wx::StaticText->new($this,-1,$section->{name},[5,$ypos]);
+					my $name = $section->{name};
+					$name =~ s/^\/|^-//;
+					$name =~ s/\//-/g if $USE_IDS_FOR_DISPLAY;
+					display($dbg_pop,1,"staticText($name)");
+					Wx::StaticText->new($this,-1,$name,[5,$ypos]);
 				}
 				$ypos += $LINE_HEIGHT;
 			}
 
 			my $color = linkDisplayColor($repo);
-			my $display_name = $repo->pathWithinSection($this->{sub_mode});
+			my $display_name = $USE_IDS_FOR_DISPLAY && !$this->{sub_mode} ?
+				$repo->idWithinSection() :
+				$repo->pathWithinSection($this->{sub_mode});
 			$this->newCtrl($ypos,$repo,$repo->{path},$display_name,$color);
 			$ypos += $LINE_HEIGHT;
 			$section_started = 1;

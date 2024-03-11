@@ -332,10 +332,10 @@ sub pathWithinSection
 {
 	my ($this,$long) = @_;
 	$long ||= 0;
-	my $MAX_DISPLAY_PATH = 28;
+	my $MAX_DISPLAY_PATH = 30;
 		# not including elipses
 
-	# submodules show ++ name
+	# submodules show ++ relpath
 	my $path = $this->{parent_repo} && !$long ?
 		"++ $this->{rel_path}" :
 		$this->{path};
@@ -349,6 +349,36 @@ sub pathWithinSection
 		if length($path) >= $MAX_DISPLAY_PATH;
 	return $path;
 }
+
+sub idWithinSection
+	# for display only
+	# if !long (default) submodules show as ++rel_path,
+	# otherwise they show as their path within the section
+{
+	my ($this,$long) = @_;
+	$long ||= 0;
+	my $MAX_DISPLAY_PATH = 30;
+		# not including elipses
+
+	my $id = $this->{id};
+	if ($this->{parent_repo})
+	{
+		$id = "++ $this->{rel_path}";
+	}
+	else
+	{
+		my $re = repoPathToId($this->{section_path});
+		$id =~ s/^$re//;
+		$id =~ s/^-//;
+		$id ||= $this->{id};
+	}
+
+
+	$id = '...'.substr($id,-$MAX_DISPLAY_PATH)
+		if length($id) >= $MAX_DISPLAY_PATH;
+	return $id;
+}
+
 
 
 
