@@ -175,10 +175,12 @@ sub onUpdateUI
 	my $id = $event->GetId();
 	my $enable = 0;
 	$enable = 1 if $id == $ID_COMMAND_PUSH_ALL && canPushRepos();
-	$enable = 1 if $id == $ID_COMMAND_RESCAN && monitorStarted();
+	$enable = 1 if $id == $ID_COMMAND_RESCAN;
 	$enable = 1 if $id == $ID_COMMAND_COMMIT &&
 		$this->{parent}->canCommit() &&
 		$this->{commit_msg}->GetValue();
+
+	$enable &&= monitorRunning();
 	$event->Enable($enable);
 }
 

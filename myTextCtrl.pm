@@ -135,17 +135,13 @@ sub onSingleUpdateUI
 
 	my $enable = 0;
 	$enable = 1 if $id == $INFO_RIGHT_COMMAND_SINGLE_PUSH &&
-		$repo->canPush();
-	$enable = 1 if $id == $INFO_RIGHT_COMMAND_SINGLE_PULL &&
-		monitorRunning() &&
-		$repo && !$repo->{AHEAD};
+		$repo && $repo->canPush();
 	$enable = 1 if $id == $INFO_RIGHT_COMMAND_SINGLE_COMMIT_PARENT &&
-		monitorRunning() &&
 		$repo && $repo->canCommitParent();
-
 
 	if ($id == $INFO_RIGHT_COMMAND_SINGLE_PULL)
 	{
+		$enable = 1 if $repo && !$repo->{AHEAD};
 		my $button_title =
 			$repo->needsStash() ? 'Stash+Pull' :
 			$repo->canPull() ? 'Needs Pull' :
@@ -153,6 +149,8 @@ sub onSingleUpdateUI
 		$event->SetText($button_title) if
 			$event->GetText() ne $button_title;
 	}
+
+	$enable &&= monitorRunning();
 	$event->Enable($enable);
 }
 

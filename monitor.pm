@@ -149,11 +149,18 @@ my $UPDATE_INTERVAL = $DEFAULT_UPDATE_INTERVAL;
 
 
 sub monitorRunning
+	# monitorRunning() indicates that a command can
+	# take place, which *might* pause the monitor
+	# or take place while the monitor is in an update.
 {
-	return $monitor_state == $MONITOR_STATE_RUNNING ? 1 : 0;
+	return
+		$monitor_state == $MONITOR_STATE_RUNNING ||
+		$monitor_state == $MONITOR_STATE_UPDATE ? 1 : 0;
 }
 
 sub monitorBusy
+	# monitoryBusy() is specifically intended to allow
+	# commands that might stop and restart the monitor.
 {
 	return
 		$monitor_state != $MONITOR_STATE_RUNNING &&
@@ -448,6 +455,15 @@ sub doMonitorStartup
 			setCanPushPull($repo);
 			&$the_callback({ repo=>$repo });
 		}
+	}
+
+	# do an update as part of the startup
+	# before any commands are allowed ..
+
+	if ($can_update)
+	{
+		$can_update = doMonitorUpdate() ;
+		$last_update = time();
 	}
 
 	&$the_callback({ status =>"started" });

@@ -166,12 +166,13 @@ sub onUpdateUI
 	my $id = $event->GetId();
 	my $enable = 0;
 
-	$enable = 1 if $id == $ID_COMMAND_RESCAN && monitorRunning();
-	$enable = 1 if $id == $ID_COMMAND_REFRESH_STATUS && monitorRunning() && !monitorBusy();
-	$enable = 1 if $id == $ID_COMMAND_REBUILD_CACHE && monitorRunning() && !monitorBusy();
+	$enable = 1 if $id == $ID_COMMAND_RESCAN && !monitorBusy();
+	$enable = 1 if $id == $ID_COMMAND_REFRESH_STATUS && !monitorBusy();
+	$enable = 1 if $id == $ID_COMMAND_REBUILD_CACHE && !monitorBusy();
 	$enable = 1 if $id == $ID_COMMAND_PUSH_ALL && canPushRepos();
 	$enable = 1 if $id == $ID_COMMAND_PULL_ALL && canPullRepos();
 
+	$enable &&= monitorRunning();
 	$event->Enable($enable);
 }
 

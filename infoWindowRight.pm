@@ -126,15 +126,14 @@ sub onUpdateUI
 
 	my $enable = 0;
 	$enable = 1 if $id == $ID_COMMAND_REFRESH_STATUS &&
-		monitorRunning() && !monitorBusy();
+		!monitorBusy();
 	$enable = 1 if $id == $INFO_RIGHT_COMMAND_PUSH &&
 		$repo &&
 		$repo->canPush();
 
 	if ($id == $INFO_RIGHT_COMMAND_COMMIT_PARENT)
 	{
-		$enable = 1 if monitorRunning() &&
-			$repo && $repo->canCommitParent();
+		$enable = 1 if $repo && $repo->canCommitParent();
 		my $button_title = $repo && $repo->{is_subgroup} ?
 			'CommitParents' :
 			'CommitParent';
@@ -147,8 +146,7 @@ sub onUpdateUI
 
 	if ($id == $INFO_RIGHT_COMMAND_PULL)
 	{
-		$enable = 1 if monitorRunning() &&
-			$repo && !$repo->{AHEAD};
+		$enable = 1 if $repo && !$repo->{AHEAD};
 		my $button_title =
 			$repo && $repo->needsStash() ? 'Stash+Pull' :
 			$repo && $repo->canPull() ? 'Needs Pull' :
@@ -157,6 +155,7 @@ sub onUpdateUI
 			$event->GetText() ne $button_title;
 	}
 
+	$enable &&= monitorRunning();
 	$event->Enable($enable);
 }
 
