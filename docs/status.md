@@ -1,12 +1,12 @@
 # gitStatus and Updating
 
-Maintaining the status of the local repositories versus github
+Maintaining the status of the local repositories versus gitHub
 is rather complicated, and a bit time consuming.
 
 This document describes how the general scheme by which
-monitorUpdate() sets the repo GITHUB_ID, remote_commits,
+monitorUpdate() sets the repo gitHub_ID, remote_commits,
 and {BEHIND} members. {BEHIND} indicates that a repo is
-out of date with respect to github and needs to be pulled.
+out of date with respect to gitHub and needs to be pulled.
 
 By the structure of the monitor, which calls gitChanges()
 on each repo at startup, which in turn calls gitStart()
@@ -18,9 +18,9 @@ the , and maintained, for every repo in repoGit().
 
 ## Automatic Status Updating
 
-There is a preference, GITHUB_UPDATE_INTERVAL, default 90,
+There is a preference, gitHub_UPDATE_INTERVAL, default 90,
 which *should* be set to 0 or a minimum of 60, that will cause
-the monitor thread to check for changes to github events.
+the monitor thread to check for changes to gitHub events.
 
 If there is a problem (i.e. no internet connection) doing
 a monitorUpdate(), the system will report an error and stop
@@ -33,7 +33,7 @@ command.
 
 The monitor thread does the behind-the-scenes work
 to call gitChanges(), which sets local members, and
-to process github events to set remote members,
+to process gitHub events to set remote members,
 necessary to determine the status of a repo.
 
 - HEAD_ID, MASTER_ID, REMOTE_ID - local commit ids
@@ -48,22 +48,22 @@ necessary to determine the status of a repo.
   this is the number of unpushed commits, set in gitStart().
 
 Once every so often, or at the users request, monitorUpdate()
-is called which hits github for a list of events, and updates
+is called which hits gitHub for a list of events, and updates
 the remote members on all repos.
 
-- github events - is a json data structure containing a list
-  of the most recent pushes to github, and the commits within
+- gitHub events - is a json data structure containing a list
+  of the most recent pushes to gitHub, and the commits within
   those pushes.  We get it initially into a cache at program startup,
   and then update the cache, using the ETag header, which will only
   return events if they have changed since the last ETag, therafter.
 
-- GITHUB_ID - the SHA of the most recent commit found for a
-  given repo in the github events.
+- gitHub_ID - the SHA of the most recent commit found for a
+  given repo in the gitHub events.
 
 - remote_commits - a list of any commits that we find in the
-  github events for the given repo.
+  gitHub events for the given repo.
 
-- BEHIND - number of remote commits between REMOTE_ID and GITHUB_ID
+- BEHIND - number of remote commits between REMOTE_ID and gitHub_ID
   this is the number of commits made to the repo from other sources
   that are not present on the machine
 
@@ -88,23 +88,23 @@ as errors if they are broken, in gitStart() and monitorUpdate():
   count for the repo ... that is, how many unpushed
   commits exist.
 
-- For any repo that have events in the github event list some
+- For any repo that have events in the gitHub event list some
   event in the list *should* match the the REMOTE_ID of the repo.
-  That is to say that for every list of events returned by github,
+  That is to say that for every list of events returned by gitHub,
   there should be at least ONE commit for any mentioned repo,
   that has the same SHA as the most recent sync (push or pull)
-  we did to/from github.
+  we did to/from gitHub.
 
 
 ### Remote Commits
 
-Note that the github event API history is limited to 100 in
+Note that the gitHub event API history is limited to 100 in
 current implementation, 300 if I implement paging, and never
 goes back more than 90 days.  By default I get the most recent
 30 events.
 
 THEREFORE, if there are NO EVENTS (pushes) to a given repo in
-the current event list, we ASSUME it is NOT BEHIND github.
+the current event list, we ASSUME it is NOT BEHIND gitHub.
 If I leave commits unpushed for more than 90 days, the system
 may not notice it is behind and a push *might* fail, needing
 a merge.  Unlikely, but possible.
@@ -112,8 +112,8 @@ a merge.  Unlikely, but possible.
 Otherwise, for each repo, we can now determine BEHIND by
 noting any remote commits since REMOTE_ID.
 
-GITHUB_ID will be set to the most recent commit, if any
-found in the github event list.
+gitHub_ID will be set to the most recent commit, if any
+found in the gitHub event list.
 
 
 ## Thread vs. Explicit Command
@@ -133,8 +133,8 @@ if needed, in gitPull().  It is upto the UI to not Pull
 repos that need stashing if that's what the user desires.
 
 A Pull is allowed even if the repo is not explicitly {BEHIND},
-in case the github events are not updated, which can take
-a minute or more on github.
+in case the gitHub events are not updated, which can take
+a minute or more on gitHub.
 
 
 gitPull() uses the same Progress dialog and callbacks as gitPush().

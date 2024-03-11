@@ -7,8 +7,8 @@
 # The experimental methods in this section try to accomplish
 # several goals.
 #
-# We use the github events API on a thread to detect pushes
-# to github that might take place on other machines, or from
+# We use the gitHub events API on a thread to detect pushes
+# to gitHub that might take place on other machines, or from
 # other submodules on the same machine, and if so, determine
 # whether the local repo is AHEAD and or BEHIND,
 # which, along with HAS_CHANGES, which is set if the repo has
@@ -51,8 +51,8 @@
 #
 # This can sort-of be done by gathering key commit identifiers,
 # SHA's, from the local repos, which can be done relatively
-# quickly, and then, by using a cache and github events,
-# compared to the remote (github) repository for change detection.
+# quickly, and then, by using a cache and gitHub events,
+# compared to the remote (gitHub) repository for change detection.
 #
 # KEY COMMIT ID'S
 #
@@ -60,7 +60,7 @@
 #
 #		head_id = HEAD - the commit the repo is at
 #		master_id = refs/heads/$branch - the most recent commit in the main branch
-#		remote_id = refs/remotes/origin/$branch - the last sync with github
+#		remote_id = refs/remotes/origin/$branch - the last sync with gitHub
 #
 # Invariants:
 #
@@ -87,10 +87,10 @@
 # be updated locally in gitPush() and gitComit() after the system is
 # initialized (scanned).
 #
-# GITHUB EVENTS
+# gitHub EVENTS
 #
-# The github event API will give us a list of the most recent pushes
-# to github, along with the repo paths and commit_ids in those pushes.
+# The gitHub event API will give us a list of the most recent pushes
+# to gitHub, along with the repo paths and commit_ids in those pushes.
 # The event history goes back a maximum of 90 days.
 #
 # It is **safe** to assume that if a repo has not been pushed in

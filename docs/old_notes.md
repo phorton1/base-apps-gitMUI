@@ -73,13 +73,13 @@ I can use the datetime stamps on /.git/index, /.git/HEAD
 --------------------------------------
 
 The repo list is quickly built when the program is started, including
-using a cached version of the data from github (descriptons, fork status,
+using a cached version of the data from gitHub (descriptons, fork status,
 etc).
 
 There are certain operations that refresh the list that take significant itme.
 
 - Scanning all repositories for changes
-- Refreshing the information from github.
+- Refreshing the information from gitHub.
 - Looking for broken links, and other as-yet undetermined utilities
 
 Particularly, scanning repositories for changes takes 5-15 seconds.
@@ -260,7 +260,7 @@ Visualing FILE diffs
 
 ## Other analysis ideas
 
-- CORRECT GITHUB LINKS in MD files
+- CORRECT gitHub LINKS in MD files
 - Libraries that SHOULD BE FORKS
 
 
