@@ -611,14 +611,15 @@ sub contentLine
 
 sub contentArray
 {
-	my ($this,$text_ctrl,$bold,$key,$ucase) = @_;
+	my ($this,$text_ctrl,$bold,$key,$ucase,$sub_context) = @_;
 	$ucase ||= 0;
 	my $label = $key;
 	$label = uc($label) if $ucase;
 	my $array = $this->{$key};
 	return '' if !$array || !@$array;
 
-	$text_ctrl->addSingleLine($bold, $color_black, $label);
+	my $line = $text_ctrl->addLine();
+	$text_ctrl->addPart($line, $bold, $color_black, $label, $sub_context);
 
 	my $color = $color_blue;
 	for my $item (@$array)
@@ -626,10 +627,15 @@ sub contentArray
 		my $context;
 		my $value = $item;
 
-		if ($key eq 'uses' ||
+		if ($key eq 'submodules')
+		{
+			my $repo = apps::gitUI::repos::getRepoByPath($value);
+			$context = { repo => $repo, path=>"subs:$repo->{id}" };
+			$color = linkDisplayColor($repo);
+		}
+		elsif ($key eq 'uses' ||
 			$key eq 'used_by' ||
 			$key eq 'friend' ||
-			$key eq 'submodules' ||
 			$key eq 'used_in')
 		{
 			$context = { repo_path => $value };
@@ -653,7 +659,7 @@ sub contentArray
 		# only the highest level repos need to be specified as groups.
 		# The recursion should be handled in parseRepos()
 
-		my $line = $text_ctrl->addLine();
+		$line = $text_ctrl->addLine();
 		$text_ctrl->addPart($line, 0, $color_black, pad('',4));
 		$text_ctrl->addPart($line, $bold, $color, $value, $context);
 	}
@@ -748,9 +754,8 @@ sub toTextCtrl
 	my $kind =
 		$this->{parent_repo} ? "SUBMODULE " :
 		$this->{used_in} ? "MAIN_MODULE " : 'REPO';
-	my $sub_context = $window_id != $ID_SUBS_WINDOW && (
-		$this->{parent_repo} || $this->{used_in}) ?
-		{ repo=>$this, path=>'MODULES'} : '';
+	my $sub_context = $kind ne 'REPO' ?
+		{ repo=>$this, path=>"subs:$this->{id}" } : '';
 
 	$this->contentLine($text_ctrl,1,'path',$kind,$sub_context);
 	$this->contentLine($text_ctrl,1,'id');
@@ -793,9 +798,6 @@ sub toTextCtrl
 
 	if ($this->{parent_repo})
 	{
-		my $main_module = apps::gitUI::repos::getRepoById($this->{id});
-		my $sub_context = { repo=>$main_module, path=>'MODULES'};
-
 		$text_ctrl->addLine();
 		$this->contentLine($text_ctrl,1,'id','MAIN_MODULE',$sub_context);
 		$this->contentLine($text_ctrl,1,'parent_repo');
@@ -805,7 +807,7 @@ sub toTextCtrl
 	{
 		$text_ctrl->addLine();
 		$this->contentArray($text_ctrl,0,'submodules',1);
-		$this->contentArray($text_ctrl,0,'used_in',1);
+		$this->contentArray($text_ctrl,0,'used_in',1,$sub_context);
 	}
 
 	# ERRORS AND WARNINGS THIRD

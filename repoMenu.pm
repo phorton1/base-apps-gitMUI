@@ -13,6 +13,7 @@ use Wx qw(:everything);
 use Wx::Event qw(
 	EVT_MENU_RANGE );
 use Pub::Utils;
+use Pub::Prefs;
 use apps::gitUI::Resources;
 
 
@@ -27,6 +28,7 @@ my $menu_desc = {
 	$ID_REPO_OPEN_GITUI		=> ['GitGUI',			'Open the repository in original GitGUI' ],
 	$ID_REPO_BRANCH_HISTORY	=> ['Branch History',	'Show Branch History' ],
 	$ID_REPO_ALL_HISTORY	=> ['All History',		'Show All History' ],
+	$ID_REPO_OPEN_GITHUB    => ['Github',			'Open the repository in Github' ],
 };
 
 
@@ -41,7 +43,7 @@ sub addRepoMenu
 {
 	my ($this,$window_id) = @_;
 	$this->{window_id} = $window_id;
-	EVT_MENU_RANGE($this, $ID_REPO_OPEN_INFO, $ID_REPO_ALL_HISTORY, \&onRepoMenu);
+	EVT_MENU_RANGE($this, $ID_REPO_OPEN_INFO, $ID_REPO_OPEN_GITHUB, \&onRepoMenu);
 }
 
 
@@ -51,7 +53,7 @@ sub popupRepoMenu
 	display($dbg_menu,1,"popupRepoMenu($this->{window_id},$repo->{path})");
 
 	my $menu = Wx::Menu->new();
-	foreach my $id ($ID_REPO_OPEN_INFO..$ID_REPO_ALL_HISTORY)
+	foreach my $id ($ID_REPO_OPEN_INFO..$ID_REPO_OPEN_GITHUB)
 	{
 		next if $id == $ID_REPO_OPEN_INFO &&
 			$this->{window_id} == $ID_INFO_WINDOW;
@@ -101,6 +103,13 @@ sub onRepoMenu
 	elsif ($command_id == $ID_REPO_ALL_HISTORY)
 	{
 		execNoShell('gitk --all',$repo->{path});
+	}
+	elsif ($command_id == $ID_REPO_OPEN_GITHUB)
+	{
+		my $user = getPref("GIT_USER");
+		my $path = "https://github.com/$user/$repo->{id}";
+		my $command = "\"start $path\"";
+		system(1,$command);
 	}
 
 }	# onRepoMenu()

@@ -363,25 +363,23 @@ sub toTextCtrl
 sub subToTextCtrl
 {
 	my ($this, $type, $color, $repo, $text_ctrl) = @_;
-	my $is_sub = $type eq 'SUB';
-	my $is_main = $type eq 'MAIN';
-	my $short_status = getShortStatus($repo);
-
 	my $CHAR_WIDTH = $text_ctrl->getCharWidth();
 	my $LEFT_MARGIN = 5;	# need accessors?
 
 	my $fill_indent = pad("",$CHAR_INDENT);
+	my $short_status = getShortStatus($repo);
 
 	my $line = $text_ctrl->addLine();
-	my $context = { repo => $repo };
-	$context->{path} = 'MODULES' if $is_main || $is_sub;
+	my $context = $type eq 'GROUP' ?
+		{ repo_path => repoIdToPath($repo->{path}) } :
+		{ repo => $repo, path => "subs:$repo->{path}" } ;
 
 	$text_ctrl->addPart($line, 0, $color_black, pad("$type:",$CHAR_INDENT));
 	$text_ctrl->addPart($line, 1, $color, $repo->{path},$context);
 
 	$text_ctrl->addSingleLine(1, $color, $fill_indent.$short_status);
 
-	if ($is_sub || $is_main)
+	if ($type ne 'GROUP')
 	{
 		my $ypos = $text_ctrl->nextYPos();
 		my $button_x = $LEFT_MARGIN + $CHAR_INDENT * $CHAR_WIDTH;
@@ -396,7 +394,7 @@ sub subToTextCtrl
 
 		# the master has no parent to update
 
-		if ($is_sub)
+		if ($type eq 'SUB')
 		{
 			$button = Wx::Button->new($text_ctrl, $INFO_RIGHT_COMMAND_SINGLE_COMMIT_PARENT, 'CommitParent',[$button_x,$ypos],	[90,16]);
 			$button->{repo} = $repo;

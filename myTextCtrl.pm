@@ -1112,7 +1112,7 @@ sub mouseClick
 	display($dbg_click,0,"mouseClick($show_part->{text})");
 
 	my $path = $this->getClickFunction($hit,1);
-	if ($path =~ s/^BROWSE //)
+	if ($path =~ s/^GITHUB //)
 	{
 		my $command = "\"start $path\"";
 		system(1,$command);
@@ -1158,7 +1158,7 @@ sub getClickFunction
 		if $is_click;
 
 	# decide the best thing to do on a left click
-	# path = https:// == 'shell start' a Browser
+	# path = https:// == 'shell start' a Browser to a Github repo
 	# path = md,gif,png,jpg,jpeg,pdf - shell
 	# path = txt,pm,pl,cpp,c,h - komodo
 	# path = 'SUBMODULE' = go to the repo in the SUBS window
@@ -1167,7 +1167,7 @@ sub getClickFunction
 
 	if ($path =~ /^https:\/\//)
 	{
-		return "BROWSE $path";
+		return "GITHUB $path";
 	}
 	elsif ($path =~ /\.(md|gif|png|jpg|jpeg|pdf)$/)
 	{
@@ -1176,6 +1176,10 @@ sub getClickFunction
 	elsif ($path =~ /\.(txt|pm|pl|ino|cpp|c|h|hpp)$/)
 	{
 		return "KOMODO $path";
+	}
+	elsif ($path =~ s/^subs://)
+	{
+		return "SUB $path";
 	}
 	elsif ($repo)
 	{
@@ -1198,7 +1202,6 @@ sub getClickFunction
 		# in order to activate the infoWindow.
 
 		return
-			$path eq 'MODULES' ? "SUB $repo->{path}" :
 			$is_this_repo ? "GITUI $repo->{path}" :
 			"INFO $repo->{path}";
 	}

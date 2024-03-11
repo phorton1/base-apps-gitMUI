@@ -40,7 +40,7 @@ BEGIN {
 my $PANE_TOP = 30;
 my $TITLE_LEFT_MARGIN = 6;
 my $TITLE_WIDTH = 60;
-my $BUTTON_SPACE = 10;
+my $RIGHT_MARGIN = 10;
 
 
 
@@ -63,19 +63,15 @@ sub new
 		$ID_SUBS_WINDOW :
 		$ID_INFO_WINDOW);
 
-	# Buttons added from right to left
+	# we use a panel for the buttons so they will show OVER
+	# the title and repo_name controls
 
+	my $panel = $this->{button_panel} = Wx::Panel->new($this,-1,[0,0],[320,$PANE_TOP]);
 	my $commit_parent = $this->{commit_parent_button} =
-		Wx::Button->new($this,$INFO_RIGHT_COMMAND_COMMIT_PARENT,'CommitParent',	[0,5], [90,20]);
-	$this->{buttons} = [
-		Wx::Button->new($this,$ID_COMMAND_REFRESH_STATUS,		'Refresh',		[0,5],	[60,20]),
-		Wx::Button->new($this,$INFO_RIGHT_COMMAND_PUSH,			'Push',			[0,5],	[60,20]),
-		Wx::Button->new($this,$INFO_RIGHT_COMMAND_PULL,			'Pull',			[0,5],	[70,20]),
-		$commit_parent,
-		# Wx::Button->new($this,-1,	'Scan Docs',	[0,5],	[80,20]),
-		# Wx::Button->new($this,-1,	'Update Docs',	[0,5],	[80,20]),
-	];
-
+	Wx::Button->new($panel,$INFO_RIGHT_COMMAND_COMMIT_PARENT,	'CommitParent',	[0,5],  [100,20]);
+	Wx::Button->new($panel,$INFO_RIGHT_COMMAND_PULL,			'Pull',			[110,5],[70, 20]);
+	Wx::Button->new($panel,$INFO_RIGHT_COMMAND_PUSH,			'Push',			[190,5],[60, 20]);
+	Wx::Button->new($panel,$ID_COMMAND_REFRESH_STATUS,			'Refresh',		[260,5],[60, 20]);
 	$commit_parent->Hide();
 
 	$this->doLayout();
@@ -104,17 +100,11 @@ sub doLayout
     $this->{text_ctrl}->SetSize([$width,$height-$PANE_TOP]);
 	$this->{text_ctrl}->Move(0,$PANE_TOP);
 
-	my $button_xpos = $width - $BUTTON_SPACE;
-	my $buttons = $this->{buttons};
-	for my $button (@$buttons)
-	{
-		my $bsz = $button->GetSize();
-		my $bwidth = $bsz->GetWidth();
-		$button_xpos -= $bwidth;
+	my $panel = $this->{button_panel};
+	my $panel_sz = $panel->GetSize();
+    my $panel_width = $panel_sz->GetWidth();
+	$panel->Move($width-$panel_width-$RIGHT_MARGIN,0);
 
-		$button->Move($button_xpos,5);
-		$button_xpos -= $BUTTON_SPACE;
-	}
 	$this->Refresh();
 }
 
@@ -140,18 +130,25 @@ sub onUpdateUI
 	$enable = 1 if $id == $INFO_RIGHT_COMMAND_PUSH &&
 		$repo &&
 		$repo->canPush();
-	$enable = 1 if $id == $INFO_RIGHT_COMMAND_PULL &&
-		monitorRunning() &&
-		$repo && !$repo->{AHEAD};
-	$enable = 1 if $id == $INFO_RIGHT_COMMAND_COMMIT_PARENT &&
-		monitorRunning() &&
-		$repo && $repo->canCommitParent();
+
+	if ($id == $INFO_RIGHT_COMMAND_COMMIT_PARENT)
+	{
+		$enable = 1 if monitorRunning() &&
+			$repo && $repo->canCommitParent();
+		my $button_title = $repo && $repo->{is_subgroup} ?
+			'CommitParents' :
+			'CommitParent';
+		$event->SetText($button_title) if
+			$event->GetText() ne $button_title;
+	}
 
 	# allow pull on individual repo even
 	# it is not known to be BEHIND
 
 	if ($id == $INFO_RIGHT_COMMAND_PULL)
 	{
+		$enable = 1 if monitorRunning() &&
+			$repo && !$repo->{AHEAD};
 		my $button_title =
 			$repo && $repo->needsStash() ? 'Stash+Pull' :
 			$repo && $repo->canPull() ? 'Needs Pull' :

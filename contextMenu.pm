@@ -15,6 +15,7 @@ use Wx qw(:everything);
 use Wx::Event qw(
 	EVT_MENU_RANGE );
 use Pub::Utils;
+use Pub::Prefs;
 use apps::gitUI::utils;
 use apps::gitUI::Resources;
 
@@ -30,10 +31,10 @@ my $menu_desc = {
 	$ID_CONTEXT_BRANCH_HISTORY	=> ['Branch History',	'Show Branch History' ],
 	$ID_CONTEXT_ALL_HISTORY		=> ['All History',		'Show All History' ],
 	$ID_CONTEXT_OPEN_EXPLORER	=> ['Explorer',			'Open in Windows Explorer' ],
+	$ID_CONTEXT_OPEN_GITHUB     => ['Github',			'Open https:// url in System Browser' ],
 	$ID_CONTEXT_OPEN_IN_KOMODO	=> ['Komodo',			'Open one or more items in Komodo Editor' ],
 	$ID_CONTEXT_OPEN_IN_SHELL   => ['Shell',			'Open single item in the Windows Shell' ],
 	$ID_CONTEXT_OPEN_IN_NOTEPAD => ['Notepad',			'Open single item in the Windows Notepad' ],
-	$ID_CONTEXT_OPEN_IN_BROWSER => ['Browser',			'Open https:// url in System Browser' ],
 };
 
 
@@ -47,7 +48,7 @@ BEGIN {
 sub addContextMenu
 {
 	my ($this) = @_;
-	EVT_MENU_RANGE($this, $ID_CONTEXT_COPY, $ID_CONTEXT_OPEN_IN_BROWSER, \&onContextMenu);
+	EVT_MENU_RANGE($this, $ID_CONTEXT_COPY, $ID_CONTEXT_OPEN_GITHUB, \&onContextMenu);
 }
 
 
@@ -58,6 +59,7 @@ sub popupContextMenu
 	$path ||= '';
 
 	my $is_url = $path =~ /^https:\/\// ? 1 : 0;
+
 	display($dbg_menu,1,"popupContextMenu)($repo,$path) is_url($is_url)");
 	$this->{popup_repo} = $repo;
 	$this->{popup_path} = $path;
@@ -74,9 +76,9 @@ sub popupContextMenu
 	# I don't quite see how we are limiting the calls
 
 	my $menu = Wx::Menu->new();
-	foreach my $id ($ID_CONTEXT_COPY..$ID_CONTEXT_OPEN_IN_BROWSER)
+	foreach my $id ($ID_CONTEXT_COPY..$ID_CONTEXT_OPEN_GITHUB)
 	{
-		next if $is_url && $id != $ID_CONTEXT_OPEN_IN_BROWSER;
+		next if $id == $ID_CONTEXT_OPEN_GITHUB && !$repo && !$is_url;
 		next if $id == $ID_CONTEXT_COPY && (!$this->can('canCopy') || !$this->canCopy());
 
 		next if $id == $ID_CONTEXT_OPEN_GITUI && !$repo;
@@ -88,7 +90,9 @@ sub popupContextMenu
 		next if $id >= $ID_CONTEXT_OPEN_IN_KOMODO && !$path;
 		next if $id == $ID_CONTEXT_OPEN_EXPLORER && !$repo && !$path;
 
-		next if $path eq 'MODULES' && $id != $ID_CONTEXT_OPEN_SUBS;
+		next if $path =~ /^subs:/ &&
+			$id >= $ID_CONTEXT_OPEN_IN_KOMODO &&
+			$id <= $ID_CONTEXT_OPEN_IN_NOTEPAD;
 
 		my $desc = $menu_desc->{$id};
 		my ($text,$hint) = @$desc;
@@ -123,7 +127,7 @@ sub onContextMenu
 	}
 	elsif ($command_id == $ID_CONTEXT_OPEN_SUBS)
 	{
-		getAppFrame->createPane($ID_SUBS_WINDOW,undef,{repo_path=>$repo->{path}});
+		getAppFrame->createPane($ID_SUBS_WINDOW,undef,{repo_path=>$repo->{id}});
 	}
 	elsif ($command_id == $ID_CONTEXT_OPEN_GITUI)
 	{
@@ -141,6 +145,7 @@ sub onContextMenu
 	elsif ($command_id == $ID_CONTEXT_OPEN_EXPLORER)
 	{
 		$path ||= $repo->{path};
+		$path =~ s/^subs://;
 		execExplorer($path);
 	}
 
@@ -158,8 +163,19 @@ sub onContextMenu
 		my $command = $komodo_exe." \"$path\"";
 		execNoShell($command);
 	}
-	elsif ($command_id == $ID_CONTEXT_OPEN_IN_BROWSER)
+	elsif ($command_id == $ID_CONTEXT_OPEN_GITHUB)
 	{
+		# https: indicates a already formed path
+		# otherwise, it will be a repo with a path to 'subs:MASTER_ID'
+		# but we just use the repo id in every case.
+		# if the path is subs: then following *should* be the
+		# finally, we use the repo if nothing better
+
+		if ($path !~ /^https:\/\//)
+		{
+			my $user = getPref("GIT_USER");
+			$path = "https://github.com/$user/$repo->{id}";
+		}
 		my $command = "\"start $path\"";
 		system(1,$command);
 
