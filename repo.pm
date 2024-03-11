@@ -23,6 +23,7 @@ my $dbg_new = 1;
 my $dbg_config = 1;
 	# 0 show header in checkConfig
 	# -1 = show details in checkConfig
+my $dbg_can_commit = 0;
 
 
 BEGIN
@@ -267,7 +268,7 @@ sub setCanCommitParent
 	my $parent = $this->{parent_repo};
 	return if !$parent;
 
-	display(0,0,"setCanCommitParent($this->{path},$parent->{path})");
+	display($dbg_can_commit+1,0,"setCanCommitParent($this->{path},$parent->{path})");
 
 	my $num_changes =
 		scalar(keys %{$this->{staged_changes}}) +
@@ -299,11 +300,11 @@ sub setCanCommitParent
 	if ($repo_ok && $num_parent_unstaged)
 	{
 		my $rel_path = $this->{rel_path};
-		display(0,0,"LOOKING FOR $rel_path in $num_parent_unstaged unstaged changes");
+		display($dbg_can_commit+1,0,"LOOKING FOR $rel_path in $num_parent_unstaged unstaged changes");
 
 		for my $fn (sort keys %$parent_unstaged)
 		{
-			display(0,0,"COMPARE $this->{path} $rel_path TO $parent->{path} CHANGE $fn");
+			display($dbg_can_commit+1,0,"COMPARE $this->{path} $rel_path TO $parent->{path} CHANGE $fn");
 			if ($fn eq $rel_path)
 			{
 				$found = $parent_unstaged->{$fn};
@@ -314,14 +315,10 @@ sub setCanCommitParent
 
 	my $can_commit = $repo_ok && $found ? 1 : 0;
 
-	my $DBG_UI = 1;
-	# if ($DBG_UI && ($this->{first_time} || $this->{can_commit_parent} != $can_commit))
-	{
-		warning(0,0,"setCanCommitParent($this->{path}) = $can_commit");
-		display(0,1,"repo_ok($repo_ok) found($found)");
-		display(0,1,"BEHIND($this->{BEHIND}) REBASE($this->{REBASE}) changes($num_changes) master_matches($master_matches)");
-		display(0,1,"parent BEHIND($parent->{BEHIND}) REBASE($parent->{REBASE}) unstaged($num_parent_unstaged)");
-	}
+	warning($dbg_can_commit,0,"setCanCommitParent($this->{path}) repo_ok($repo_ok) found($found) = $can_commit");
+	display($dbg_can_commit+1,1,"BEHIND($this->{BEHIND}) REBASE($this->{REBASE}) changes($num_changes) master_matches($master_matches)");
+	display($dbg_can_commit+1,1,"parent BEHIND($parent->{BEHIND}) REBASE($parent->{REBASE}) unstaged($num_parent_unstaged)");
+
 	$this->{first_time} = 0;
 	$this->{can_commit_parent} = $can_commit;;
 }

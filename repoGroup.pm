@@ -254,7 +254,7 @@ sub canCommitParent
 
 	my $can_commit = $any_bad ? 0 : $can_count;
 
-	my $DBG_UI = 1;
+	my $DBG_UI = 0;
 	if ($DBG_UI && $this->{dbg_last_can_commit_parent} != $can_commit)
 	{
 		$this->{dbg_last_can_commit_parent} = $can_commit;
@@ -342,7 +342,7 @@ sub toTextCtrl
 
 {
 	my ($this,$text_ctrl) = @_;	#,$window_id) = @_;
-	display(0,0,"toTextCtrl()");
+	# display(0,0,"toTextCtrl()");
 	$text_ctrl->addLine();	# blank first line
 
 	my $color = $this->displayColor();
@@ -356,8 +356,7 @@ sub toTextCtrl
 	}
 
 	$text_ctrl->addLine();	# blank line at end
-
-	display(0,0,"toTextCtrl() returning");
+	# display(0,0,"toTextCtrl() returning");
 }
 
 

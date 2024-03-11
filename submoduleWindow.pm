@@ -26,9 +26,6 @@ my $dbg_notify = 1;
 
 my $GROUP_BASE_ID = 100000;
 my $GROUP_ID_SPACE = 1000;
-# my $CTRLS_PER_ITEM = 10;
-	# scheme allows for 100 submodules per group
-	# with upto 10 controls
 
 
 my $TOP_MARGIN = 10;
@@ -37,8 +34,6 @@ my $LINE_SPACING = 20;
 my $LEFT_MARGIN = 10;
 my $INDENT_MARGIN  = 50;
 
-#my $MIDDLE_COL  = 300;
-#my $RIGHT_COL   = 500;
 
 
 sub new
