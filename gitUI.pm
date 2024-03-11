@@ -286,17 +286,37 @@ sub commitOneParent
 #------------------------------
 # monitor
 #------------------------------
-
+# A notification of a repo changing that has submodules means
+# that we also need to notify on all the submodule repos,
+# as the parent could change the canCommitParent status
+# of the submodules.
 
 sub notifyRepoChanged
 {
 	my ($this,$repo) = @_;
 	display($dbg_notify,0,"notifyRepoChanged($repo->{path})");
+
+	my $notifies = [ $repo ];
+	my $submodules = $repo->{submodules};
+	if ($submodules)
+	{
+		for my $path (@$submodules)
+		{
+			my $sub = getRepoByPath($path);
+			push @$notifies,$sub;
+		}
+	}
+
 	for my $pane (@{$this->{panes}})
 	{
 		my $can = $pane && $pane->can("notifyRepoChanged") ? 1 : 0;
+		next if !$can;
 		display($dbg_notify+1,1,"pane($pane) can($can)");
-		$pane->notifyRepoChanged($repo) if $can;
+
+		for my $notify (@$notifies)
+		{
+			$pane->notifyRepoChanged($notify);
+		}
 	}
 }
 
