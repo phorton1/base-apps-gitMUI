@@ -1227,7 +1227,7 @@ sub getHitContext
 	{
 		my $context = $hit->{part}->{context};
 		$repo = $context->{repo} if $context->{repo};
-		$repo = getRepoHash()->{$context->{repo_path}} if $context->{repo_path};
+		$repo = getRepoByPath{$context->{repo_path}} if $context->{repo_path};
 		$repo ||= '';
 
 		$path = $context->{path} if $context->{path};

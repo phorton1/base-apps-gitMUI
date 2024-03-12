@@ -36,7 +36,7 @@ BEGIN
  	use Exporter qw( import );
 	our @EXPORT = qw(
 		parseRepos
-		getRepoHash
+
 		getRepoList
 		getRepoById
 		getRepoByPath
@@ -69,8 +69,10 @@ BEGIN
 
 my $repo_filename = '/base/bat/git_repositories.txt';
 
-my $repo_hash:shared = shared_clone({});
 my $repo_list:shared = shared_clone([]);
+my $repos_by_path:shared = shared_clone({});
+my $repos_by_id:shared = shared_clone({});
+
 my $repos_can_push = shared_clone({});
 my $repos_can_pull = shared_clone({});
 my $repos_do_push = shared_clone({});
@@ -82,22 +84,21 @@ my $repos_commit_parent = shared_clone({});
 # accessors
 #----------------------------------
 
-sub getRepoHash		{ return $repo_hash; }
-sub getRepoList		{ return $repo_list; }
-
+sub getRepoList
+{
+	return $repo_list;
+}
 
 sub getRepoByPath
 {
 	my ($path) = @_;
-	return $repo_hash->{$path};
+	return $repos_by_path->{$path};
 }
-
 
 sub getRepoById
 {
 	my ($id) = @_;
-	my $path = repoIdToPath($id);
-	return $repo_hash->{$path};
+	return $repos_by_id->{$id};
 }
 
 
@@ -212,7 +213,7 @@ sub setCanPushPull
 sub parseRepos
 {
     repoDisplay($dbg_parse,0,"parseRepos($repo_filename)");
-	$repo_hash = shared_clone({});
+	$repos_by_path = shared_clone({});
 	$repo_list = shared_clone([]);
 
 	my $text = getTextFile($repo_filename);
@@ -245,7 +246,7 @@ sub parseRepos
 					$rel_path,
 					$sub_path);
 				push @$repo_list,$sub_module;
-				$repo_hash->{$path} = $sub_module;
+				$repos_by_path->{$path} = $sub_module;
 			}
 
 			# get section path RE and optional name if different
@@ -271,9 +272,11 @@ sub parseRepos
 				{
 					repoDisplay($dbg_parse+1,1,"repo($repo_num,$path,$branch,$section_path,$section_name)");
 					$repo = apps::gitUI::repo->new($repo_num++,$path,$branch,$section_path,$section_name);
+					my $id = $repo->{id};
 
 					push @$repo_list,$repo;
-					$repo_hash->{$path} = $repo;
+					$repos_by_path->{$path} = $repo;
+					$repos_by_id->{$id} = $repo if $id;
 				}
 				else
 				{
@@ -379,7 +382,7 @@ sub parseRepos
 		{
 			for my $use (@$uses)
 			{
-				my $used_repo = $repo_hash->{$use};
+				my $used_repo = $repos_by_path->{$use};
 				if (!$used_repo)
 				{
 					$repo->repoError("invalid USES: $use");

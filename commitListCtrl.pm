@@ -374,10 +374,8 @@ sub drawRepo
 	my $repo_sel = $this->{selection}->{$path};
 	my $num_selected = $repo_sel ? scalar(keys %$repo_sel) : 0;
 
-	my $use_name = repoPathToId($path);
-	my $name = "$use_name (".($num_selected?"$num_selected/":'')."$num_items)";
-
-	display($dbg_draw,0,"drawRepo($this->{name},$ypos) exp($expanded) sel($num_selected) num($num_items) $path=$use_name");
+	my $name = "$path (".($num_selected?"$num_selected/":'')."$num_items)";
+	display($dbg_draw,0,"drawRepo($this->{name},$ypos) exp($expanded) sel($num_selected) num($num_items) $path");
 
 	my $bm = $expanded ? $bm_up_arrow : $bm_right_arrow;
 

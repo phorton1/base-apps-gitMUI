@@ -61,7 +61,7 @@ sub setRepoUI { $repo_ui = shift; }
 #	the path to the (master) copy of the submodule (for the github id)
 #
 # The presence of {parent_repo} or {rel_path} indicates it is a submodule.
-# submodules add the following to OTHER repos in parseRepos"
+# submodules add the following to OTHER repos in parseRepos:
 #
 #		parent repo - gets {submodules} with the submodule's paths
 #		master_module - gets {used_in} with all submodule paths that denormalize it
@@ -71,6 +71,29 @@ sub setRepoUI { $repo_ui = shift; }
 # Submodules inherit their parents 'private' bits, which
 # must be declared BEFORE the SUBMODULE statement, and
 # are always assumed to be 'mine'.
+
+
+use Git::Raw;
+
+sub getId
+{
+	my ($this) = @_;
+	my $path = $this->{path};
+	my $git_repo = Git::Raw::Repository->open($path);
+	return repoError(undef,"Could not create git_repo($path)")
+		if !$git_repo;
+	my $remote = Git::Raw::Remote->load($git_repo, 'origin');
+	return repoError(undef,"Could not create remote($path)")
+		if !$remote;
+
+	my $id = $remote->url();
+	my $user = getPref("GIT_USER");
+	return repoError("Bad remote url($id)")
+		if $id !~ s/https:\/\/github.com\/$user\///;
+	$id =~ s/\.git$//;
+	display($dbg_new,0,"getId($path) = $id");
+	return $id;
+}
 
 
 sub new
@@ -87,7 +110,6 @@ sub new
 
 		num 	=> $num,
 		path 	=> $path,
-		id      => repoPathToId($submodule_path || $path),
 		branch	=> $branch,
 
 		section_path => $section_path,
@@ -159,6 +181,9 @@ sub new
 	# save_XXX (AHEAD, BEHIND, HEAD_ID, MASTER_ID, REMOTE_ID)
 
 	bless $this,$class;
+
+	$this->{id} = $this->getId();
+
 	return $this;
 }
 
@@ -367,7 +392,8 @@ sub idWithinSection
 	}
 	else
 	{
-		my $re = repoPathToId($this->{section_path});
+		my $re = $this->{section_path};
+		$re =~ s/\//-/g;
 		$id =~ s/^$re//;
 		$id =~ s/^-//;
 		$id ||= $this->{id};
@@ -378,211 +404,6 @@ sub idWithinSection
 		if length($id) >= $MAX_DISPLAY_PATH;
 	return $id;
 }
-
-
-
-
-#------------------------------------------
-# check git/.config files
-#------------------------------------------
-# Submodules are handled slightly differently.
-# The .git/config file is located in the parent repo at
-#
-#	{parent_path}/.git/modules/{rel_path}/config
-#
-# And, of course, the url in the [remote] section
-# maps to/gives the id of the master module.
-#
-# There are other files we *could* check for submodules:
-#
-#	{parent_path}/.gitmodules
-#
-#		[submodule "copy_sub1"]
-#			path = copy_sub1
-#			url = https://github.com/phorton1/junk-test_repo-test_sub1
-#
-#	{parent_patah}/{rel_path}/.git (is a file)
-#
-#		 gitdir: ../.git/modules/copy_sub1
-#
-# but we don't.
-
-sub checkGitConfig
-	# For every repo, validate that
-	#
-	# - config file exists
-	# - it has exactly one [remote "origin"]
-	# - that the remote origin points to our repository
-	# - it has a [branch "blah"] that matches $this->{branch}
-	# - that the repos' {branch} has "remote = origin"
-	#
-	# Note any additional branches
-{
-    my ($this) = @_;
-
-	my $path = $this->{path};
-    display($dbg_config+1,0,"checkGitConfig($path)");
-
-    if (!(-d $path))
-	{
-		$this->repoError("validateGitConfig($path) path not found");
-		return 0;
-	}
-
-	my $rel_path = $this->{rel_path};
-	my $parent_repo = $this->{parent_repo};
-    my $git_config_file = "$path/.git/config";
-
-	if ($parent_repo)
-	{
-		$git_config_file =
-			"$parent_repo->{path}/.git/modules/".
-			$this->{rel_path}."/config";
-	}
-
-    my $text = getTextFile($git_config_file);
-	if (!$text)
-	{
-		$this->repoError("checkGitConfig($path) no text in $git_config_file");
-		return 0;
-	}
-
-	my $branch;
-	my $errors = 0;
-	my $has_url = 0;
-    my $remote_count = 0;
-	my $has_remote_origin = 0;
-    my $has_branch_master = 0;
-	my $master_has_origin = 0;
-
-	my $in_remote = 0;
-	my $in_branch = 0;
-	my $in_submodule = 0;
-
-    for my $line (split(/\n/,$text))
-    {
-		$line =~ s/^\s+|\s+$//g;
-
-		if ($line =~ /^\[/)
-		{
-			$in_remote = 0;
-			$in_branch = 0;
-			$in_submodule = 0;
-		}
-
-		if ($line =~ /^\[remote \"(.*)"\]/)
-        {
-            my $remote = $1;
-			display($dbg_config+1,1,"remote = $remote");
-
-			$in_remote = 1;
-			if ($remote eq 'origin')
-			{
-				$has_remote_origin = 1;
-			}
-			else
-			{
-				$errors++;
-				$this->repoError("checkGitConfig($path) remote($remote) != origin");
-			}
-			if ($remote_count++)
-			{
-				$errors++;
-				$this->repoError("checkGitConfig($path) has more than one remote");
-			}
-		}
-		elsif ($line =~ /^\[branch \"(.*)"\]/)
-        {
-            $branch = $1;
-			display($dbg_config+1,1,"branch = $branch");
-
-			$in_branch = 1;
-			if ($branch eq $this->{branch})
-			{
-				$has_branch_master = 1;
-			}
-			else
-			{
-				$this->repoNote($dbg_config,1,"$git_config_file: branch($branch) != master");
-			}
-        }
-
-
-		elsif ($in_branch && $line =~ /^remote = (.*)$/)
-		{
-			my $remote = $1;
-			display($dbg_config+1,1,"branh($branch) remote = $remote");
-			if ($remote ne 'origin')
-			{
-				$errors++;
-				$this->repoError("checkGitConfig($path) branch($branch) has remote($remote)");
-			}
-			elsif ($branch eq $this->{branch})
-			{
-				$master_has_origin = 1;
-			}
-		}
-
-
-		elsif ($in_remote && $line =~ /^url = (.*)$/)
-		{
-			my $url = $1;
-			display($dbg_config+1,1,"url = $url");
-
-			if ($url !~ s/^https:\/\/github.com\/phorton1\///)
-			{
-				$errors++;
-				$this->repoError("checkGitConfig($path) invalid remote url: $url");
-			}
-
-			# the .git extension on the url is optional
-			# for submodules we map github id (from the url) to a
-			# repo path and make sure it exists.
-
-			else
-			{
-				$url =~ s/\.git$//;
-
-				if ($this->{parent_repo})
-				{
-					my $sub_path = repoIdToPath($url);
-					# no warnings 'once';
-					if (!apps::gitUI::repos::getRepoById($url))
-					{
-						$errors++;
-						$this->repoError("checkGitConfig($path) could not find master module for remote url: $url==$sub_path");
-					}
-				}
-
-				elsif ($url ne $this->{id})
-				{
-					$errors++;
-					$this->repoError("checkGitConfig($path) incorrect remote url: $url != $this->{id}");
-				}
-			}
-		}
-	}
-
-	if (!$has_remote_origin)
-	{
-		$errors++;
-		$this->repoError("checkGitConfig($path) Could not find [remote \"origin\"]");
-	}
-	if (!$has_branch_master)
-	{
-		$errors++;
-		$this->repoError("checkGitConfig($path) Could not find [branch \"$this->{branch}\"]");
-	}
-	if (!$master_has_origin)
-	{
-		$errors++;
-		$this->repoError("checkGitConfig($path) Could not find remote = origin for [branch \"$this->{branch}\"]");
-	}
-
-	return !$errors;
-		# return value is currently ignored in only caller: reposGitHub
-
-}   # checkGitConfig()
 
 
 
@@ -603,18 +424,22 @@ sub contentLine
 	return if !defined($value) || $value eq '';
 
 	$value = $value->{path} if $key eq 'parent_repo';
-	$value = repoIdToPath($value) if $is_main_module_ref;
 
 	my $context;
 	my $color = $color_blue;
 
-	if ($key eq 'section_path')
+	if ($is_main_module_ref)
+	{
+		my $repo = apps::gitUI::repos::getRepoById($value);
+		$value = $repo->{path};
+		$color = linkDisplayColor($repo);
+	}
+	elsif ($key eq 'section_path')
 	{
 		$context = { path => $value };
 	}
 	elsif ($key eq 'path' ||
-		$key eq 'parent_repo' ||
-		$is_main_module_ref)
+		$key eq 'parent_repo')
 	{
 		$context = { repo_path => $value };
 		my $repo = apps::gitUI::repos::getRepoByPath($value);

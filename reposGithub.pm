@@ -286,9 +286,6 @@ sub doGitHub
 			# is always called just before doGithub()
 			# (they are always paired).
 		$repo->{found_on_github} = 0;
-		$repo->checkGitConfig();
-			# Of questionable value, this is currently the only place
-			# checkGitConfig() is called. We ignore any return value.
 	}
 
 	my $page = 0;
@@ -307,17 +304,16 @@ sub doGitHub
         for my $entry (@$data)
         {
             my $id = $entry->{name};
-            my $path = repoIdToPath($id);
-			my $repo = getRepoHash()->{$path};
-
-			next if $TEST_JUNK_ONLY && $path !~ /junk/;
+			my $repo = getRepoById($id);
 
 			if (!$repo)
 			{
-				repoError(undef,"doGitHub() cannot find repo($id) = path($path)");
+				repoError(undef,"doGitHub() cannot find repo($id)");
 			}
 			else
 			{
+				next if $TEST_JUNK_ONLY && $repo->{path} !~ /junk/;
+
 				$repo->{found_on_github} = 1;
 				$repo->{size} = $entry->{size} || 0;
 				$repo->{descrip} = $entry->{description} || '';

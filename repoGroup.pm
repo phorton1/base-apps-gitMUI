@@ -371,7 +371,7 @@ sub subToTextCtrl
 
 	my $line = $text_ctrl->addLine();
 	my $context = $type eq 'GROUP' ?
-		{ repo_path => repoIdToPath($repo->{path}) } :
+		{ repo => getRepoById($repo->{path}) } :
 		{ repo => $repo, path => "subs:$repo->{path}" } ;
 
 	$text_ctrl->addPart($line, 0, $color_black, pad("$type:",$CHAR_INDENT));

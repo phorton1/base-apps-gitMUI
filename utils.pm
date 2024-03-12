@@ -73,9 +73,6 @@ BEGIN
 
 		$komodo_exe
 
-		repoPathToId
-		repoIdToPath
-
 		$font_normal
         $font_bold
 
@@ -137,95 +134,6 @@ our $GIT_CB_ERROR      = -1;		# $msg
 our $GIT_CB_PACK		= 0;		# $stage, $current, $total
 our $GIT_CB_TRANSFER	= 1;		# $current, $total, $bytes
 our $GIT_CB_REFERENCE  = 2;		# $ref, $msg
-
-
-#---------------------------------------------
-# common methods
-#---------------------------------------------
-# The whole system is based on the notion that there is a one-to-one
-# mapping between github repo IDs and paths on the local system.
-# By detault a path is converted to an ID, and vice-versa by
-# replacing slashes '/' with dashes '-'.
-#
-# For a number of repos, I have shortened the IDs according to the
-# following id/path mappings. These mappings are applied before
-# the dash/slash substitution.
-#
-# In special cases, we want an exact match, and to suppress the
-# dash/slash substitutions.  That case is indicated by a path that
-# starts with two slashes, as in the wxWidgets case, below.
-
-my @id_path_mappings = (
-	"obs-"             , "/src/obs/",
-    "Android"      	   , "/src/Android",
-	"Arduino"          , "/src/Arduino",
-    "circle-prh-apps"  , "/src/circle/_prh/_apps",
-    "circle-prh"       , "/src/circle/_prh",
-    "circle"           , "/src/circle",
-	"phorton1"	       , "/src/phorton1",
-    "projects"         , "/src/projects",
-    "www"              , "/var/www",
-	"komodoEditTools"  , "/Users/Patrick/AppData/Local/ActiveState/KomodoEdit/8.5/tools",
-	"fusionAddIns"	   , "/Users/Patrick/AppData/Roaming/Autodesk/Autodesk Fusion 360/API/AddIns",
-	"src-wx-wxAlien-wxWidgets-3.0.2", "//src/wx/wxAlien/wxWidgets-3.0.2",
-);
-
-
-sub repoPathToId
-{
-    my ($path) = @_;
-    my $id = $path;
-    my $i = 0;
-	my $use_exact = 0;
-    while ($i < @id_path_mappings)
-    {
-        my $repl = $id_path_mappings[$i++];
-        my $pat = $id_path_mappings[$i++];
-		my $exact = $pat =~ s/^\/\//\// ? 1 : 0;
-        if ($id =~ s/^$pat/$repl/e)
-		{
-			$use_exact = $exact;
-			last;
-		}
-    }
-	if (!$use_exact)
-	{
-		$id =~ s/\//-/g;
-		$id =~ s/^-//;
-	}
-	display($dbg_ids,0,"repoPathToId($path)=$id");
-    return $id;
-}
-
-
-sub repoIdToPath
-{
-    my ($id) = @_;
-    my $path = $id;
-    my $i = 0;
-	my $is_exact = 0;
-    while ($i < @id_path_mappings)
-    {
-        my $pat = $id_path_mappings[$i++];
-        my $repl = $id_path_mappings[$i++];
-		my $exact = $repl =~ s/^\/\//\// ? 1 : 0;
-        if ($path =~ s/^$pat/$repl/e)
-		{
-			$is_exact = $exact;
-			last;
-		}
-    }
-    $path =~ s/-/\//g if !$is_exact;
-    $path = "/".$path if $path !~ /^\//;
-
-    # one project has a dash in their terminal directory name
-
-    # $path =~ s/wxWidgets\/3.0.2$/wxWidgets-3.0.2/;
-
-	display($dbg_ids,0,"repoIdToPath($id)=$path");
-    return $path;
-}
-
 
 
 #-----------------------------------------------------
