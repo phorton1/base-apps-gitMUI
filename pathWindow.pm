@@ -22,7 +22,7 @@ use apps::gitUI::myHyperlink;
 use base qw(Pub::WX::Window apps::gitUI::repoMenu);
 
 my $dbg_win = 0;
-my $dbg_pop = 0;
+my $dbg_pop = 1;
 my $dbg_layout = 1;
 my $dbg_notify = 1;
 
