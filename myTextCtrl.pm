@@ -976,6 +976,14 @@ sub refreshDrag
 # Mouse Event Handling
 #------------------------------------------------
 
+sub dbgDrag
+{
+	my ($this,$what) = @_;
+	return $this->{$what} ?
+		"$this->{$what}->[0],$this->{$what}->[1]" :
+		'undef';
+}
+
 sub onMouse
 {
 	my ($this,$event) = @_;
@@ -1002,7 +1010,11 @@ sub onMouse
 	$this->{scroll_inc} = 0;
 
 	my $dbg = $lclick || $rclick || $dragging ? 0 : 1;
-	display($dbg_mouse + $dbg,0,"onMouse($sx,$sy) unscrolled($ux,$uy) left($lclick) right($rclick) dragging($dragging) alt($alt) shift($shift)");
+	my $dbg_start = $this->dbgDrag('drag_start');
+	my $dbg_end = $this->dbgDrag('drag_end');
+	display($dbg_mouse + $dbg,0,"onMouse($sx,$sy) unscrolled($ux,$uy) left($lclick) right($rclick) ".
+			" dragging($dragging) alt($alt) shift($shift) ".
+			" start($dbg_start) end($dbg_end)");
 
 	my $hit = '';
 	for my $h (@{$this->{hits}})
@@ -1260,8 +1272,11 @@ sub handleScroll
 	my ($cur_x, $cur_y) = $this->GetViewStart();
 	my $new_y = $cur_y + $inc;
 	$new_y = 0 if $new_y < 0;
-	$this->Scroll($cur_x,$new_y);
-	$this->Update();
+	if ($new_y != $cur_y)
+	{
+		$this->Scroll($cur_x,$new_y);
+		$this->Update();
+	}
 }
 
 
@@ -1280,10 +1295,13 @@ sub onIdle
 		my ($cur_x, $cur_y) = $this->GetViewStart();
 		my $new_y = $cur_y + $inc;
 		$new_y = 0 if $new_y < 0;
-		$this->Scroll($cur_x,$new_y);
 
-		$this->refreshDrag([$ex,$ey]);
-		$this->Update();
+		if ($new_y != $cur_y)
+		{
+			$this->Scroll($cur_x,$new_y);
+			$this->refreshDrag([$ex,$ey]);
+			$this->Update();
+		}
 		sleep(0.02);
 		$event->RequestMore();
 	}
