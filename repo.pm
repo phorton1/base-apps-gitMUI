@@ -78,21 +78,45 @@ use Git::Raw;
 sub getId
 {
 	my ($this) = @_;
+
+	my ($id,$branch) = ('','');
+
 	my $path = $this->{path};
 	my $git_repo = Git::Raw::Repository->open($path);
-	return repoError(undef,"Could not create git_repo($path)")
-		if !$git_repo;
-	my $remote = Git::Raw::Remote->load($git_repo, 'origin');
-	return repoError(undef,"Could not create remote($path)")
-		if !$remote;
+	if ($git_repo)
+	{
+		my $head = $git_repo->head();
+		$branch = $head->shorthand();
 
-	my $id = $remote->url();
-	my $user = getPref("GIT_USER");
-	return repoError("Bad remote url($id)")
-		if $id !~ s/https:\/\/github.com\/$user\///;
-	$id =~ s/\.git$//;
-	display($dbg_new,0,"getId($path) = $id");
-	return $id;
+		display($dbg_new-1,0,"branch($path) = $branch");
+
+		my $remote = Git::Raw::Remote->load($git_repo, 'origin');
+		if ($remote)
+		{
+			my $url = $remote->url();
+			my $user = getPref("GIT_USER");
+			if ($url =~ s/https:\/\/github.com\/$user\///)
+			{
+				$id = $url;
+				$id =~ s/\.git$//;
+				display($dbg_new,0,"getId($path) = $id");
+			}
+			else
+			{
+				return repoError($this,"Unexpected remote url($id)");
+			}
+		}
+		else
+		{
+			$this->{is_local} = 1;
+			repoError($this,"Could not get remote($path)");
+		}
+	}
+	else
+	{
+		repoError($this,"Could not open git_repo($path)");
+	}
+	return ($branch,$id);
 }
 
 
@@ -182,7 +206,11 @@ sub new
 
 	bless $this,$class;
 
-	$this->{id} = $this->getId();
+	my ($cur_branch,$id) = $this->getId();
+	repoError($this,"cur_branch($cur_branch) != branch($branch)")
+		if $cur_branch ne $branch;
+
+	$this->{id} = $id;
 
 	return $this;
 }
@@ -392,8 +420,9 @@ sub idWithinSection
 	}
 	else
 	{
-		my $re = $this->{section_path};
+		my $re = $this->{section_name};
 		$re =~ s/\//-/g;
+		$re =~ s/^-//;
 		$id =~ s/^$re//;
 		$id =~ s/^-//;
 		$id ||= $this->{id};
@@ -466,7 +495,7 @@ sub contentLine
 
 sub contentArray
 {
-	my ($this,$text_ctrl,$bold,$key,$ucase,$sub_context) = @_;
+	my ($this,$text_ctrl,$bold,$key,$color,$ucase,$sub_context) = @_;
 	$ucase ||= 0;
 	my $label = $key;
 	$label = uc($label) if $ucase;
@@ -476,7 +505,7 @@ sub contentArray
 	my $line = $text_ctrl->addLine();
 	$text_ctrl->addPart($line, $bold, $color_black, $label, $sub_context);
 
-	my $color = $color_blue;
+	$color = $color_blue if !defined($color);
 	for my $item (@$array)
 	{
 		my $context;
@@ -661,10 +690,11 @@ sub toTextCtrl
 	elsif ($this->{submodules} || $this->{used_in})
 	{
 		$text_ctrl->addLine();
-		$this->contentArray($text_ctrl,0,'submodules',1);
-		$this->contentArray($text_ctrl,0,'used_in',1,$sub_context);
+		$this->contentArray($text_ctrl,0,'submodules',undef,1);
+		$this->contentArray($text_ctrl,0,'used_in',undef,1,$sub_context);
 	}
 
+	# 	my ($this,$text_ctrl,$bold,$key,$color,$ucase,$sub_context) = @_;
 	# ERRORS AND WARNINGS THIRD
 
 	if (@{$this->{errors}} ||
@@ -672,8 +702,8 @@ sub toTextCtrl
 		@{$this->{notes}})
 	{
 		$text_ctrl->addLine();
-		$this->contentArray($text_ctrl,1,'errors',0,$color_red);
-		$this->contentArray($text_ctrl,1,'warnings',0,$color_yellow);
+		$this->contentArray($text_ctrl,1,'errors',$color_red);
+		$this->contentArray($text_ctrl,1,'warnings',$color_magenta);
 		$this->contentArray($text_ctrl,0,'notes');
 	}
 

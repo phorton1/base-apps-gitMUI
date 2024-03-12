@@ -172,9 +172,9 @@ sub gitStart
 
 	# note invariants, but don't stop using this repo
 
-	repoError($repo,"DETACHED HEAD!!")
+	gitError($repo,"DETACHED HEAD!!")
 		if $git_repo->is_head_detached();
-	repoError($repo,"HEAD_ID <> MASTER_ID!!")
+	gitError($repo,"HEAD_ID <> MASTER_ID!!")
 		if $head_id ne $master_id;
 
 	# rebuild/add local_commits and AHEAD
