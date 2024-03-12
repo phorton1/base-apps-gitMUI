@@ -453,8 +453,8 @@ sub doMonitorStartup
 		{
 			display($dbg_chgs,-2,"notifyRepoChanged(init,$repo->{path})");
 			setCanPushPull($repo);
-			&$the_callback({ repo=>$repo });
 		}
+		&$the_callback({ repo=>$repo, changed=>$rslt });
 	}
 
 	# do an update as part of the startup
@@ -499,8 +499,10 @@ sub doMonitorRun
 			{
 				display($dbg_chgs,-2,"notifyRepoChanged($repo->{path})");
 				setCanPushPull($repo);
-				&$the_callback({ repo=>$repo });
 			}
+
+			&$the_callback({ repo=>$repo, changed=>$rslt });
+
 		}	# a monitor is reaady
 
 		$group++;

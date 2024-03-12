@@ -294,8 +294,9 @@ sub commitOneParent
 
 sub notifyRepoChanged
 {
-	my ($this,$repo) = @_;
-	display($dbg_notify,0,"notifyRepoChanged($repo->{path})");
+	my ($this,$repo,$changed) = @_;
+	display($dbg_notify,0,"notifyRepoChanged("._def($changed).",$repo->{path})");
+	$changed = 1 if !defined($changed);
 
 	my $notifies = [ $repo ];
 	my $submodules = $repo->{submodules};
@@ -311,12 +312,14 @@ sub notifyRepoChanged
 	for my $pane (@{$this->{panes}})
 	{
 		my $can = $pane && $pane->can("notifyRepoChanged") ? 1 : 0;
-		next if !$can;
+		my $wants = $changed || ($pane && $pane->{wants_null_changes});
+		next if !$can || !$wants;
+
 		display($dbg_notify+1,1,"pane($pane) can($can)");
 
 		for my $notify (@$notifies)
 		{
-			$pane->notifyRepoChanged($notify);
+			$pane->notifyRepoChanged($notify,$changed);
 		}
 	}
 }
@@ -332,7 +335,7 @@ sub onMonitorEvent
 	my $show = $data->{status} || $repo->{path};
 	$this->SetStatusText("monitor: $show");
 	display($dbg_mon,0,"onMonitorEvent($is_repo,$show)");
-	$this->notifyRepoChanged($repo) if $repo;
+	$this->notifyRepoChanged($repo,$data->{changed}) if $repo;
 }
 
 

@@ -75,6 +75,10 @@ sub new
 	$this->{data} = $data;
 	$this->{left_width} = $left_width;
 	$this->{left_top_pct} = $left_top_pct;
+	$this->{wants_null_changes} = 1;
+		# tell gitUI that we want null changes
+		# so we can update the diffs myTextCtrl
+		# if only a file changed, but not the repo state
 
 	# Create splitters and child windows
 	# We set a minimum pane size of 20 pixels merely
@@ -183,9 +187,11 @@ sub populate
 
 sub notifyRepoChanged
 {
-	my ($this,$repo) = @_;
-	display($dbg_pop,0,"notifyRepoChanged($repo->{path})");
-	$this->populate();
+	my ($this,$repo,$changed) = @_;
+	display($dbg_pop,0,"notifyRepoChanged($changed,$repo->{path})");
+	$changed ?
+		$this->populate() :
+		$this->{right}->notifyDiffMayHaveChanged($repo);
 }
 
 

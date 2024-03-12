@@ -64,6 +64,7 @@ sub new
 
 	$this->{diff_repo} = '';
 	$this->{diff_item} = '';
+	$this->{diff_staged} = '';
 	$this->{bottom_height} = $DEFAULT_COMMAND_AREA_HEIGHT;
 
 	my $right_splitter  = $this->{right_splitter}  = Wx::SplitterWindow->new($this, $ID_COMMIT_SPLITTER_RIGHT, [0, 0]);
@@ -446,6 +447,7 @@ sub notifyItemSelected
 		{
 			$this->{diff_repo} = '';
 			$this->{diff_item} = '';;
+			$this->{diff_staged} = '';
 			$this->{what_ctrl}->SetLabel('');
 			$this->{hyperlink}->SetLabel('');
 			$diff_ctrl->Refresh();
@@ -464,7 +466,10 @@ sub notifyItemSelected
 
 	if ($item)
 	{
-		if (!$this->{is_staged} && $type eq 'A')
+		# this line was apparently incorrect
+		# if (!$this->{is_staged} && $type eq 'A')
+		# there is no $this->{is_staged} member
+		if ($type eq 'A')
 		{
 			$this->determineType($repo,$item,$file_type);
 		}
@@ -488,10 +493,36 @@ sub notifyItemSelected
 
 	$this->{diff_repo} = $repo;
 	$this->{diff_item} = $item;
+	$this->{diff_staged} = $is_staged;
 	$this->{what_ctrl}->SetLabel($file_type.$where.$kind.$what);
 	$this->{hyperlink}->SetLabel($fn || $id);
 }
 
+
+
+sub notifyDiffMayHaveChanged
+{
+	my ($this,$repo) = @_;
+
+	display($dbg_notify,0,"notifyDiffMayHaveChanged($repo->{path}) ".
+			"diff_repo(".($this->{diff_repo}?$this->{diff_repo}->{path}:'').") ".
+			"diff_item(".($this->{diff_item}?"$this->{diff_item}->{type}:$this->{diff_item}->{fn}":'').") ".
+			"diff_staged($this->{diff_staged})");
+
+	if ($this->{diff_repo} &&
+		$this->{diff_item} &&
+		!$this->{diff_staged} &&
+		$this->{diff_repo}->{path} eq $repo->{path} &&
+		$this->{diff_item}->{type} eq 'M')
+	{
+		display($dbg_notify,1,"UPDATING DIFF");
+		my $diff_ctrl = $this->{diff_ctrl};
+		$diff_ctrl->clearContent();
+		my $text = gitDiff($repo,0,$this->{diff_item}->{fn});
+		$this->parseDiffText($text,'Changed');
+		$diff_ctrl->Refresh();
+	}
+}
 
 
 
