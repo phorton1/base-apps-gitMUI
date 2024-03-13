@@ -168,8 +168,8 @@ sub doLayout
 
 sub newCtrlSection
 {
-	my ($this,$section,$name) = @_;
-	display($dbg_pop,0,"newCtrlSection($section->{name})");
+	my ($this,$section) = @_;
+	display($dbg_pop,0,"newCtrlSection($section->{path})");
 
 	my $ctrl_section = {
 		section => $section,
@@ -202,11 +202,12 @@ sub populate
 		my $ctrl_section = newCtrlSection($this,$section);
 		for my $repo (@{$section->{repos}})
 		{
-			if (!$started && $section->{name} ne $repo->{path})
+			if (!$started && $section->{path} ne $repo->{path})
 			{
-				my $name = $section->{name};
+				my $name = $USE_IDS_FOR_DISPLAY ?
+					$section->{id} :
+					$section->{path};
 				$name =~ s/^\/|^-//;
-				$name =~ s/\//-/g if $USE_IDS_FOR_DISPLAY;
 				display($dbg_pop,1,"staticText($name)");
 				my $ctrl = Wx::StaticText->new($this,-1,$name,[0,0]);
 				addSectionCtrl($ctrl_section,$ctrl,$name);

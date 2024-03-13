@@ -137,29 +137,6 @@ sub onRightDown
 # populate
 #----------------------------------------
 
-sub newCtrlSection
-{
-	my ($this,$section,$name) = @_;
-	display($dbg_pop,0,"newCtrlSection($section->{name})");
-
-	my $ctrl_section = {
-		section => $section,
-		ctrls   => [] };
-	push @{$this->{ctrl_sections}},$ctrl_section;
-	return $ctrl_section;
-}
-
-sub addSectionCtrl
-{
-	my ($ctrl_section,$ctrl,$name) = @_;
-	display($dbg_pop,0,"addSectionCtrl($name)");
-	push @{$ctrl_section->{ctrls}},$ctrl;
-}
-
-
-
-
-
 sub populate
 {
 	my ($this) = @_;

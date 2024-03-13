@@ -223,7 +223,7 @@ sub parseRepos
 
 		my $repo;
 		my $section_path = '';
-		my $section_name = '';
+		my $section_id = '';
 
         for my $line (split(/\n/,$text))
         {
@@ -241,7 +241,7 @@ sub parseRepos
 					$path,
 					'master',
 					$section_path,
-					$section_name,
+					$section_id,
 					$repo,
 					$rel_path,
 					$sub_path);
@@ -257,7 +257,7 @@ sub parseRepos
 				my @parts = split(/\t/,$line);
 				$section_path = $parts[1];
 				$section_path =~ s/^\s+|\s+$//g;
-				$section_name = $parts[2] || '';
+				$section_id = $parts[2] || '';
 			}
 
 			# Repos start with a forward slash
@@ -270,8 +270,8 @@ sub parseRepos
 
 				if (!$TEST_JUNK_ONLY || $path =~ /junk/)
 				{
-					repoDisplay($dbg_parse+1,1,"repo($repo_num,$path,$branch,$section_path,$section_name)");
-					$repo = apps::gitUI::repo->new($repo_num++,$path,$branch,$section_path,$section_name);
+					repoDisplay($dbg_parse+1,1,"repo($repo_num,$path,$branch,$section_path,$section_id)");
+					$repo = apps::gitUI::repo->new($repo_num++,$path,$branch,$section_path,$section_id);
 					my $id = $repo->{id};
 
 					push @$repo_list,$repo;
@@ -434,24 +434,25 @@ sub parseRepos
 sub section
 {
 	my ($name) = @_;
-	return shared_clone({
-		name  => $name,
-		repos => shared_clone([]),
-	});
+	return
 }
 
 
 sub groupReposBySection
 {
 	my $section = '';
-	my $section_name = 'invalid_initial_value';
+	my $section_path = 'invalid_initial_value';
 	my $sections = shared_clone([]);
 	for my $repo (@$repo_list)
 	{
-		if ($section_name ne $repo->{section_name})
+		if ($section_path ne $repo->{section_path})
 		{
-			$section_name = $repo->{section_name};
-			$section = section($section_name);
+			$section_path = $repo->{section_path};
+			$section = shared_clone({
+				path => $section_path,
+				id => $repo->{section_id},
+				repos => shared_clone([]),
+			});
 			push @$sections,$section;
 		}
 		push @{$section->{repos}},$repo;

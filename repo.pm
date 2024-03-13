@@ -122,11 +122,13 @@ sub getId
 
 sub new
 {
-	my ($class, $num, $path, $branch, $section_path, $section_name, $parent_repo, $rel_path, $submodule_path) = @_;
+	my ($class, $num, $path, $branch, $section_path, $section_id, $parent_repo, $rel_path, $submodule_path) = @_;
 	$branch ||= 'master';
-	$section_name ||= $section_path;
+	$section_id ||= $section_path;
+	$section_id =~ s/\//-/g;
+	$section_id =~ s/^-//;
 
-	display($dbg_new,0,"repo->new($num, $path, $branch, $section_path, $section_name,)");
+	display($dbg_new,0,"repo->new($num, $path, $branch, $section_path, $section_id,)");
 
 	my $this = shared_clone({
 
@@ -137,7 +139,7 @@ sub new
 		branch	=> $branch,
 
 		section_path => $section_path,
-		section_name => $section_name,
+		section_id => $section_id,
 
 		# Status fields always exist
 
@@ -420,14 +422,11 @@ sub idWithinSection
 	}
 	else
 	{
-		my $re = $this->{section_name};
-		$re =~ s/\//-/g;
-		$re =~ s/^-//;
+		my $re = $this->{section_id};
 		$id =~ s/^$re//;
 		$id =~ s/^-//;
 		$id ||= $this->{id};
 	}
-
 
 	$id = '...'.substr($id,-$MAX_DISPLAY_PATH)
 		if length($id) >= $MAX_DISPLAY_PATH;
@@ -670,8 +669,8 @@ sub toTextCtrl
 		$text_ctrl->addSingleLine(1, $color, $short_status);
 	}
 
-	$this->contentLine($text_ctrl,0,'section_name');
 	$this->contentLine($text_ctrl,0,'section_path');
+	$this->contentLine($text_ctrl,0,'section_id');
 	$this->contentLine($text_ctrl,1,'mine');
 	$this->contentLine($text_ctrl,0,'forked');
 	$this->contentLine($text_ctrl,0,'parent');

@@ -234,8 +234,8 @@ sub selectObject
 
 sub newCtrlSection
 {
-	my ($this,$section,$name) = @_;
-	display($dbg_pop,0,"newCtrlSection($section->{name})");
+	my ($this,$section) = @_;
+	display($dbg_pop,0,"newCtrlSection($section->{path})");
 	my $ctrl_section = {
 		section => $section,
 		ctrls   => [] };
@@ -282,20 +282,19 @@ sub populate
 			# A ctrl is created using $SUB_BASE_ID, with both the path, and
 			# the display being passed in as that ID.
 
-			if (!$section_started && $section->{name} ne $repo->{path})
+			if (!$section_started && $section->{path} ne $repo->{path})
 			{
 				if ($this->{sub_mode})
 				{
 					my $color = $section->displayColor();
-					$this->newCtrl($ypos,$section,$section->{id},$section->{name},$color);
+					$this->newCtrl($ypos,$section,$section->{id},$section->{path},$color);
 					push @{$this->{groups}},$section;
 					$this->{groups_by_id}->{$section->{id}} = $section;
 				}
 				else
 				{
-					my $name = $section->{name};
+					my $name = $USE_IDS_FOR_DISPLAY ? $section->{id} : $section->{path};
 					$name =~ s/^\/|^-//;
-					$name =~ s/\//-/g if $USE_IDS_FOR_DISPLAY;
 					display($dbg_pop,1,"staticText($name)");
 					Wx::StaticText->new($this,-1,$name,[5,$ypos]);
 				}
