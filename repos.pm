@@ -40,6 +40,7 @@ BEGIN
 		getRepoList
 		getRepoById
 		getRepoByPath
+		addRepoToSystem
 
 		canPushRepos
 		canPullRepos
@@ -69,15 +70,31 @@ BEGIN
 
 my $repo_filename = '/base/bat/git_repositories.txt';
 
-my $repo_list:shared = shared_clone([]);
-my $repos_by_path:shared = shared_clone({});
-my $repos_by_id:shared = shared_clone({});
+my $repo_list:shared;
+my $repos_by_path:shared;
+my $repos_by_id:shared;
 
-my $repos_can_push = shared_clone({});
-my $repos_can_pull = shared_clone({});
-my $repos_do_push = shared_clone({});
-my $repos_do_pull = shared_clone({});
-my $repos_commit_parent = shared_clone({});
+my $repos_can_push:shared;
+my $repos_can_pull:shared;
+my $repos_do_push:shared;
+my $repos_do_pull:shared;
+my $repos_commit_parent:shared;
+
+
+sub initParse
+{
+	$repo_list = shared_clone([]);
+	$repos_by_path = shared_clone({});
+	$repos_by_id = shared_clone({});
+
+	$repos_can_push = shared_clone({});
+	$repos_can_pull = shared_clone({});
+	$repos_do_push = shared_clone({});
+	$repos_do_pull = shared_clone({});
+	$repos_commit_parent = shared_clone({});
+}
+
+initParse();
 
 
 #----------------------------------
@@ -100,6 +117,17 @@ sub getRepoById
 	my ($id) = @_;
 	return $repos_by_id->{$id};
 }
+
+
+sub addRepoToSystem
+{
+	my ($repo,$id) = @_;
+	push @$repo_list,$repo;
+	$repos_by_path->{$repo->{path}} = $repo
+		if $repo->{path};
+	$repos_by_id->{$id} = $repo if $id;
+}
+
 
 
 sub canPushRepos
@@ -185,6 +213,8 @@ sub clearSelectedCommitParentRepo
 sub setCanPushPull
 {
 	my ($repo) = @_;
+	return if !$repo->isLocalAndRemote();
+		# TODO: I don't think this handles localOnly commitParent
 	display($dbg_notify,0,"setCanPushPull($repo->{path})");
 	$repo->canPush() ?
 		$repos_can_push->{$repo->{path}} = 1 :
@@ -213,8 +243,8 @@ sub setCanPushPull
 sub parseRepos
 {
     repoDisplay($dbg_parse,0,"parseRepos($repo_filename)");
-	$repos_by_path = shared_clone({});
-	$repo_list = shared_clone([]);
+
+	initParse();
 
 	my $text = getTextFile($repo_filename);
     if ($text)
@@ -237,16 +267,15 @@ sub parseRepos
 				my $path = makePath($repo->{path},$rel_path);
 				repoWarning(undef,$dbg_parse+1,1,"SUBMODULE($repo_num, $repo->{path}) = $rel_path ==> $sub_path");
 				my $sub_module = apps::gitUI::repo->new(
+					$REPO_LOCAL,
 					$repo_num++,
 					$path,
-					'master',
 					$section_path,
 					$section_id,
 					$repo,
 					$rel_path,
 					$sub_path);
-				push @$repo_list,$sub_module;
-				$repos_by_path->{$path} = $sub_module;
+				addRepoToSystem($sub_module,'');
 			}
 
 			# get section path RE and optional name if different
@@ -264,28 +293,9 @@ sub parseRepos
 
 			elsif ($line =~ /^\//)
 			{
-				my @parts = split(/\t/,$line);
-				my ($path,$branch) = @parts;
-				$branch ||= 'master';
-
-				if (!$TEST_JUNK_ONLY || $path =~ /junk/)
-				{
-					repoDisplay($dbg_parse+1,1,"repo($repo_num,$path,$branch,$section_path,$section_id)");
-					$repo = apps::gitUI::repo->new($repo_num++,$path,$branch,$section_path,$section_id);
-					my $id = $repo->{id};
-
-					push @$repo_list,$repo;
-					$repos_by_path->{$path} = $repo;
-					$repos_by_id->{$id} = $repo if $id;
-				}
-				else
-				{
-					# support for TEST_JUNK_ONLY, set repo to ''
-					# so that the rest of the stuff won't be added
-					# as it goes through the file.
-
-					$repo = '';
-				}
+				repoDisplay($dbg_parse+1,1,"repo($repo_num,$line,$section_path,$section_id)");
+				$repo = apps::gitUI::repo->new($REPO_LOCAL,$repo_num++,$line,$section_path,$section_id);
+				addRepoToSystem($repo,$repo->{id});
 			}
 			elsif ($repo)
 			{

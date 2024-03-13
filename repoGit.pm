@@ -110,6 +110,16 @@ sub gitError
 	return undef;
 }
 
+sub gitWarning
+{
+	my ($repo,$msg,$call_level) = @_;
+	$call_level ||= 0;
+	$call_level++;
+	my $show_path = $repo ? "repo($repo->{path}): " : '';
+	warning(0,-1,$show_path.$msg,$call_level);
+	return undef;
+}
+
 
 #--------------------------------------------
 # utilities for calling Git::Raw stuff
@@ -147,11 +157,27 @@ sub gitStart
 	# returns the $git_repo otherwise
 {
 	my ($repo,$git_repo) = @_;
-	my $branch = $repo->{branch};
+	# my $branch = $repo->{branch};
 
-	display($dbg_start,0,"gitStart($repo->{path}) branch=$branch");
+	display($dbg_start,0,"gitStart($repo->{path}) branch=$repo->{branch}");
 	$git_repo ||= Git::Raw::Repository->open($repo->{path});
 	return gitError($repo,"Could not create git_repo") if !$git_repo;
+
+	my $branch_changed = 0;
+	my $head = $git_repo->head();
+	my $branch = $head->shorthand();
+	if ($repo->{branch} ne $branch)
+	{
+		$branch_changed = 1;
+		gitWarning($repo,"branch($repo->{branch}) changed to($branch)");
+		$repo->{branch} = $branch;
+
+		# re-init remote portion repo
+
+		$repo->{BEHIND} = 0;
+		delete $repo->{remote_commits};
+		$repo->{branch_changed} = 1;
+	}
 
 	my $head_commit = Git::Raw::Reference->lookup("HEAD", $git_repo)->peel('commit') || '';
 	display($dbg_start+1,1,"head_id="._def($head_commit));
@@ -159,8 +185,12 @@ sub gitStart
 	my $master_commit = Git::Raw::Reference->lookup("refs/heads/$branch", $git_repo)->peel('commit') || '';
 	display($dbg_start+1,1,"master_id="._def($master_commit));
 
-	my $remote_commit = Git::Raw::Reference->lookup("remotes/origin/$branch", $git_repo)->peel('commit') || '';
+	my $remote_ref = Git::Raw::Reference->lookup("remotes/origin/$branch", $git_repo);
+	my $remote_commit = $remote_ref ? $remote_ref->peel('commit') : '';
 	display($dbg_start+1,1,"remote_id="._def($remote_commit));
+
+	gitWarning($repo,"Remote branch($branch) not found")
+		if !$remote_commit && $branch_changed;
 
 	my $head_id = "$head_commit";
 	my $master_id = "$master_commit";
@@ -172,9 +202,9 @@ sub gitStart
 
 	# note invariants, but don't stop using this repo
 
-	gitError($repo,"DETACHED HEAD!!")
+	gitWarning($repo,"DETACHED HEAD!!")
 		if $git_repo->is_head_detached();
-	gitError($repo,"HEAD_ID <> MASTER_ID!!")
+	gitWarning($repo,"HEAD_ID <> MASTER_ID!!")
 		if $head_id ne $master_id;
 
 	# rebuild/add local_commits and AHEAD
@@ -183,7 +213,7 @@ sub gitStart
 
 	my ($head_id_found,
 		$master_id_found,
-		$remote_id_found) = (0,0,0);
+		$remote_id_found) = (0,0,$remote_id?0:1);
 
 	# push all branches on the walker to do history
 	# and sort it in time order (most recent first)
@@ -191,7 +221,7 @@ sub gitStart
 	my $log = $git_repo->walker();
 	$log->push($head_commit);
 	$log->push($master_commit);
-	$log->push($remote_commit);
+	$log->push($remote_commit) if $remote_commit;
 	$log->sorting(["time"]);	# ,"reverse"]);
 
 	my $ahead = 0;
@@ -257,6 +287,8 @@ sub gitStart
 		if $rebase;
 	$repo->{AHEAD} = $ahead;
 	$repo->{REBASE} = $rebase;
+
+	display($dbg_start+1,0,"gitStart($repo->{path}) returning");
 
 	return $git_repo;
 }
@@ -359,6 +391,13 @@ sub gitChanges
 	}
 
 	my $changed = 0;
+
+	if ($repo->{branch_changed})
+	{
+		display(0,0,"gitChanges reporting branch changed");
+		$repo->{branch_changed} = 0;
+		$changed = 1;
+	}
 	$changed++ if assignHashIfChanged($repo,'unstaged_changes',$new_unstaged_changes,$unstaged_changed);
 	$changed++ if assignHashIfChanged($repo,'staged_changes',$new_staged_changes,$staged_changed);
 	display($dbg_chgs-$changed,0,"gitChanges($repo->{path}) returning $changed");

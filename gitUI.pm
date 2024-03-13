@@ -36,8 +36,6 @@ use apps::gitUI::progressDialog;
 use apps::gitUI::dialogDisplay;
 use base qw(Pub::WX::Frame);
 
-$TEST_JUNK_ONLY = 0;
-
 
 my $dbg_frame = 0;
 	# lifecycle

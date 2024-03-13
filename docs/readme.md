@@ -73,6 +73,8 @@ to navigate to a folder containing a repo, and then right-click
 to select the "Git GUI Here* option.  So, at first I merely had
 a process of modifying my system-wide git_config to replace the
 list of recent repos with a list of all the repos on my machine.
+Then I added a program showing that list of repos that could
+"shell" to the gitUI command.
 
 I continued to fight with gitUI, as anytime you modify any repo,
 it re-orders the list of 'recentRepos' into what it *thinks* you
@@ -99,7 +101,16 @@ repo on a different machine.
 So I expanded the program from a simple list of repos
 that linked to gitGUI into a multi-window application,
 where the list became the **pathWindow** as I added the
-new **commitWindow**.  But, even though I implemented
+new **commitWindow**.  At first I used "shell" commands
+to call git command line operations, but I had several
+issues running git as a shell command from within a wxPerl UI.
+
+I spent several months implementing the commitWindow, as well as the
+ability to Diff and Push repos using the Perl Git::Raw module.
+Git::Raw allows me to directly manipulate repos from Perl without
+doing shell commands all over the place.
+
+But, even though I implemented
 the basic **commit, stage, unstage, and revert** process
 across multiple repos, it was still onerous to use
 as I had to **rescan all of my repos** every time I

@@ -374,7 +374,9 @@ sub drawRepo
 	my $repo_sel = $this->{selection}->{$path};
 	my $num_selected = $repo_sel ? scalar(keys %$repo_sel) : 0;
 
-	my $name = "$path (".($num_selected?"$num_selected/":'')."$num_items)";
+	my $name = "$path(".($num_selected?"$num_selected/":'')."$num_items)";
+	$name .= "{$repo->{branch}}" if $repo->{branch} ne $repo->{default_branch};
+
 	display($dbg_draw,0,"drawRepo($this->{name},$ypos) exp($expanded) sel($num_selected) num($num_items) $path");
 
 	my $bm = $expanded ? $bm_up_arrow : $bm_right_arrow;

@@ -36,16 +36,57 @@ BEGIN
 		repoNote
 
 		setRepoUI
+
+		$REPO_LOCAL
+		$REPO_REMOTE
 	);
 }
 
 
+our $REPO_LOCAL = 1;
+our $REPO_REMOTE = 2;
+	# bitwise "exists" members
 
 my $repo_ui;
 
 sub setRepoUI { $repo_ui = shift; }
 	# call with undef, or an object that supports
 	# display, error, and warning
+
+
+sub isLocal
+{
+	my ($this) = @_;
+	return $this->{exists} & $REPO_LOCAL ? 1 : 0;
+}
+sub isRemote
+{
+	my ($this) = @_;
+	return $this->{exists} & $REPO_REMOTE ? 1 : 0;
+}
+sub isLocalOnly
+{
+	my ($this) = @_;
+
+	# initial implementation is a little kludgy.
+	# we allow submodules that don't per-se, have
+	# a repo on github. I'm not sure where to best
+	# encapsulate this.
+
+	return !$this->{parent_repo} &&
+		$this->{exists} == $REPO_LOCAL ? 1 : 0;
+}
+sub isRemoteOnly
+{
+	my ($this) = @_;
+	return $this->{exists} == $REPO_REMOTE ? 1 : 0;
+}
+sub isLocalAndRemote
+{
+	my ($this) = @_;
+	return $this->{exists} == ($REPO_LOCAL|$REPO_REMOTE) ? 1 : 0;
+}
+
 
 
 #---------------------------
@@ -88,7 +129,7 @@ sub getId
 		my $head = $git_repo->head();
 		$branch = $head->shorthand();
 
-		display($dbg_new-1,0,"branch($path) = $branch");
+		display($dbg_new,0,"branch($path) = $branch");
 
 		my $remote = Git::Raw::Remote->load($git_repo, 'origin');
 		if ($remote)
@@ -108,8 +149,13 @@ sub getId
 		}
 		else
 		{
-			$this->{is_local} = 1;
-			repoError($this,"Could not get remote($path)");
+			repoWarning($this,0,0,"Could not get remote($path)");
+
+			# we are going to return a slash/dash substituted id
+			# for this repo, but it probably match sections
+
+			$id = $this->{path};
+			$id =~ s/\//-/g;
 		}
 	}
 	else
@@ -122,21 +168,23 @@ sub getId
 
 sub new
 {
-	my ($class, $num, $path, $branch, $section_path, $section_id, $parent_repo, $rel_path, $submodule_path) = @_;
-	$branch ||= 'master';
+	my ($class, $where, $num, $path, $section_path, $section_id, $parent_repo, $rel_path, $submodule_path) = @_;
+
 	$section_id ||= $section_path;
 	$section_id =~ s/\//-/g;
 	$section_id =~ s/^-//;
 
-	display($dbg_new,0,"repo->new($num, $path, $branch, $section_path, $section_id,)");
+	display($dbg_new,0,"repo->new($num, $path, $section_path, $section_id,)");
 
 	my $this = shared_clone({
 
 		# main fields
 
 		num 	=> $num,
+		exists  => $where,
 		path 	=> $path,
-		branch	=> $branch,
+		branch	=> '',
+		default_branch => '',
 
 		section_path => $section_path,
 		section_id => $section_id,
@@ -156,13 +204,13 @@ sub new
 		# PRIVATE is inherited for submdules
 
 		mine     => 1,						# if !FORKED && !NOT_MINE in file
-		private  => $parent_repo ? $parent_repo->{private} : 0,
+		private  => 0,
 		forked   => 0,						# if FORKED [optional_blah] in file
 		parent   => '',						# "Forked from ..." or "Copied from ..."
 		descrip  => '',						# description from github
 		size	 => 0,						# size in KB from github
 
-		# parsed fields added as necessary
+		# fields added in parseRepos()
 		#
 		# page_header => 0,					# PAGE_HEADER for ordered documents
 		# docs     => shared_clone([]),		# MD documents in particular order
@@ -195,25 +243,31 @@ sub new
 		$this->{can_commit_parent} = 0;
 		$this->{first_time} = 1;
 
+		# inherited from parent
+
+		$this->{private} = $parent_repo->{private};
+
+		# added by parseRepos
 		# main_module =>
 		# $this->{submodules} = shared_clone([]);
 		# $this->{used_in}	  = shared_clone([]);
 	}
 
-	# temporary fields added as necessary
-	# by various methods
+	# fields added as necessary
+	# local_commits, remote_commits
 
+	# known temp fields
 	# found_on_github => 0,
 	# save_XXX (AHEAD, BEHIND, HEAD_ID, MASTER_ID, REMOTE_ID)
 
 	bless $this,$class;
 
-	my ($cur_branch,$id) = $this->getId();
-	repoError($this,"cur_branch($cur_branch) != branch($branch)")
-		if $cur_branch ne $branch;
-
-	$this->{id} = $id;
-
+	if ($where == $REPO_LOCAL)
+	{
+		my ($cur_branch,$id) = $this->getId();
+		$this->{branch} = $cur_branch;
+		$this->{id} = $id;
+	}
 	return $this;
 }
 
@@ -239,33 +293,41 @@ sub repoDisplay
 		if $repo_ui;
 	display($dbg,$indent,$msg,1);
 }
+
+sub _repoShow
+{
+	my ($this) = @_;
+	my $show =
+		$this && $this->{path} ? "repo($this->{path}): " :
+		$this && $this->{id} ? "repo_id($this->{id}): " : '';
+}
+
 sub repoError
 {
 	my ($this,$msg) = @_;
-	my $show_path = $this ? "repo($this->{path}): " : '';
-	$repo_ui->do_error($show_path.$msg)
+	my $show = _repoShow($this);
+	$repo_ui->do_error($show.$msg)
 		if $repo_ui;
-	error($show_path.$msg,1); # ,$repo_ui);
-		# $repo_ui == supress_show
+	error($show.$msg,1); # ,$repo_ui);
 	push @{$this->{errors}},$msg if $this;
 	return undef;
 }
 sub repoWarning
 {
 	my ($this,$dbg_level,$indent,$msg) = @_;
-	my $show_path = $this ? "repo($this->{path}): " : '';
-	$repo_ui->do_warning($dbg_level,$indent,$show_path.$msg)
+	my $show = _repoShow($this);
+	$repo_ui->do_warning($dbg_level,$indent,$show.$msg)
 		if $repo_ui;
-	warning($dbg_level,$indent,$show_path.$msg,1);
+	warning($dbg_level,$indent,$show.$msg,1);
 	push @{$this->{warnings}},$msg if $this;
 }
 sub repoNote
 {
 	my ($this,$dbg_level,$indent,$msg) = @_;
-	my $show_path = $this ? "repo($this->{path}): " : '';
-	$repo_ui->do_display($dbg_level,$indent,$show_path.$msg,$color_white)
+	my $show = _repoShow($this);
+	$repo_ui->do_display($dbg_level,$indent,$show.$msg,$color_white)
 		if $repo_ui;
-	display($dbg_level,$indent,$show_path.$msg,1,$UTILS_COLOR_WHITE);
+	display($dbg_level,$indent,$show.$msg,1,$UTILS_COLOR_WHITE);
 	push @{$this->{notes}},$msg if $this;
 }
 
@@ -439,6 +501,9 @@ sub idWithinSection
 # toTextCtrl()
 #---------------------------------------
 
+my $LEFT_MARGIN = 14;
+
+
 sub contentLine
 {
 	my ($this,$text_ctrl,$bold,$key,$use_label,$label_context) = @_;
@@ -484,7 +549,7 @@ sub contentLine
 	}
 
 	my $line = $text_ctrl->addLine();
-	my $fill = pad("",12-length($label));
+	my $fill = pad("",$LEFT_MARGIN-length($label));
 
 	$text_ctrl->addPart($line, 0, $color_black, $label, $label_context);
 	$text_ctrl->addPart($line, 0, $color_black, $fill." = ");
@@ -640,10 +705,25 @@ sub toTextCtrl
 	my $sub_context = $kind ne 'REPO' ?
 		{ repo=>$this, path=>"subs:$this->{id}" } : '';
 
+	$this->contentLine($text_ctrl,1,'exists');
+		# hopefully temporary
+
 	$this->contentLine($text_ctrl,1,'path',$kind,$sub_context);
 	$this->contentLine($text_ctrl,1,'id');
 	$this->contentLine($text_ctrl,0,'branch');
+	$this->contentLine($text_ctrl,0,'default_branch');
+
+	# add a yellow warning if not on the default branch
+
+	$text_ctrl->addSingleLine(1,$color_orange,
+		pad("WARNING:",$LEFT_MARGIN + 3).
+		"branch($this->{branch}) is not default_branch($this->{default_branch})")
+		if $this->{branch} && $this->{default_branch} &&
+		   $this->{branch} ne $this->{default_branch};
+
 	$this->contentLine($text_ctrl,1,'private');
+
+	# short status
 
 	my $short_status = '';
 	$short_status = $this->addTextForHashNum($short_status,'unstaged_changes',"UNSTAGED");
@@ -659,13 +739,12 @@ sub toTextCtrl
 	$short_status = $this->addTextForFxn($short_status,'needsStash');
 	$short_status = $this->addTextForFxn($short_status,'canCommitParent');
 
-
 	if ($short_status)
 	{
 		# mimic the 'link' colors for 'canPush',
 
 		my $color = linkDisplayColor($this);
-		$short_status = pad('status',12)." = ".$short_status;
+		$short_status = pad('status',$LEFT_MARGIN)." = ".$short_status;
 		$text_ctrl->addSingleLine(1, $color, $short_status);
 	}
 

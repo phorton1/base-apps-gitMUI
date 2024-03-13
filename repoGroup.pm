@@ -191,6 +191,36 @@ sub setSelectedCommitParentRepos
 # These orthogonal accessors need counterparts to
 # select the given repos for Pushing and Pulling.
 
+# TODO: Currently assuming a subgroup is REMOTE and LOCAL
+
+sub isLocal
+{
+	my ($this) = @_;
+	return 1;
+}
+sub isRemote
+{
+	my ($this) = @_;
+	return 1;
+}
+sub isLocalOnly
+{
+	my ($this) = @_;
+	return 0;
+}
+sub isRemoteOnly
+{
+	my ($this) = @_;
+	return 0;
+}
+sub isLocalAndRemote
+{
+	my ($this) = @_;
+	return ;
+}
+
+
+
 sub canAdd
 {
 	my ($this) = @_;

@@ -146,7 +146,9 @@ sub onUpdateUI
 
 	if ($id == $INFO_RIGHT_COMMAND_PULL)
 	{
-		$enable = 1 if $repo && !$repo->{AHEAD};
+		$enable = 1 if 	$repo &&
+			$repo->isLocalAndRemote() &&
+			!$repo->{AHEAD};
 		my $button_title =
 			$repo && $repo->needsStash() ? 'Stash+Pull' :
 			$repo && $repo->canPull() ? 'Needs Pull' :
@@ -216,7 +218,10 @@ sub notifyObjectSelected
 	$obj->toTextCtrl($text_ctrl, $this->{sub_mode} ?
 		$ID_SUBS_WINDOW :
 		$ID_INFO_WINDOW );
-	historyToTextCtrl($text_ctrl,$repo,0) if !$obj->{is_subgroup};
+	historyToTextCtrl($text_ctrl,$repo,0) if
+		!$obj->{is_subgroup} &&
+		$obj->isLocal();
+
 	$text_ctrl->setRepoContext($obj);
 
 	$text_ctrl->Refresh();

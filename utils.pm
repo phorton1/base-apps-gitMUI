@@ -43,9 +43,6 @@ use Pub::Prefs;
 
 my $dbg_ids = 1;
 
-our $TEST_JUNK_ONLY = 0;
-	# limits visible repos to /junk
-
 
 $temp_dir = "/base_data/temp/gitUI";
 $data_dir = "/base_data/data/gitUI";
@@ -61,8 +58,6 @@ BEGIN
 {
  	use Exporter qw( import );
 	our @EXPORT = qw(
-
-		$TEST_JUNK_ONLY
 
 		$THREAD_EVENT
 
@@ -83,6 +78,7 @@ BEGIN
 		$color_cyan
 		$color_magenta
 		$color_yellow
+		$color_dark_yellow
 		$color_grey
 		$color_purple
 		$color_orange
@@ -153,6 +149,7 @@ our $color_blue    	     = Wx::Colour->new(0x00, 0x00, 0xC0);		# commit: icons a
 our $color_cyan          = Wx::Colour->new(0x00, 0xC0, 0xC0);		# unused
 our $color_magenta       = Wx::Colour->new(0xC0, 0x00, 0xC0);		# link: staged or unstaged changes
 our $color_yellow        = Wx::Colour->new(0xFF, 0xD7, 0x00);		# commitRight title background; dialog: repoWarning
+our $color_dark_yellow   = Wx::Colour->new(0xA0, 0xA0, 0x00);		# default branch warning
 our $color_grey          = Wx::Colour->new(0x99, 0x99, 0x99);		# unused
 our $color_purple        = Wx::Colour->new(0x60, 0x00, 0xC0);		# unused
 our $color_orange        = Wx::Colour->new(0xC0, 0x60, 0x00);		# link: needs Push; history: tags
@@ -180,6 +177,12 @@ sub linkDisplayColor
 			# parent ready for commit unstaged changes
 		keys %{$repo->{staged_changes}} ? $color_magenta :
 			# can commit
+		($repo->{branch} && $repo->{default_branch} &&
+		 $repo->{branch} ne $repo->{default_branch} ||
+		 @{$repo->{warnings}})
+			# $repo->isLocalOnly() ||
+			# $repo->isRemoteOnly())
+			? $color_dark_yellow :
 		$repo->{private} ? $color_blue :
 		$color_green;
 }

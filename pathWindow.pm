@@ -135,7 +135,7 @@ sub doLayout
 	{
 		my $ctrls = $ctrl_section->{ctrls};
 		my $num_ctrls = @$ctrls;
-		display($dbg_layout,1,"ctrl_section($ctrl_section->{section}->{name}) row=$row col=$col  num=$num_ctrls");
+		display($dbg_layout,1,"ctrl_section($ctrl_section->{section}->{path}) row=$row col=$col  num=$num_ctrls");
 
 		if ($row + 2 >= $NUM_PER)	# to fit each section fully: $num_ctrls > $NUM_PER)
 		{

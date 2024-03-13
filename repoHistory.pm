@@ -24,8 +24,6 @@ BEGIN
 {
  	use Exporter qw( import );
 	our @EXPORT = qw(
-		gitHistory
-		gitHistoryText
 		historyToTextCtrl
 		gitCurrentBranch
 	);
@@ -174,33 +172,6 @@ sub gitHistory
 
 
 
-sub gitHistoryText
-{
-	my ($repo_or_path,$all_branch_history) = @_;
-	my $commit_list = gitHistory($repo_or_path,1);
-
-	$max_name = 20 if $max_name > 20;
-
-	my $text = '';
-	for my $commit (reverse @$commit_list)
-	{
-		my @branches = sort keys %{$commit->{branches}};
-		my $branch_text = @branches ? "[".join(",",@branches)."]" : '';
-		my @tags     = sort keys %{$commit->{tags}};
-		my $tag_text = @tags ? "<".join(",",@tags).">" : '';
-		my $spacer = $branch_text || $tag_text ? " " : '';
-
-		my $summary  = $branch_text.$tag_text.$spacer.$commit->{summary};
-
-		$text .=
-			_plim($commit->{id},42).
-			_plim($commit->{time},20).
-			_plim($commit->{author},$max_name)." ".
-			_plim($summary,80).
-			"\n";
-	}
-	return $text;
-}
 
 
 
@@ -235,15 +206,6 @@ sub historyToTextCtrl
 			if $tag_text;
 		$text_ctrl->addPart($line,0,$color_black,$spacer.$commit->{summary});
 	}
-}
-
-
-
-if (0)
-{
-	my $path = '/src/circle';	 # '/base/apps/buddy';
-	my $text = gitHistoryText($path,1);
-	print $text;
 }
 
 

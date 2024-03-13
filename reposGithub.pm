@@ -308,66 +308,106 @@ sub doGitHub
 
 			if (!$repo)
 			{
-				repoError(undef,"doGitHub() cannot find repo($id)");
+				# create a "remoteOnly" repo, using a mapping for the path
+				# and report an error if that happens to map to an existing path
+
+				my $repo_num = scalar(@$repo_list);
+				my $repo_path = $entry->{name};
+				$repo_path =~ s/-/\//g;
+				$repo_path = "/".$repo_path;
+
+				repoDisplay($dbg_github,0,"creating remoteOnlyRepo($repo_num,$entry->{name})");
+
+				if (getRepoById($repo_path))
+				{
+					repoError(undef,"cannot create remoteOnlyRepo($repo_path) - path already exists!");
+					next;
+				}
+
+				$repo = apps::gitUI::repo->new(
+					$REPO_REMOTE,
+					$repo_num,
+					$repo_path,
+					'remoteOnly',	# section path
+					'remoteOnly');	# section id
+				$repo->{id} = $entry->{name};
+				$repo->{private} = 1 if $entry->{visibility} eq 'private';
+				$repo->{forked} = 1 if $entry->{fork};
+				repoWarning($repo,0,0,"gitHub repo does not exist locally!!");
+				addRepoToSystem($repo,$repo->{id});
 			}
 			else
 			{
-				next if $TEST_JUNK_ONLY && $repo->{path} !~ /junk/;
+				$repo->{exists} |= $REPO_REMOTE;
+			}
+			$repo->{size} = $entry->{size} || 0;
+			$repo->{descrip} = $entry->{description} || '';
+			my $default_branch = $repo->{default_branch} = $entry->{default_branch} || '';
 
-				$repo->{found_on_github} = 1;
-				$repo->{size} = $entry->{size} || 0;
-				$repo->{descrip} = $entry->{description} || '';
-				my $is_private = $entry->{visibility} eq 'private' ? 1 : 0;
-				my $is_forked = $entry->{fork} ? 1 : 0;
-				my $repo_forked = $repo->{forked} ? 1 : 0;
+			# add default branch to submodules of the repo
 
-				repoDisplay($dbg_github+1,1,"doGitHub($id) private($is_private) forked($is_forked)");
-
-				$repo->repoError("validateGitHub($id) - local private($repo->{private}) != github($is_private)")
-					if $repo->{private} != $is_private;
-				$repo->repoError("validateGitHub($id) - local forked($repo_forked) != github($is_forked)")
-					if $repo_forked != $is_forked;
-
-				# if it's forked, do a separate request to get the parent information
-
-				if ($GET_GITHUB_FORK_PARENTS && $is_forked)
+			my $subs = $repo->{submodules};
+			if ($subs)
+			{
+				for my $sub_path (@$subs)
 				{
-					my $git_user = getPref("GIT_USER");
-					my $info = gitHubRequest($id,"repos/$git_user/$id",$use_cache);
-					if (!$info)
-					{
-						$repo->repoError("doGitHub($id) - could not get forked repo");
-					}
-					elsif (!$info->{parent})
-					{
-						$repo->repoError("doGitHub($id) - no parent for forked repo");
-					}
-					elsif (!$info->{parent}->{full_name})
-					{
-						$repo->repoWarning(0,2,"doGitHub($id) - No parent->full_name for forked repo");
-					}
-					else
-					{
-						$repo->{parent} = $info->{parent}->{full_name};
-						repoDisplay($dbg_github,2,"fork parent = $repo->{parent}");
-					}
+					repoDisplay($dbg_github+1,1,"==> default_branch($default_branch) for sub($sub_path)");
+					my $sub_repo = getRepoByPath($sub_path);
+					$sub_repo->{default_branch} = $default_branch;
+				}
+			}
 
-				}   # $GET_GITHUB_PARENTS
+			my $is_private = $entry->{visibility} eq 'private' ? 1 : 0;
+			my $is_forked = $entry->{fork} ? 1 : 0;
+			my $repo_forked = $repo->{forked} ? 1 : 0;
 
-				# IF my description includes "Copied from blah [space],
-				# parent contents will display (blah) as a reminder
-				# of where i got it
+			repoDisplay($dbg_github+1,1,"doGitHub($id) private($is_private) forked($is_forked)");
 
-				elsif ($entry->{description} &&
-					   $entry->{description} =~ /Copied from (.*?)\s/i)
+			$repo->repoError("validateGitHub($id) - local private($repo->{private}) != github($is_private)")
+				if $repo->{private} != $is_private;
+			$repo->repoError("validateGitHub($id) - local forked($repo_forked) != github($is_forked)")
+				if $repo_forked != $is_forked;
+
+			# if it's forked, do a separate request to get the parent information
+
+			if ($GET_GITHUB_FORK_PARENTS && $repo->isLocal() && $is_forked)
+			{
+				my $git_user = getPref("GIT_USER");
+				my $info = gitHubRequest($id,"repos/$git_user/$id",$use_cache);
+				if (!$info)
 				{
-					my $parent = $1;
-					$repo->repoWarning($dbg_github,2,"Copied from $parent");
-					$parent =~ s/https:\/\/github.com\///;
-					$repo->{parent} = "($parent)";
+					$repo->repoError("doGitHub($id) - could not get forked repo");
+				}
+				elsif (!$info->{parent})
+				{
+					$repo->repoError("doGitHub($id) - no parent for forked repo");
+				}
+				elsif (!$info->{parent}->{full_name})
+				{
+					$repo->repoWarning(0,2,"doGitHub($id) - No parent->full_name for forked repo");
+				}
+				else
+				{
+					$repo->{parent} = $info->{parent}->{full_name};
+					repoDisplay($dbg_github,2,"fork parent = $repo->{parent}");
 				}
 
-			} 	# found $repo
+			}   # $GET_GITHUB_PARENTS
+
+			# IF my description includes "Copied from blah [space],
+			# parent contents will display (blah) as a reminder
+			# of where i got it
+
+			elsif ($repo->isLocal() &&
+				   $entry->{description} &&
+				   $entry->{description} =~ /Copied from (.*?)\s/i)
+			{
+				my $parent = $1;
+				$repo->repoNote($dbg_github,2,"Copied from $parent");
+				$parent =~ s/https:\/\/github.com\///;
+				$repo->{parent} = "($parent)";
+			}
+
         }   # foreach $entry
     }   # while $page
 
@@ -376,8 +416,10 @@ sub doGitHub
 		# submodules (rel_path} are allowed to exist without
 		# an explicit repo on git hub.
 
-		$repo->repoError("repo($repo->{id} not found on github!")
-			if !$repo->{rel_path} && !$repo->{found_on_github};
+		$repo->repoWarning(0,0,"repo not found on github!")
+			if !$repo->{rel_path} &&
+			   ($repo->{exists} & $REPO_LOCAL) &&
+			   !($repo->{exists} & $REPO_REMOTE);
 	}
 
 }   #   doGitHub()

@@ -71,7 +71,7 @@ sub new
 	$right_splitter->SetMinimumPaneSize($DEFAULT_COMMAND_AREA_HEIGHT);
 	# $right_splitter->{frame} = $this->{frame};
 	# if I wanted to be consistent
-	warning(0,0,"right_splitter->frame="._def($right_splitter->{frame}));
+	# warning(0,0,"right_splitter->frame="._def($right_splitter->{frame}));
 
 	my $top_panel = $this->{top_panel} = Wx::Panel->new($right_splitter);
 	my $bottom_panel = $this->{bottom_panel} = Wx::Panel->new($right_splitter);
@@ -482,7 +482,7 @@ sub notifyItemSelected
 	else
 	{
 		$repo->toTextCtrl($diff_ctrl,$ID_COMMIT_WINDOW);
-		historyToTextCtrl($diff_ctrl,$repo,0);
+		historyToTextCtrl($diff_ctrl,$repo,0) if $repo->isLocal();
 	}
 
 	$diff_ctrl->Refresh();

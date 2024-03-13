@@ -423,6 +423,8 @@ sub doMonitorStartup
 	my $repo_list = getRepoList();
 	for my $repo (@$repo_list)
 	{
+		next if !$repo->isLocal();
+
 		if ($num == $MAXIMUM_WAIT_OBJECTS)
 		{
 			$num = 0;
@@ -445,6 +447,8 @@ sub doMonitorStartup
 
 	for my $repo (@$repo_list)
 	{
+		next if !$repo->isLocal();
+
 		display($dbg_mon,-2,"initial call to gitChanges($repo->{path})");
 		&$the_callback({ status =>"checking: $repo->{path}" });
 		my $rslt = gitChanges($repo);
@@ -559,6 +563,7 @@ sub updateStatusAll
 	my $repo_list = getRepoList();
 	for my $repo (@$repo_list)
 	{
+		next if !$repo->isLocalAndRemote();
 		return 0 if !initRepoStatus($repo);
 	}
 
@@ -569,6 +574,7 @@ sub updateStatusAll
 
 	for my $repo (@$repo_list)
 	{
+		next if !$repo->isLocalAndRemote();
 		return 0 if !finishRepoStatus($repo);
 	}
 
@@ -627,6 +633,7 @@ sub finishRepoStatus
 
 
 sub oneEvent
+	# Todo: I believe that we now need to pay attention to BRANCHES in gitHub events
 {
 	my ($event) = @_;
 	my $event_id = $event->{id};

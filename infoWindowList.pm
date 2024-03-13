@@ -251,17 +251,25 @@ sub populate
 
 	display($dbg_pop,0,"populate()");
 
+	my $selected_path = $this->{selected_path};
+
+	$this->{ctrls} = [];
+	$this->{ctrls_by_path} = {};
+	$this->{groups} = [];
+	$this->{groups_by_id} = {};
+	$this->{ysize} = 0;
+	$this->{selected_path} = '';
+
+	$this->DestroyChildren();
+	$this->SetVirtualSize([0,0]);
+
+	my $ypos = 5;
+	my $group_num = 0;
+	my $page_started = 0;
 	my $sections = $this->{sub_mode} ?
 		groupReposAsSubmodules() :
 		groupReposBySection();
-	$this->DestroyChildren();
-	$this->{ctrls} = [];
-	$this->{ctrls_by_path} = {};
 
-	my $ypos = 5;
-
-	my $group_num = 0;
-	my $page_started = 0;
 	for my $section (@$sections)
 	{
 		my $section_started = 0;
@@ -313,7 +321,10 @@ sub populate
 	}
 
 	$this->{ysize} = $ypos + $LINE_HEIGHT;
+
 	$this->SetVirtualSize([1000,$this->{ysize}]);
+	$this->selectObject($selected_path)
+		if $selected_path && $this->{ctrls_by_path}->{$selected_path};
 	$this->Refresh();
 }
 
@@ -321,7 +332,7 @@ sub populate
 sub newCtrl
 {
 	my ($this,$ypos,$obj,$path,$display_name,$color) = @_;
-	display($dbg_pop,1,"hyperLink($display_name)");
+	display($dbg_pop,1,"newCtrl($ypos,$display_name)");
 	my $ctrl = apps::gitUI::myHyperlink->new(
 		$this,
 		-1,
