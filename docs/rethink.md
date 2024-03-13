@@ -4,28 +4,9 @@ I have re-introduced the notion of LOCAL_ONLY,
 and REMOTE_ONLY repos, and removed the parsing
 of the BRANCH from the git_repos.txt file.
 
-
-
 The {branch} member (used in gitChanges, gitPush,
 gitPull, and so forth) is determined, and monitored
 based on the local Git::Raw repository.
-
-
-
-I am rethinking the way I do the whole thing, removing some of
-the invariants, and 'fixed' members in the system.
-
-- The system considers it an invariant that all managed LOCAL
-  repos within git_repos.txt have a REMOTE on gitHub.
-- The system considers it an invariant that all repos on gitHub
-  have a managed LOCAL repository within git_repos.txt
-- git_repos.txt has a BRANCH, which defaults to 'master' if
-  not otherwise specified.
-- The system considers it an invariant that the parsed BRANCH
-  for all managed local repos have a correponding remote of
-  that branch.
-- The system implicitly assumes that the gitHub default branch
-  is, or at least *should* be the same as the parsed BRANCH
 
 
 ## LOCAL_ONLY and REMOTE_ONLY repos
@@ -41,20 +22,30 @@ REMOTE_ONLY repos can be viewed in the infoWindow but are not otherwise
 used within the program. Since REMOTE_ONLY do not have an actual local 'path',
 and we need to put them into the
 
-per se,
-we are kind of back to the chicken-and-egg problem of where to
-put such repos in the overall list, especially since they are
-"discovered" in the separate reposGithub.pm process AFTER the
-list of repos has been parsed.  One idea would be to develop
-a 'default path' using slash/dash substitution, and then trying
-to determine where such a path *might* fit into the list, based
-on sections, perhaps from the end of the list backwards to account
-for the way I 'nest' sections.  A simple initial solution will be
-to place all REMOTE_ONLY repos in a new, system generated "section"
-at the end of the list.
-
 LOCAL_ONLY and REMOTE_ONLY repos generate Warnings during
 a scan, and hence, show as yellow in lists.
+
+### POTENTIAL CONFLICTS
+
+Because we are making up id's for LOCAL_ONLY repos, and making
+up paths for REMOTE_ONLY ones, the possibility exists that that
+id or path is in legitimate use for another repo.  For REMOTE_ONLY
+repos, we refuse to add the item if the path is already in use.
+HOWEVER, for LOCAL_ONLY repos, due to the way we scan, we *could*
+check that the generated ID is not in use BEFORE the local_only
+repo, but we cannot be sure that the id will not be used legitimately
+by a later scanned repo.  The best we could do would be to either]
+(a) give an error if any repo id or path is attempted to be added
+twice to the list, or (b) save up the local_only repos and add them
+at the end of the list, in another section, where we could conceivably
+refuse to add it if it conflicted with an existing ID.
+
+TODO: AT THE MOMENT IT IS UP TO THE USER TO NOT INCLUDE ANY LOCAL_ONLY
+REPOS whose path would map to an existing, legitimate gitHub repo id.
+
+A bit of thought can probably make this smoother, but I am
+checking in the changes "AS-IS"
+
 
 
 ### REMOTE_ONLY restrictions

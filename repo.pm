@@ -152,10 +152,11 @@ sub getId
 			repoWarning($this,0,0,"Could not get remote($path)");
 
 			# we are going to return a slash/dash substituted id
-			# for this repo, but it probably match sections
+			# for this repo, but it probably wont match sections
 
 			$id = $this->{path};
 			$id =~ s/\//-/g;
+			$id =~ s/^-//;
 		}
 	}
 	else
