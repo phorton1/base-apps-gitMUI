@@ -39,6 +39,11 @@ BEGIN
 
 		$REPO_LOCAL
 		$REPO_REMOTE
+
+		$LOCAL_ONLY
+		$REMOTE_ONLY
+		$UNTRACKED_REPO
+
 	);
 }
 
@@ -47,6 +52,12 @@ our $REPO_LOCAL = 1;
 	# LOCAL_ONLY repos have no ID
 our $REPO_REMOTE = 2;
 	# REMOTE_ONLY repos have no PATH
+
+our $LOCAL_ONLY = "LOCAL_ONLY";
+our $REMOTE_ONLY = "REMOTE_ONLY";
+our $UNTRACKED_REPO = 'UNTRACKED_REPO';
+
+
 my $MAX_DISPLAY_PATH = 30;
 	# not including elipses
 
@@ -148,10 +159,13 @@ sub openGitRepo
 
 sub getId
 {
-	my ($this) = @_;
+	my ($this,$opts) = @_;
 
 	my ($id,$branch);
 	my $path = $this->{path};
+	return repoError($this,"No path in getId!")
+		if !$path;
+
 	my $git_repo = openGitRepo($path);
 
 	if ($git_repo)
@@ -162,26 +176,31 @@ sub getId
 
 		display($dbg_new,0,"branch($path) = $branch");
 
-		my $remote = Git::Raw::Remote->load($git_repo, 'origin');
-		if ($remote)
+		if ($opts  !~ /$LOCAL_ONLY/)
 		{
-			my $url = $remote->url();
-			my $user = getPref("GIT_USER");
-			if ($url =~ s/https:\/\/github.com\/$user\///)
+			my $remote = Git::Raw::Remote->load($git_repo, 'origin');
+			if ($remote)
 			{
-				$id = $url;
-				$id =~ s/\.git$//;
-				display($dbg_new,0,"getId($path) = $id");
+				my $url = $remote->url();
+				my $user = getPref("GIT_USER");
+				if ($url =~ s/https:\/\/github.com\/$user\///)
+				{
+					$id = $url;
+					$id =~ s/\.git$//;
+					display($dbg_new,0,"getId($path) = $id");
+				}
+				else
+				{
+					$opts =~ /$UNTRACKED_REPO/ ?
+						repoWarning($this,0,0,"Unexpected remote url($url)") :
+						repoError($this,"Unexpected remote url($url)");
+				}
 			}
 			else
 			{
-				repoError($this,"Unexpected remote url($url)");
+				repoWarning($this,0,0,"Could not get remote($path)");
 			}
-		}
-		else
-		{
-			repoWarning($this,0,0,"Could not get remote($path)");
-		}
+		}	# !local_only
 	}
 	else
 	{
@@ -193,26 +212,35 @@ sub getId
 
 sub new
 {
-	my ($class, $where, $num, $path, $section_path, $section_id, $parent_repo, $rel_path, $submodule_path) = @_;
+	my ($class, $params) = @_;
+	my $num = scalar(@{apps::gitUI::repos::getRepoList()});
+	display_hash($dbg_new,0,"repo->new($num)",$params);
 
-	$section_id ||= $section_path;
-	$section_id =~ s/\//-/g;
-	$section_id =~ s/^-//;
+	# my ($where, $num, $path, $section_path, $section_id, $parent_repo, $rel_path, $sub_path) = @_;
 
-	display($dbg_new,0,"repo->new($num, $path, $section_path, $section_id,)");
+	$params->{id} ||= '';
+	$params->{path} ||= '';
+	$params->{opts} ||= '';
+
+	$params->{section_path} ||= '';
+	$params->{section_id} ||= $params->{section_path};
+	$params->{section_id} =~ s/\//-/g;
+	$params->{section_id} =~ s/^-//;
 
 	my $this = shared_clone({
 
 		# main fields
 
 		num 	=> $num,
-		exists  => $where,
-		path 	=> $path,
+		opts    => $params->{opts},
+		exists  => $params->{where},
+		id      => $params->{id},
+		path 	=> $params->{path},
 		branch	=> '',
 		default_branch => '',
 
-		section_path => $section_path,
-		section_id => $section_id,
+		section_path => $params->{section_path},
+		section_id => $params->{section_id},
 
 		# Status fields always exist
 
@@ -261,16 +289,16 @@ sub new
 
 	# optional fields
 
-	if ($parent_repo)
+	if ($params->{parent_repo})
 	{
-		$this->{parent_repo} = $parent_repo;
-		$this->{rel_path}	 = $rel_path;
+		$this->{parent_repo} = $params->{parent_repo};
+		$this->{rel_path}	 = $params->{rel_path};
 		$this->{can_commit_parent} = 0;
 		$this->{first_time} = 1;
 
 		# inherited from parent
 
-		$this->{private} = $parent_repo->{private};
+		$this->{private} = $params->{parent_repo}->{private};
 
 		# added by parseRepos
 		# main_module =>
@@ -287,12 +315,12 @@ sub new
 
 	bless $this,$class;
 
-	if ($where == $REPO_LOCAL)
+	if ($params->{where} == $REPO_LOCAL)
 	{
-		my ($branch,$id) = $this->getId();
+		my ($branch,$id) = $this->getId($params->{opts});
 		if (!defined($branch))
 		{
-			display(0,0,"returning undef for REPO_LOCAL($path)");
+			display(0,0,"returning undef for REPO_LOCAL($params->{path})");
 			return undef;
 		}
 		$this->{branch} = $branch;
@@ -512,7 +540,7 @@ sub idWithinSection
 {
 	my ($this) = @_;
 	my $id = $this->{id};
-	if (!$id || $this->{is_untracked})
+	if (!$id || $this->{opts} =~ /$UNTRACKED_REPO/)
 	{
 		$id = $this->{path};
 	}
@@ -756,7 +784,7 @@ sub toTextCtrl
 		{ repo => $this, open_main_sub=>1, no_menu=>1, } : '';
 
 	$this->contentLine($text_ctrl,1,'exists');
-		# hopefully temporary
+	$this->contentLine($text_ctrl,1,'opts');
 
 	$this->contentLine($text_ctrl,1,'path',$kind,$label_context);
 	$this->contentLine($text_ctrl,1,'id');

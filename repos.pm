@@ -149,6 +149,7 @@ sub addRepoToSystem
 	# Nonetheless, they have paths and must have unique UUIDs.
 {
 	my ($repo,$id) = @_;
+	$id = $repo->{id} if !defined($id);
 	push @$repo_list,$repo;
 	my $path = $repo->{path};
 
@@ -309,8 +310,6 @@ sub parseRepos
 
 	initParse();
 
-	my $repo_num = 0;
-
 	my $text = getTextFile($repo_filename);
     if ($text)
     {
@@ -324,20 +323,20 @@ sub parseRepos
 			$line =~ s/^\s+//;
 			$line =~ s/\s+$//;
 
-			if ($line =~ /SUBMODULE\t(.*)\t(.*)$/)
+			my $dbg_num = scalar(@$repo_list);
+
+			if ($line =~ /SUBMODULE\t(.*)$/)
 			{
-				my ($rel_path,$sub_path) = ($1,$2);
+				my $rel_path = $1;
 				my $path = makePath($repo->{path},$rel_path);
-				repoWarning(undef,$dbg_parse+1,1,"SUBMODULE($repo_num, $repo->{path}) = $rel_path ==> $sub_path");
-				my $sub_module = apps::gitUI::repo->new(
-					$REPO_LOCAL,
-					$repo_num++,
-					$path,
-					$section_path,
-					$section_id,
-					$repo,
-					$rel_path,
-					$sub_path);
+				repoWarning(undef,$dbg_parse+1,1,"SUBMODULE($dbg_num, $repo->{path}) = $rel_path ");
+				my $sub_module = apps::gitUI::repo->new({
+					where => $REPO_LOCAL,
+					path  => $path,
+					section_path => $section_path,
+					section_id => $section_id,
+					parent_repo => $repo,
+					rel_path => $rel_path, });
 				addRepoToSystem($sub_module,'') if $sub_module;
 			}
 
@@ -352,14 +351,37 @@ sub parseRepos
 				$section_id = $parts[2] || '';
 			}
 
-			# Repos start with a forward slash
+			# Local Repos start with a forward slash
+			# Remote Only repos start with a dash
 
 			elsif ($line =~ /^\//)
 			{
-				repoDisplay($dbg_parse+1,1,"repo($repo_num,$line,$section_path,$section_id)");
-				$repo = apps::gitUI::repo->new($REPO_LOCAL,$repo_num++,$line,$section_path,$section_id);
-				addRepoToSystem($repo,$repo->{id}) if $repo;
+				my @parts = split(/\t/,$line);
+				my ($path,$opts) = ($parts[0],$parts[1] || '');
+				repoDisplay($dbg_parse+1,1,"repo($dbg_num,$path,$section_path,$section_id)");
+				$repo = apps::gitUI::repo->new({
+					where => $REPO_LOCAL,
+					path => $path,
+					section_path => $section_path,
+					section_id => $section_id,
+					opts => $opts, });
+				addRepoToSystem($repo) if $repo;
 			}
+			elsif ($line =~ s/^-//)
+			{
+				my @parts = split(/\t/,$line);
+				my ($id,$opts) = ($parts[0],$parts[1] || '');
+				repoDisplay($dbg_parse+1,1,"remote_only repo($dbg_num,$id,$section_path,$section_id)");
+				$repo = apps::gitUI::repo->new({
+					where => $REPO_REMOTE,
+					id => $id,
+					section_path => $section_path,
+					section_id => $section_id,
+					opts => $opts, });
+				addRepoToSystem($repo) if $repo;
+			}
+
+
 			elsif ($repo)
 			{
 				# set PRIVATE bit
@@ -446,8 +468,6 @@ sub parseRepos
 	# For submodules, set
 	#		{submodules} list of paths on parent
 	#		{used_in} list of paths on master module
-				# following are repos
-
 
 	for my $repo (@$repo_list)
 	{
@@ -537,11 +557,15 @@ sub parseRepos
 		for my $path (sort keys %$untracked)
 		{
 			repoDisplay($dbg_parse,2,"adding untracked_repo($path)");
-			my $repo = apps::gitUI::repo->new($REPO_LOCAL,$repo_num++,$path,"untrackedRepos","untrackedRepos");
+			my $repo = apps::gitUI::repo->new({
+				where => $REPO_LOCAL,
+				path  => $path,
+				section_id => "untrackedRepos",
+				section_path => "untrackedRepos",
+				opts => $UNTRACKED_REPO, });
 			if ($repo)
 			{
-				$repo->{is_untracked} = 1;
-				addRepoToSystem($repo,$repo->{id});
+				addRepoToSystem($repo);
 				repoWarning($repo,$dbg_parse,2,"This is an untracked repo!");
 			}
 		}

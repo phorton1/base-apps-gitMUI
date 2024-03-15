@@ -11,10 +11,10 @@ library, which is included in a number of other repos as a submodule.
 ## SUBMODULE specification (SUBMODULE GROUP)
 
 The SUBMODULE specifier within a repo in git_repositories.txt
-tells the system what submodules exist, and where to find them.
+tells the system what submodules exist.
 
 	/parent_repo_path
-		SUBMODULE	rel_path	/master_sub_path
+		SUBMODULE	rel_path
 
 The presence of the SUBMODULE verb will create a new repo object,
 and set various members on the parent and 'master'
@@ -26,10 +26,10 @@ The new submodule repo object will have
   /parent_repo_path/rel_path, so the repo shows up in the system
   as 'just another' repo. It shows up as "++ relpath" in lists
   in the UI.
-- {id} - the id of the submodules IS the same as the the ID
-  of the 'master submodule'.  As far as much of the system is
-  concerned, the submodule is JUST ANOTHER COPY of the master
-  submodule.
+- {id} - the id of the submodules is gotten from Git::Raw
+  and is the same as the the ID of the 'master submodule'.
+  As far as much of the system is concerned, the submodule is
+  JUST ANOTHER COPY of the master submodule.
 - {parent_repo} - a pointer to the actual parent repo object
   is included in memory for submodule repos.  This is usually
   the field checked to determine if a repo is, in fact,

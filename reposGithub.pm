@@ -310,22 +310,20 @@ sub doGitHub
 
 			if (!$repo)
 			{
-				my $repo_num = scalar(@$repo_list);
-				repoDisplay($dbg_github,0,"creating remoteOnlyRepo($repo_num,$entry->{name})");
+				my $dbg_num = scalar(@$repo_list);
+				repoDisplay($dbg_github,0,"creating remoteOnlyRepo($dbg_num,$entry->{name})");
 
-				$repo = apps::gitUI::repo->new(
-					$REPO_REMOTE,
-					$repo_num,
-					'',
-					'remoteOnly',	# section path
-					'remoteOnly');	# section id
+				$repo = apps::gitUI::repo->new({
+					where => $REPO_REMOTE,
+					id => $entry->{name},
+					section_id => 'remoteOnly',
+					section_path => 'remoteOnly', });
 
 				next if !$repo;
-				$repo->{id} = $entry->{name};
 				$repo->{private} = 1 if $entry->{visibility} eq 'private';
 				$repo->{forked} = 1 if $entry->{fork};
 				repoWarning($repo,0,0,"gitHub repo does not exist locally!!");
-				addRepoToSystem($repo,$repo->{id}) if $repo;
+				addRepoToSystem($repo) if $repo;
 			}
 			else
 			{
@@ -404,11 +402,13 @@ sub doGitHub
 
 	for my $repo (@$repo_list)
 	{
+		# explicit local_only repos and
 		# submodules (rel_path} are allowed to exist without
 		# an explicit repo on git hub.
 
 		$repo->repoWarning(0,0,"repo not found on github!")
-			if !$repo->{rel_path} &&
+			if $repo->{opts} !~ /$LOCAL_ONLY/ &&
+			   !$repo->{rel_path} &&
 			   ($repo->{exists} & $REPO_LOCAL) &&
 			   !($repo->{exists} & $REPO_REMOTE);
 	}
