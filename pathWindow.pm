@@ -46,7 +46,7 @@ sub new
 
 	$this->SetBackgroundColour($color_white);
 	$this->{ctrl_sections} = [];
-	$this->{ctrls_by_path} = {};
+	$this->{ctrls_by_num} = {};
 
 	$this->populate();
 
@@ -86,9 +86,9 @@ sub onLeftDown
 	my $event_id = $event->GetId();
 	my $this = $ctrl->GetParent();
 	my $repo = $ctrl->{repo};
-	my $path = $repo->{path};
-	display($dbg_win,0,"onLeftDown($event_id,$path)");
-	$this->{frame}->createPane($ID_INFO_WINDOW,undef,{repo_path=>$path});
+	my $uuid = $repo->uuid();
+	display($dbg_win,0,"onLeftDown($uuid)");
+	$this->{frame}->createPane($ID_INFO_WINDOW,undef,{repo_uuid=>$uuid});
 }
 
 
@@ -98,7 +98,7 @@ sub onRightDown
 	my $event_id = $event->GetId();
 	my $this = $ctrl->GetParent();
 	my $repo = $ctrl->{repo};
-	display($dbg_win,0,"onRightDown($event_id,$repo->{path}");
+	display($dbg_win,0,"onRightDown($repo->uuid()");
 	$this->popupRepoMenu($repo);
 
 }
@@ -227,7 +227,7 @@ sub populate
 				[$COLUMN_WIDTH-2,16],
 				$color);
 			addSectionCtrl($ctrl_section,$ctrl,$display_name);
-			$this->{ctrls_by_path}->{$repo->{path}} = $ctrl;
+			$this->{ctrls_by_num}->{$repo->{num}} = $ctrl;
 			$ctrl->{repo} = $repo;
 			$started = 1;
 
@@ -247,8 +247,7 @@ sub notifyRepoChanged
 	my ($this,$repo) = @_;
 	display($dbg_notify,0,"notifyRepoChanged($repo->{path})");
 
-	my $path = $repo->{path};
-	my $ctrl = $this->{ctrls_by_path}->{$path};
+	my $ctrl = $this->{ctrls_by_num}->{$repo->{num}};
 	if ($ctrl)
 	{
 		my $color = linkDisplayColor($repo);

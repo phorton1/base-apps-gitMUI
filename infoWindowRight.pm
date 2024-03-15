@@ -57,7 +57,7 @@ sub new
 
 	$this->SetBackgroundColour($color_cyan);
 
-	$this->{title_ctrl} = Wx::StaticText->new($this,-1,'Repo:',[5,5],[$TITLE_LEFT_MARGIN-10,20]);
+	$this->{title_ctrl} = Wx::StaticText->new($this,-1,'Repo:',[5,8],[$TITLE_LEFT_MARGIN-10,20]);
 	my $repo_name = $this->{repo_name} = apps::gitUI::myHyperlink->new($this,-1,'',[$TITLE_LEFT_MARGIN + $TITLE_WIDTH,7]);
 	$this->{text_ctrl} = apps::gitUI::myTextCtrl->new($this, $this->{sub_mode} ?
 		$ID_SUBS_WINDOW :
@@ -225,7 +225,8 @@ sub notifyObjectSelected
 	$text_ctrl->setRepoContext($obj);
 
 	$text_ctrl->Refresh();
-	$this->{repo_name}->SetLabel($obj->{path});
+	my $uuid = $obj->uuid();
+	$this->{repo_name}->SetLabel($uuid);
 	$this->{title_ctrl}->SetLabel("$kind\[$obj->{num}]");
 }
 

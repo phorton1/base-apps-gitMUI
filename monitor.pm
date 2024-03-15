@@ -320,7 +320,6 @@ sub run
 	$monitors = [];
 	$monitor_groups = [];
 	push @$monitor_groups,$monitors;
-	my $repo_list = getRepoList();
 
 	if ($DELAY_MONITOR_STARTUP)		# to see startup before any events occur
 	{
@@ -413,6 +412,14 @@ sub run
 # atoms
 #----------------------------------------------------
 
+sub getRepoPaths
+	# the monitor works on unique repos that have been
+	# added to the system with paths.
+{
+	my $repos_by_path = getReposByPath();
+	return sort keys %$repos_by_path;
+}
+
 sub doMonitorStartup
 {
 	display($dbg_thread,-1,"doMonitorStartup()");
@@ -420,11 +427,9 @@ sub doMonitorStartup
 
 	my $num = 0;
 	my $group = 0;
-	my $repo_list = getRepoList();
-	for my $repo (@$repo_list)
+	my @repo_paths = getRepoPaths();
+	for my $path (@repo_paths)
 	{
-		next if !$repo->isLocal();
-
 		if ($num == $MAXIMUM_WAIT_OBJECTS)
 		{
 			$num = 0;
@@ -433,22 +438,21 @@ sub doMonitorStartup
 			push @$monitor_groups,$monitors;
 		}
 
-		&$the_callback({ status =>"monitor: $repo->{path}" });
-		display($dbg_mon,-2,"CREATE MONITOR[$group:$num] $repo->{path}");
-		my $mon = Win32::ChangeNotify->new($repo->{path},1,$WIN32_FILTER);
+		&$the_callback({ status =>"monitor: $path" });
+		display($dbg_mon,-2,"CREATE MONITOR[$group:$num] $path");
+		my $mon = Win32::ChangeNotify->new($path,1,$WIN32_FILTER);
 		if (!$mon)
 		{
-			error("apps::gitUI::monitor::createMonitor() - Could not create monitor($group:$num) $repo->{path}");
+			error("apps::gitUI::monitor::createMonitor() - Could not create monitor($group:$num) $path");
 			return 0;
 		}
 		push @$monitors,$mon;
 		$num++;
 	}
 
-	for my $repo (@$repo_list)
+	for my $path (@repo_paths)
 	{
-		next if !$repo->isLocal();
-
+		my $repo = getRepoByPath($path);
 		display($dbg_mon,-2,"initial call to gitChanges($repo->{path})");
 		&$the_callback({ status =>"checking: $repo->{path}" });
 		my $rslt = gitChanges($repo);
@@ -480,7 +484,7 @@ sub doMonitorRun
 	display($dbg_thread+1,-1,"doMonitorRun()");
 
 	my $group = 0;
-	my $repo_list = getRepoList();
+	my @repo_paths = getRepoPaths();
 	for $monitors (@$monitor_groups)
 	{
 		my $ready = Win32::ChangeNotify::wait_any(@$monitors,$MONITOR_WAIT);
@@ -493,7 +497,8 @@ sub doMonitorRun
 		{
 			$monitors->[$ready-1]->reset();
 			my $num = $group * $MAXIMUM_WAIT_OBJECTS + $ready-1;
-			my $repo = $repo_list->[$num];
+			my $path = $repo_paths[$num];
+			my $repo = getRepoByPath($path);
 			display($dbg_cb,-2,"win_notify[$group:".($ready-1)."] $repo->{path}");
 
 			my $rslt = gitChanges($repo);

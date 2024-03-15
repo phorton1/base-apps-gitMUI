@@ -1,17 +1,6 @@
 #-------------------------------------------
 # apps::gitUI::myTextCtrl
 #-------------------------------------------
-# context may be:
-#    path => a fully qualified folder path
-#		execExplorer
-#       maybe show in komodo places somehow
-#    filename => a fully qualified filename
-#       fileMenu
-#       	komodo, explorer shell, notepad
-#    repo_path => a fully qualified repo path
-#		repoMenu
-#    repo,file => a repo and a relative filename
-#
 # ALT-mouse selects rectangle
 # Regular mouse selects lines
 # Refresh is not optimized.
@@ -48,7 +37,7 @@ my $dbg_draw = 1;
 	# -1 to show drag rectangles
 my $dbg_mouse = 1;
 	# -1 to show moves
-my $dbg_click = 1;
+my $dbg_click = 0;
 	# debug what happens when you click on a link
 my $dbg_refresh = 1;
 	# -1 to show drag rectangles
@@ -973,8 +962,15 @@ sub refreshDrag
 
 
 #------------------------------------------------
-# Mouse Event Handling
+# Mouse Event Handling and Context
 #------------------------------------------------
+# Context:
+# 		repo = an actual repo
+# 		url  = a github url
+# 		path = an explorable path
+# 		file = a repo relative file
+# 		open_main_sub = 0/1 = use the id from the repo in the subs window
+#		open_repo_sub = 0/1 = use the path from the repo in the subs window
 
 sub dbgDrag
 {
@@ -1034,8 +1030,11 @@ sub onMouse
 
 	if ($rclick)
 	{
-		my ($repo,$path) = getHitContext($hit);
-		$this->popupContextMenu($repo,$path);
+		if ($hit)
+		{
+			my $context = getHitContext($hit);
+			$this->popupContextMenu($context);
+		}
 	}
 	elsif ($event->LeftUp())
 	{
@@ -1121,41 +1120,42 @@ sub mouseClick
 	my $show_part = $hit->{part};
 	display($dbg_click,0,"mouseClick($show_part->{text})");
 
-	my $path = $this->getClickFunction($hit,1);
-	if ($path =~ s/^GITHUB //)
+	my $fxn = $this->getClickFunction($hit,1);
+	if ($fxn =~ s/^GITHUB //)
 	{
-		my $command = "\"start $path\"";
+		my $command = "\"start $fxn\"";
 		system(1,$command);
 	}
-	elsif ($path =~ s/^SYSTEM //)
+	elsif ($fxn =~ s/^SYSTEM //)
 	{
-		chdir $path;
-		system(1,"\"$path\"");
+		chdir $fxn;
+		system(1,"\"$fxn\"");
 	}
-	elsif ($path =~ s/^KOMODO //)
+	elsif ($fxn =~ s/^EDIT //)
 	{
-		my $command = $komodo_exe." \"$path\"";
+		my $command = $DEFAULT_EDITOR." \"$fxn\"";
 		execNoShell($command);
 	}
-	elsif ($path =~ s/^GITUI //)
+	elsif ($fxn =~ s/^GITUI //)
 	{
-		execNoShell('git gui',$path);
+		execNoShell('git gui',$fxn);
 	}
-	elsif ($path =~ s/^INFO //)
+	elsif ($fxn =~ s/^INFO //)
 	{
-		$this->{frame}->createPane($ID_INFO_WINDOW,undef,{repo_path=>$path});
+		$this->{frame}->createPane($ID_INFO_WINDOW,undef,{repo_uuid=>$fxn});
 	}
-	elsif ($path =~ s/^SUB //)
+	elsif ($fxn =~ s/^MAIN_SUB // ||
+		   $fxn =~ s/^REPO_SUB //)
 	{
-		$this->{frame}->createPane($ID_SUBS_WINDOW,undef,{repo_path=>$path});
+		$this->{frame}->createPane($ID_SUBS_WINDOW,undef,{repo_uuid=>$fxn});
 	}
-	elsif ($path =~ s/^EXPLORE //)
+	elsif ($fxn =~ s/^EXPLORE //)
 	{
-		execExplorer($path);
+		execExplorer($fxn);
 	}
 	else
 	{
-		error("unknown clickFunction($path)");
+		error("unknown clickFunction($fxn)");
 	}
 }
 
@@ -1163,66 +1163,69 @@ sub mouseClick
 sub getClickFunction
 {
 	my ($this,$hit,$is_click) = @_;
-	my ($repo,$path) = getHitContext($hit);
-	display($dbg_click,1,"getClickFunction repo=".($repo?$repo->{path}:'undef')." path="._def($path))
+
+# 		repo = an actual repo
+# 		url  = a github url
+# 		path = an explorable path
+# 		file = a repo relative file
+# 		open_main_sub = 0/1 = use the id from the repo in the subs window
+#		open_repo_sub = 0/1 = use the path from the repo in the subs window
+
+	my $context = getHitContext($hit);
+	return '' if !$context;
+	display_hash($dbg_click,1,"getClickFunction",$context)
 		if $is_click;
 
-	# decide the best thing to do on a left click
-	# path = https:// == 'shell start' a Browser to a Github repo
-	# path = md,gif,png,jpg,jpeg,pdf - shell
-	# path = txt,pm,pl,cpp,c,h - komodo
-	# path = 'SUBMODULE' = go to the repo in the SUBS window
-	# repo - show repo details if not in that window, open gitUI otherwise
-	# otherwise, show in explorer
+	my $repo = $context->{repo};
+	my $filename = $context->{file} ?
+		$repo->{path}.$context->{file} : '';
 
-	if ($path =~ /^https:\/\//)
+	if ($context->{url})
 	{
-		return "GITHUB $path";
+		return "GITHUB $context->{url}";
 	}
-	elsif ($path =~ /\.(md|gif|png|jpg|jpeg|pdf)$/)
+	elsif ($filename =~ /\.($DEFAULT_SHELL_EXTS)$/)
 	{
-		return "SYSTEM $path";
+		return "SYSTEM $filename";
 	}
-	elsif ($path =~ /\.(txt|pm|pl|ino|cpp|c|h|hpp)$/)
+	elsif ($filename =~ /\.($DEFAULT_EDITOR_EXTS)$/)
 	{
-		return "KOMODO $path";
-	}
-	elsif ($path =~ s/^subs://)
-	{
-		return "SUB $path";
+		return "EDIT $filename";
 	}
 	elsif ($repo)
 	{
-		# when we click on 'used_in' submodules in master module list
-		# it wants to go to gitUI because the linked submodule has the
-		# same id as this repository.  We just need to change to paths
+		my $id = $repo->{id};
+		my $uuid = $repo->uuid();
+		my $path = $repo->{path};
+		my $win_uuid = $this->{repo_context} ?
+			$this->{repo_context}->uuid() : '';
+		my $is_this_repo = $uuid eq $win_uuid ? 1 : 0;
+		my $open_main_sub = $context->{open_main_sub} || 0;
+		my $open_repo_sub = $context->{open_repo_sub} || 0;
 
-		my $repo_context = $this->{repo_context};
-		display($dbg_click,1,"repo_context=".($repo_context?$repo_context->{path}:'undef'))
-			if $is_click;
-
-		my $is_this_repo = $repo_context &&
-			$repo->{path} eq $repo_context->{path} ? 1 : 0;
-
-		display($dbg_click,1,"repo is_this_repo($is_this_repo)")
-			if $is_click;
-
-		# navigation clicks on the myTextCtrl in the commitRight window
-		# require that we do not call event->Skip() from the click event
-		# in order to activate the infoWindow.
+		if ($is_click)
+		{
+			display($dbg_click,2,"path($path) id($id)");
+			display($dbg_click,2,"uuid($uuid) win_uuid($win_uuid)");
+			display($dbg_click,2,"is_this_repo($is_this_repo) open_main_sub($open_main_sub) open_repo_sub($open_repo_sub)");
+		}
 
 		return
-			$is_this_repo ? "GITUI $repo->{path}" :
-			"INFO $repo->{path}";
+			$open_main_sub ? "MAIN_SUB $id" :
+			$open_repo_sub ? "REPO_SUB $path" :
+			$path && $is_this_repo ? "GITUI $path" :
+			"INFO $uuid";
 	}
-	elsif ($path)
+	elsif ($context->{path})
 	{
-		return "EXPLORE $path";
+		return "EXPLORE $context->{path}";
 	}
 
 	# Just in case:
 
-	return "no function for hit context repo($repo) path($path)!!";
+	error("NO FUNCTION FOR CONTEXT");
+	display_hash($dbg_click,1,"NO FUNCTION FOR CONTEXT",$context)
+		if $is_click;
 
 }
 
@@ -1232,21 +1235,8 @@ sub getClickFunction
 sub getHitContext
 {
 	my ($hit) = @_;
-	my $repo = '';
-	my $path = '';
-
-	if ($hit)
-	{
-		my $context = $hit->{part}->{context};
-		$repo = $context->{repo} if $context->{repo};
-		$repo = getRepoByPath($context->{repo_path}) if $context->{repo_path};
-		$repo ||= '';
-
-		$path = $context->{path} if $context->{path};
-		$path = $context->{filename} if $context->{filename};
-		$path = "$repo->{path}$context->{file}" if $repo && $context->{file};
-	}
-	return ($repo,$path);
+	my $context = $hit->{part}->{context};
+	return $context;
 }
 
 

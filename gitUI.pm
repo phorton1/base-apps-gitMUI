@@ -25,6 +25,7 @@ use Pub::WX::Dialogs;
 use apps::gitUI::repo;
 use apps::gitUI::repos;
 use apps::gitUI::reposGithub;
+use apps::gitUI::reposUntracked;
 use apps::gitUI::utils;
 use apps::gitUI::Resources;
 use apps::gitUI::command;
@@ -66,7 +67,6 @@ Win32::OLE::prhSetThreadNum(1);
 #--------------------------------------
 # methods
 #--------------------------------------
-
 
 sub new
 {

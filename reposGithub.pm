@@ -290,6 +290,7 @@ sub doGitHub
 
 	my $page = 0;
 	my $next_page = 1;
+	my $total_size = 0;
 	while ($page != $next_page)
 	{
 		$page = $next_page;
@@ -305,36 +306,26 @@ sub doGitHub
         {
             my $id = $entry->{name};
 			my $repo = getRepoById($id);
+			$total_size += $entry->{size};
 
 			if (!$repo)
 			{
-				# create a "remoteOnly" repo, using a mapping for the path
-				# and report an error if that happens to map to an existing path
-
 				my $repo_num = scalar(@$repo_list);
-				my $repo_path = $entry->{name};
-				$repo_path =~ s/-/\//g;
-				$repo_path = "/".$repo_path;
-
 				repoDisplay($dbg_github,0,"creating remoteOnlyRepo($repo_num,$entry->{name})");
-
-				if (getRepoById($repo_path))
-				{
-					repoError(undef,"cannot create remoteOnlyRepo($repo_path) - path already exists!");
-					next;
-				}
 
 				$repo = apps::gitUI::repo->new(
 					$REPO_REMOTE,
 					$repo_num,
-					$repo_path,
+					'',
 					'remoteOnly',	# section path
 					'remoteOnly');	# section id
+
+				next if !$repo;
 				$repo->{id} = $entry->{name};
 				$repo->{private} = 1 if $entry->{visibility} eq 'private';
 				$repo->{forked} = 1 if $entry->{fork};
 				repoWarning($repo,0,0,"gitHub repo does not exist locally!!");
-				addRepoToSystem($repo,$repo->{id});
+				addRepoToSystem($repo,$repo->{id}) if $repo;
 			}
 			else
 			{
@@ -421,6 +412,8 @@ sub doGitHub
 			   ($repo->{exists} & $REPO_LOCAL) &&
 			   !($repo->{exists} & $REPO_REMOTE);
 	}
+
+	display(0,-1,"doGitHub() total used on gitHub=".prettyBytes($total_size*1024));
 
 }   #   doGitHub()
 

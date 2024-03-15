@@ -44,8 +44,12 @@ BEGIN
 
 
 our $REPO_LOCAL = 1;
+	# LOCAL_ONLY repos have no ID
 our $REPO_REMOTE = 2;
-	# bitwise "exists" members
+	# REMOTE_ONLY repos have no PATH
+my $MAX_DISPLAY_PATH = 30;
+	# not including elipses
+
 
 my $repo_ui;
 
@@ -53,6 +57,12 @@ sub setRepoUI { $repo_ui = shift; }
 	# call with undef, or an object that supports
 	# display, error, and warning
 
+
+sub uuid
+{
+	my ($this) = @_;
+	return $this->{path} || $this->{id};
+}
 
 sub isLocal
 {
@@ -116,18 +126,39 @@ sub isLocalAndRemote
 
 use Git::Raw;
 
+sub openGitRepo
+{
+	my ($path) = @_;
+	my $git_repo;
+	eval
+	{
+		$git_repo = Git::Raw::Repository->open($path);
+		1;
+	}
+	or do
+	{
+		my $err = $@;
+		my $msg = ref($err) =~ /Git::Raw::Error/ ?
+			$err->message() : $err;
+		error($msg);
+	};
+	return $git_repo;
+}
+
+
 sub getId
 {
 	my ($this) = @_;
 
-	my ($id,$branch) = ('','');
-
+	my ($id,$branch);
 	my $path = $this->{path};
-	my $git_repo = Git::Raw::Repository->open($path);
+	my $git_repo = openGitRepo($path);
+
 	if ($git_repo)
 	{
+		($id,$branch) = ('','');
 		my $head = $git_repo->head();
-		$branch = $head->shorthand();
+		$branch = $head->shorthand() || '';
 
 		display($dbg_new,0,"branch($path) = $branch");
 
@@ -144,19 +175,12 @@ sub getId
 			}
 			else
 			{
-				return repoError($this,"Unexpected remote url($id)");
+				repoError($this,"Unexpected remote url($url)");
 			}
 		}
 		else
 		{
 			repoWarning($this,0,0,"Could not get remote($path)");
-
-			# we are going to return a slash/dash substituted id
-			# for this repo, but it probably wont match sections
-
-			$id = $this->{path};
-			$id =~ s/\//-/g;
-			$id =~ s/^-//;
 		}
 	}
 	else
@@ -265,8 +289,13 @@ sub new
 
 	if ($where == $REPO_LOCAL)
 	{
-		my ($cur_branch,$id) = $this->getId();
-		$this->{branch} = $cur_branch;
+		my ($branch,$id) = $this->getId();
+		if (!defined($branch))
+		{
+			display(0,0,"returning undef for REPO_LOCAL($path)");
+			return undef;
+		}
+		$this->{branch} = $branch;
 		$this->{id} = $id;
 	}
 	return $this;
@@ -299,8 +328,8 @@ sub _repoShow
 {
 	my ($this) = @_;
 	my $show =
-		$this && $this->{path} ? "repo($this->{path}): " :
-		$this && $this->{id} ? "repo_id($this->{id}): " : '';
+		($this && $this->{path}) ? "repo($this->{path}): " :
+		($this && $this->{id}) ? "repo_id($this->{id}): " : '';
 }
 
 sub repoError
@@ -309,7 +338,7 @@ sub repoError
 	my $show = _repoShow($this);
 	$repo_ui->do_error($show.$msg)
 		if $repo_ui;
-	error($show.$msg,1); # ,$repo_ui);
+	error($show.$msg,1,$repo_ui);
 	push @{$this->{errors}},$msg if $this;
 	return undef;
 }
@@ -445,23 +474,30 @@ sub setCanCommitParent
 
 sub pathWithinSection
 	# for display only
-	# if !long (default) submodules show as ++rel_path,
+	# submodules show as ++rel_path,
+	# remote only repos show their id
 	# otherwise they show as their path within the section
 {
 	my ($this,$long) = @_;
 	$long ||= 0;
-	my $MAX_DISPLAY_PATH = 30;
-		# not including elipses
 
-	# submodules show ++ relpath
-	my $path = $this->{parent_repo} && !$long ?
-		"++ $this->{rel_path}" :
-		$this->{path};
+	my $path = $this->{path};
 
-	my $re = $this->{section_path};
-	$re =~ s/\//\\\//g;
-	$path =~ s/^$re//;
-	$path ||= $this->{path};
+	if (!$path)
+	{
+		$path = $this->{id};
+	}
+	elsif ($this->{parent_repo})
+	{
+		$path = "++ $this->{rel_path}";
+	}
+	else
+	{
+		my $re = $this->{section_path};
+		$re =~ s/\//\\\//g;
+		$path =~ s/^$re//;
+		$path ||= $this->{path};
+	}
 
 	$path = '...'.substr($path,-$MAX_DISPLAY_PATH)
 		if length($path) >= $MAX_DISPLAY_PATH;
@@ -470,16 +506,17 @@ sub pathWithinSection
 
 sub idWithinSection
 	# for display only
-	# if !long (default) submodules show as ++rel_path,
+	# submodules show as ++rel_path,
+	# local_only repos and untracked repos show their path
 	# otherwise they show as their path within the section
 {
-	my ($this,$long) = @_;
-	$long ||= 0;
-	my $MAX_DISPLAY_PATH = 30;
-		# not including elipses
-
+	my ($this) = @_;
 	my $id = $this->{id};
-	if ($this->{parent_repo})
+	if (!$id || $this->{is_untracked})
+	{
+		$id = $this->{path};
+	}
+	elsif ($this->{parent_repo})
 	{
 		$id = "++ $this->{rel_path}";
 	}
@@ -514,8 +551,8 @@ sub contentLine
 		$use_label eq 'MAIN_MODULE' &&
 		$key eq 'id';
 
-	my $value = $this->{$key} || '';
-	return if !defined($value) || $value eq '';
+	my $value = $this->{$key};
+	return if !defined($value) || !$value;
 
 	$value = $value->{path} if $key eq 'parent_repo';
 
@@ -526,17 +563,21 @@ sub contentLine
 	{
 		my $repo = apps::gitUI::repos::getRepoById($value);
 		$value = $repo->{path};
+		$context = { repo => $repo };
 		$color = linkDisplayColor($repo);
 	}
 	elsif ($key eq 'section_path')
 	{
-		$context = { path => $value };
+		my $repo = apps::gitUI::repos::getRepoByPath($value);
+		$context = $repo ?
+			{ repo => $repo } :
+			{ path => $value };
 	}
 	elsif ($key eq 'path' ||
 		$key eq 'parent_repo')
 	{
-		$context = { repo_path => $value };
 		my $repo = apps::gitUI::repos::getRepoByPath($value);
+		$context = { repo => $repo };
 		$color = linkDisplayColor($repo);
 	}
 	elsif ($key eq 'parent' || $key eq 'id')
@@ -546,7 +587,11 @@ sub contentLine
 		my $url = "https://github.com/";
 		$url .= getPref('GIT_USER')."/" if $key eq 'id';
 		$url .= $clean;
-		$context = { path => $url };
+		$context = { url => $url };
+	}
+	elsif ($key eq 'size')
+	{
+		$value = prettyBytes($value * 1024);
 	}
 
 	my $line = $text_ctrl->addLine();
@@ -556,6 +601,8 @@ sub contentLine
 	$text_ctrl->addPart($line, 0, $color_black, $fill." = ");
 	$text_ctrl->addPart($line, $bold, $color, $value, $context );
 }
+
+
 
 
 sub contentArray
@@ -579,7 +626,7 @@ sub contentArray
 		if ($key eq 'submodules')
 		{
 			my $repo = apps::gitUI::repos::getRepoByPath($value);
-			$context = { repo => $repo, path=>"subs:$repo->{id}" };
+			$context = { repo => $repo, open_repo_sub => 1 };
 			$color = linkDisplayColor($repo);
 		}
 		elsif ($key eq 'uses' ||
@@ -587,13 +634,13 @@ sub contentArray
 			$key eq 'friend' ||
 			$key eq 'used_in')
 		{
-			$context = { repo_path => $value };
 			my $repo = apps::gitUI::repos::getRepoByPath($value);
+			$context = { repo => $repo };
 			$color = linkDisplayColor($repo);
 		}
 		elsif ($key eq 'docs')
 		{
-			$context = { repo=>$this, file=>$value };
+			$context = { repo => $this, file=>$value };
 		}
 		elsif ($key eq 'needs')
 		{
@@ -601,7 +648,8 @@ sub contentArray
 		}
 		elsif ($key eq 'group')
 		{
-			$context = { repo_path => '/src/phorton1', file=>"/$value.md" };
+			my $top_repo = apps::gitUI::repos::getRepoByPath('/src/phorton1');
+			$context = { repo => $top_repo, file=>"/$value.md" };
 		}
 
 		# GROUPS are recursive through USES and FRIEND.
@@ -703,13 +751,14 @@ sub toTextCtrl
 	my $kind =
 		$this->{parent_repo} ? "SUBMODULE " :
 		$this->{used_in} ? "MAIN_MODULE " : 'REPO';
-	my $sub_context = $kind ne 'REPO' ?
-		{ repo=>$this, path=>"subs:$this->{id}" } : '';
+
+	my $label_context = $kind ne 'REPO' ?
+		{ repo => $this, open_main_sub=>1, no_menu=>1, } : '';
 
 	$this->contentLine($text_ctrl,1,'exists');
 		# hopefully temporary
 
-	$this->contentLine($text_ctrl,1,'path',$kind,$sub_context);
+	$this->contentLine($text_ctrl,1,'path',$kind,$label_context);
 	$this->contentLine($text_ctrl,1,'id');
 	$this->contentLine($text_ctrl,0,'branch');
 	$this->contentLine($text_ctrl,0,'default_branch');
@@ -753,6 +802,7 @@ sub toTextCtrl
 	$this->contentLine($text_ctrl,0,'section_id');
 	$this->contentLine($text_ctrl,1,'mine');
 	$this->contentLine($text_ctrl,0,'forked');
+	$this->contentLine($text_ctrl,0,'size');
 	$this->contentLine($text_ctrl,0,'parent');
 	$this->contentLine($text_ctrl,0,'descrip');
 	$this->contentLine($text_ctrl,0,'page_header');
@@ -762,15 +812,19 @@ sub toTextCtrl
 	if ($this->{parent_repo})
 	{
 		$text_ctrl->addLine();
-		$this->contentLine($text_ctrl,1,'id','MAIN_MODULE',$sub_context);
+		$this->contentLine($text_ctrl,1,'id','MAIN_MODULE',$label_context);
 		$this->contentLine($text_ctrl,1,'parent_repo');
 		$this->contentLine($text_ctrl,1,'rel_path');
 	}
-	elsif ($this->{submodules} || $this->{used_in})
+	elsif ($this->{used_in})
+	{
+		$text_ctrl->addLine();
+		$this->contentArray($text_ctrl,0,'used_in',undef,1,$label_context);
+	}
+	elsif ($this->{submodules})
 	{
 		$text_ctrl->addLine();
 		$this->contentArray($text_ctrl,0,'submodules',undef,1);
-		$this->contentArray($text_ctrl,0,'used_in',undef,1,$sub_context);
 	}
 
 	# 	my ($this,$text_ctrl,$bold,$key,$color,$ucase,$sub_context) = @_;

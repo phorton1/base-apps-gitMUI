@@ -74,6 +74,12 @@ sub groupReposAsSubmodules
 # ctor
 #---------------------------
 
+sub uuid
+{
+	my ($this) = @_;
+	return $this->{path};
+}
+
 sub new
 {
 	my ($class, $group_num, $master_module) = @_;
@@ -400,9 +406,8 @@ sub subToTextCtrl
 	my $short_status = getShortStatus($repo);
 
 	my $line = $text_ctrl->addLine();
-	my $context = $type eq 'GROUP' ?
-		{ repo => getRepoById($repo->{path}) } :
-		{ repo => $repo, path => "subs:$repo->{path}" } ;
+	my $context = $type eq 'GROUP' ? '' :
+		{ repo => $repo, open_repo_sub => 1, } ;
 
 	$text_ctrl->addPart($line, 0, $color_black, pad("$type:",$CHAR_INDENT));
 	$text_ctrl->addPart($line, 1, $color, $repo->{path},$context);

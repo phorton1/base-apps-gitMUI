@@ -20,21 +20,21 @@ use apps::gitUI::utils;
 use apps::gitUI::Resources;
 
 
-my $dbg_menu = 0;		# context menu and commands
+my $dbg_menu = 1;		# context menu and commands
 
 
 my $menu_desc = {
-	$ID_CONTEXT_COPY            => ['Copy',				'Copy selected region to clipboard' ],
-	$ID_CONTEXT_OPEN_INFO		=> ['Info',				'Open the repository in the Info Window' ],
-	$ID_CONTEXT_OPEN_SUBS       => ['Subs',				'Open the repository in the Subs Window' ],
-	$ID_CONTEXT_OPEN_GITUI		=> ['GitGUI',			'Open the repository in original GitGUI' ],
-	$ID_CONTEXT_BRANCH_HISTORY	=> ['Branch History',	'Show Branch History' ],
-	$ID_CONTEXT_ALL_HISTORY		=> ['All History',		'Show All History' ],
-	$ID_CONTEXT_OPEN_EXPLORER	=> ['Explorer',			'Open in Windows Explorer' ],
-	$ID_CONTEXT_OPEN_GITHUB     => ['Github',			'Open https:// url in System Browser' ],
-	$ID_CONTEXT_OPEN_IN_KOMODO	=> ['Komodo',			'Open one or more items in Komodo Editor' ],
-	$ID_CONTEXT_OPEN_IN_SHELL   => ['Shell',			'Open single item in the Windows Shell' ],
-	$ID_CONTEXT_OPEN_IN_NOTEPAD => ['Notepad',			'Open single item in the Windows Notepad' ],
+	$ID_CONTEXT_COPY            => ['Copy',				1, 'Copy selected region to clipboard' ],
+	$ID_CONTEXT_OPEN_INFO		=> ['Info',				1, 'Open the repository in the Info Window' ],
+	$ID_CONTEXT_OPEN_SUBS       => ['Subs',				1, 'Open the repository in the Subs Window' ],
+	$ID_CONTEXT_OPEN_GITUI		=> ['GitGUI',			2, 'Open the repository in original GitGUI' ],
+	$ID_CONTEXT_BRANCH_HISTORY	=> ['Branch History',	2, 'Show Branch History' ],
+	$ID_CONTEXT_ALL_HISTORY		=> ['All History',		2, 'Show All History' ],
+	$ID_CONTEXT_OPEN_GITHUB     => ['Github',			2, 'Open https:// url in System Browser' ],
+	$ID_CONTEXT_OPEN_EXPLORER	=> ['Explorer',			3, 'Open in Windows Explorer' ],
+	$ID_CONTEXT_OPEN_IN_EDITOR	=> ['Editor',			3, 'Open one or more items in System Editor' ],
+	$ID_CONTEXT_OPEN_IN_SHELL   => ['Shell',			3, 'Open single item in the Windows Shell' ],
+	$ID_CONTEXT_OPEN_IN_NOTEPAD => ['Notepad',			3, 'Open single item in the Windows Notepad' ],
 };
 
 
@@ -48,59 +48,76 @@ BEGIN {
 sub addContextMenu
 {
 	my ($this) = @_;
-	EVT_MENU_RANGE($this, $ID_CONTEXT_COPY, $ID_CONTEXT_OPEN_GITHUB, \&onContextMenu);
+	EVT_MENU_RANGE($this, $ID_CONTEXT_COPY, $ID_CONTEXT_OPEN_IN_NOTEPAD, \&onContextMenu);
 }
+
 
 
 sub popupContextMenu
 {
-	my ($this,$repo,$path) = @_;
-	$repo ||= '';
-	$path ||= '';
+	my ($this,$context) = @_;
+	$this->{popup_context} = $context;
 
-	my $is_url = $path =~ /^https:\/\// ? 1 : 0;
+	display_hash($dbg_menu,0,"popupContextMenu()",$context);
 
-	display($dbg_menu,1,"popupContextMenu)($repo,$path) is_url($is_url)");
-	$this->{popup_repo} = $repo;
-	$this->{popup_path} = $path;
+	if ($context->{no_menu})
+	{
+		display($dbg_menu,1,"short return for no_menu");
+		return;
+	}
 
-	my $repo_context = $this->{repo_context};
-	my $same_repo = $repo_context && $repo &&
-		$repo->{path} eq $repo_context->{path};
+	my $is_sub_ref = 0;
+	my $is_same_repo = 0;
+	my $filename = '';
+	my $repo = $context->{repo};
+	my $repo_path = $repo ? $repo->{path} : '';
+	my $repo_id = $repo ? $repo->{id} : '';
 
-	my $is_this_info = $same_repo &&
+	if ($repo)
+	{
+		my $uuid = $repo->uuid();
+		my $path = $repo->{path};
+		my $win_uuid = $this->{repo_context} ?
+			$this->{repo_context}->uuid() : '';
+		$is_same_repo = $uuid eq $win_uuid ? 1 : 0;
+		$is_sub_ref = $repo->{parent_repo} || $repo->{used_in} ? 1 : 0;
+		$filename = $repo->{path}.$context->{file} if $context->{file};
+	}
+
+	my $is_this_info = $is_same_repo &&
 		$this->{window_id} == $ID_INFO_WINDOW;
-	my $is_this_sub = $same_repo &&
+	my $is_this_sub = $is_same_repo &&
 		$this->{window_id} == $ID_SUBS_WINDOW;
+
+	display($dbg_menu,1,"filename($filename) rpath($repo_path) rid($repo_id)");
+	display($dbg_menu,1,"is_sub($is_sub_ref) is_same($is_same_repo) ".
+		"is_this_info($is_this_info) is_this_sub($is_this_sub)");
+
 
 	# I don't quite see how we are limiting the calls
 
+	my $menu_group_num = 0;
 	my $menu = Wx::Menu->new();
-	foreach my $id ($ID_CONTEXT_COPY..$ID_CONTEXT_OPEN_GITHUB)
+	foreach my $id ($ID_CONTEXT_COPY..$ID_CONTEXT_OPEN_IN_NOTEPAD)
 	{
-		next if $id == $ID_CONTEXT_OPEN_GITHUB && !$repo && !$is_url;
-		next if $id == $ID_CONTEXT_COPY && (!$this->can('canCopy') || !$this->canCopy());
-
-		next if $id == $ID_CONTEXT_OPEN_GITUI && !$repo;
-		next if $id == $ID_CONTEXT_OPEN_INFO && (!$repo || $is_this_info);
-		next if $id == $ID_CONTEXT_OPEN_SUBS && (!$repo || $is_this_sub);
-		next if $id == $ID_CONTEXT_BRANCH_HISTORY && !$repo;
-		next if $id == $ID_CONTEXT_ALL_HISTORY && !$repo;
-
-		next if $id >= $ID_CONTEXT_OPEN_IN_KOMODO && !$path;
-		next if $id == $ID_CONTEXT_OPEN_EXPLORER && !$repo && !$path;
-
-		next if $path =~ /^subs:/ &&
-			$id >= $ID_CONTEXT_OPEN_IN_KOMODO &&
-			$id <= $ID_CONTEXT_OPEN_IN_NOTEPAD;
-
 		my $desc = $menu_desc->{$id};
-		my ($text,$hint) = @$desc;
+		my ($text,$gnum,$hint) = @$desc;
+
+		next if $id == $ID_CONTEXT_COPY && (!$this->can('canCopy') || !$this->canCopy());
+		next if $id == $ID_CONTEXT_OPEN_INFO && (!$repo || $is_this_info);
+		next if $id == $ID_CONTEXT_OPEN_SUBS && (!$is_sub_ref || $is_this_sub);
+		next if $id == $ID_CONTEXT_OPEN_GITUI && ($filename || !$repo_path);
+		next if $id == $ID_CONTEXT_BRANCH_HISTORY && ($filename || !$repo_path);
+		next if $id == $ID_CONTEXT_ALL_HISTORY && ($filename || !$repo_path);
+		next if $id == $ID_CONTEXT_OPEN_GITHUB && $filename || (!$repo_id && !$context->{url});
+		next if $id == $ID_CONTEXT_OPEN_EXPLORER && !$filename && !$repo_path && !$context->{path};
+		next if $id == $ID_CONTEXT_OPEN_IN_EDITOR && (!$filename || $filename !~ /\.($DEFAULT_EDITOR_EXTS)$/);
+		next if $id == $ID_CONTEXT_OPEN_IN_SHELL && (!$filename || $filename !~ /\.($DEFAULT_SHELL_EXTS)$/);
+		next if $id == $ID_CONTEXT_OPEN_IN_NOTEPAD && !$filename;
+
+		$menu->AppendSeparator() if $menu_group_num && $menu_group_num != $gnum;
 		$menu->Append($id,$text,$hint,wxITEM_NORMAL);
-		$menu->AppendSeparator()
-			if $id == $ID_CONTEXT_COPY && ($repo || $path);
-		$menu->AppendSeparator()
-			if $id == $ID_CONTEXT_ALL_HISTORY && $repo && $path;
+		$menu_group_num = $gnum;
 	}
 	$this->PopupMenu($menu,[-1,-1]);
 }
@@ -111,24 +128,31 @@ sub onContextMenu
 {
 	my ($this,$event) = @_;
 	my $command_id = $event->GetId();
-	my $path = $this->{popup_path};
-	my $repo = $this->{popup_repo};
-	my $id = $repo ? $repo->{id} : '';
+	my $context = $this->{popup_context};
 
-	display($dbg_menu,0,"onContextMenu($command_id,$id,$path)");
+	my $repo = $context->{repo};
+	my $filename = $repo && $context->{file} ?
+		$repo->{path}.$context->{file} : '';
+
+	display_hash($dbg_menu,0,"onContextMenu($command_id)",$context);
+
+	# copy and program navigation
 
 	if ($command_id == $ID_CONTEXT_COPY)
 	{
-		$this->doCopy() if $this->can('doCopy');
+		$this->doCopy();
 	}
 	elsif ($command_id == $ID_CONTEXT_OPEN_INFO)
 	{
-		getAppFrame->createPane($ID_INFO_WINDOW,undef,{repo_path=>$repo->{path}});
+		getAppFrame->createPane($ID_INFO_WINDOW,undef,{repo_uuid=>$repo->uuid()});
 	}
 	elsif ($command_id == $ID_CONTEXT_OPEN_SUBS)
 	{
-		getAppFrame->createPane($ID_SUBS_WINDOW,undef,{repo_path=>$repo->{id}});
+		getAppFrame->createPane($ID_SUBS_WINDOW,undef,{repo_uuid=>$repo->uuid()});
 	}
+
+	# external gitGUI and gitHub
+
 	elsif ($command_id == $ID_CONTEXT_OPEN_GITUI)
 	{
 		execNoShell('git gui',$repo->{path});
@@ -141,45 +165,40 @@ sub onContextMenu
 	{
 		execNoShell('gitk --all',$repo->{path});
 	}
+	elsif ($command_id == $ID_CONTEXT_OPEN_GITHUB)
+	{
+		my $url = $context->{url};
+		if (!$url)
+		{
+			my $user = getPref("GIT_USER");
+			$url = "https://github.com/$user/$repo->{id}";
+		}
+		my $command = "\"start $url\"";
+		system(1,$command);
+	}
+
+	# Windows Commands
 
 	elsif ($command_id == $ID_CONTEXT_OPEN_EXPLORER)
 	{
-		$path ||= $repo->{path};
-		$path =~ s/^subs://;
+		my $path = $context->{path} || $filename || $repo->{path};
 		execExplorer($path);
 	}
-
+	elsif ($command_id == $ID_CONTEXT_OPEN_IN_EDITOR)
+	{
+		my $command = $DEFAULT_EDITOR." \"$filename\"";
+		execNoShell($command);
+	}
 	elsif ($command_id == $ID_CONTEXT_OPEN_IN_SHELL)
 	{
-		chdir $path;
-		system(1,"\"$path\"");
+		chdir(pathOf($filename));
+		system(1,"\"$filename\"");
 	}
 	elsif ($command_id == $ID_CONTEXT_OPEN_IN_NOTEPAD)
 	{
-		execNoShell("notepad \"$path\"");
+		execNoShell("notepad \"$filename\"");
 	}
-	elsif ($command_id == $ID_CONTEXT_OPEN_IN_KOMODO)
-	{
-		my $command = $komodo_exe." \"$path\"";
-		execNoShell($command);
-	}
-	elsif ($command_id == $ID_CONTEXT_OPEN_GITHUB)
-	{
-		# https: indicates a already formed path
-		# otherwise, it will be a repo with a path to 'subs:MASTER_ID'
-		# but we just use the repo id in every case.
-		# if the path is subs: then following *should* be the
-		# finally, we use the repo if nothing better
 
-		if ($path !~ /^https:\/\//)
-		{
-			my $user = getPref("GIT_USER");
-			$path = "https://github.com/$user/$repo->{id}";
-		}
-		my $command = "\"start $path\"";
-		system(1,$command);
-
-	}
 
 }	# onContextMenu()
 

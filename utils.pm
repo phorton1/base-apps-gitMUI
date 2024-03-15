@@ -66,7 +66,9 @@ BEGIN
         $GIT_CB_TRANSFER
         $GIT_CB_REFERENCE
 
-		$komodo_exe
+		$DEFAULT_EDITOR
+        $DEFAULT_SHELL_EXTS
+        $DEFAULT_EDITOR_EXTS
 
 		$font_normal
         $font_bold
@@ -111,7 +113,14 @@ BEGIN
 our $THREAD_EVENT:shared = Wx::NewEventType;
 	# This is a weird place for this, but it is includable by both gitUI & command
 
-our $komodo_exe = "\"C:\\Program Files (x86)\\ActiveState Komodo Edit 8\\komodo.exe\"";
+# TODO: DEFAULT_EDITOR and DEFAULT_EXTS to become Prefs
+# shell extensions are checked before editor extensions for
+# default click behavior
+
+our $DEFAULT_EDITOR = "\"C:\\Program Files (x86)\\ActiveState Komodo Edit 8\\komodo.exe\"";
+our $DEFAULT_SHELL_EXTS = 'md|gif|png|jpg|jpeg|pdf';
+our $DEFAULT_EDITOR_EXTS = 'txt|pm|pl|ino|cpp|c|h|hpp|md';
+
 
 # PUSH callback types
 # PACK is called first, stage is 0 on first, 1 thereafter

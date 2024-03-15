@@ -72,10 +72,10 @@ sub new
 	$this->{sub_mode} = $parent->{sub_mode};
 
 	$this->{ctrls} = [];
-	$this->{ctrls_by_path} = {};
+	$this->{ctrls_by_uuid} = {};
 	$this->{groups} = [];
 	$this->{groups_by_id} = {};
-	$this->{selected_path} = '';
+	$this->{selected_uuid} = '';
 	$this->{bold_font} = $this->GetFont();
 	$this->{bold_font}->SetWeight(wxFONTWEIGHT_BOLD);
 
@@ -118,7 +118,7 @@ sub onEnterLink
 	my $obj = $ctrl->{obj};
 	my $this = $ctrl->GetParent();
 	my $ctrl_id = $event->GetId();
-	$this->{frame}->SetStatusText($obj->{path});
+	$this->{frame}->SetStatusText($obj->uuid());
 	$ctrl->SetFont($this->{bold_font});
 	$ctrl->Refresh();
 	$event->Skip();
@@ -133,7 +133,7 @@ sub onLeaveLink
 	my $ctrl_id = $event->GetId();
 	$this->{frame}->SetStatusText('');
 	$ctrl->SetFont($this->GetFont())
-		if $obj->{path} ne $this->{selected_path};
+		if $obj->uuid() ne $this->{selected_uuid};
 	$ctrl->Refresh();
 	$event->Skip();
 }
@@ -156,8 +156,9 @@ sub onLeftDown
 	my $obj = $ctrl->{obj};
 	my $this = $ctrl->GetParent();
 	my $ctrl_id = $event->GetId();
-	display($dbg_life,0,"onLeftDown($obj->{path})");
-	$this->selectObject($obj->{path});
+	my $uuid = $obj->uuid();
+	display($dbg_life,0,"onLeftDown($uuid})");
+	$this->selectObject($uuid);
 	$event->Skip();
 }
 
@@ -167,27 +168,27 @@ sub selectObject
 	# So named because it works with either the path to a subGroup
 	# or a path to a real repo.
 {
-	my ($this,$path) = @_;
-	display($dbg_sel,0,"selectObject($path)");
+	my ($this,$uuid) = @_;
+	display($dbg_sel,0,"selectObject($uuid)");
 
 	# $this->{parent}->SetFocus();
 		# switch to the infoWindow if called
 		# from another window
 
-	my $ctrl = $this->{ctrls_by_path}->{$path};
-	return !error("Could not find ctrl($path)")
+	my $ctrl = $this->{ctrls_by_uuid}->{$uuid};
+	return !error("Could not find ctrl($uuid)")
 		if !$ctrl;
 
-	my $selected_path = $this->{selected_path};
-	if ($selected_path && $selected_path ne $path)
+	my $selected_uuid = $this->{selected_uuid};
+	if ($selected_uuid && $selected_uuid ne $uuid)
 	{
-		my $prev_sel = $this->{ctrls_by_path}->{$selected_path};
+		my $prev_sel = $this->{ctrls_by_uuid}->{$selected_uuid};
 		$prev_sel->SetBackgroundColour($color_white);
 		$prev_sel->SetFont($this->GetFont());
 		$prev_sel->Refresh();
 	}
 
-	$this->{selected_path} = $path;
+	$this->{selected_uuid} = $uuid;
 	$ctrl->SetBackgroundColour($color_medium_grey);
 	$ctrl->SetFont($this->{bold_font});
 	$ctrl->Update();
@@ -221,8 +222,8 @@ sub selectObject
 
 	my $obj = $ctrl->{obj};
 
-	display($dbg_sel+1,1,"finishing selectObject($path)");
-	$this->{frame}->SetStatusText($obj->{path});
+	display($dbg_sel+1,1,"finishing selectObject($uuid)");
+	$this->{frame}->SetStatusText($uuid);
 	$this->{parent}->{right}->notifyObjectSelected($obj);
 	$this->Refresh();
 }
@@ -251,14 +252,14 @@ sub populate
 
 	display($dbg_pop,0,"populate()");
 
-	my $selected_path = $this->{selected_path};
+	my $selected_uuid = $this->{selected_uuid};
 
 	$this->{ctrls} = [];
-	$this->{ctrls_by_path} = {};
+	$this->{ctrls_by_uuid} = {};
 	$this->{groups} = [];
 	$this->{groups_by_id} = {};
 	$this->{ysize} = 0;
-	$this->{selected_path} = '';
+	$this->{selected_uuid} = '';
 
 	$this->DestroyChildren();
 	$this->SetVirtualSize([0,0]);
@@ -295,7 +296,7 @@ sub populate
 				if ($this->{sub_mode})
 				{
 					my $color = $section->displayColor();
-					$this->newCtrl($ypos,$section,$section->{id},$section->{path},$color);
+					$this->newCtrl($ypos,$section,$section->{path},$color);
 					push @{$this->{groups}},$section;
 					$this->{groups_by_id}->{$section->{id}} = $section;
 				}
@@ -313,7 +314,7 @@ sub populate
 			my $display_name = $USE_IDS_FOR_DISPLAY && !$this->{sub_mode} ?
 				$repo->idWithinSection() :
 				$repo->pathWithinSection($this->{sub_mode});
-			$this->newCtrl($ypos,$repo,$repo->{path},$display_name,$color);
+			$this->newCtrl($ypos,$repo,$display_name,$color);
 			$ypos += $LINE_HEIGHT;
 			$section_started = 1;
 		}
@@ -323,16 +324,17 @@ sub populate
 	$this->{ysize} = $ypos + $LINE_HEIGHT;
 
 	$this->SetVirtualSize([1000,$this->{ysize}]);
-	$this->selectObject($selected_path)
-		if $selected_path && $this->{ctrls_by_path}->{$selected_path};
+	$this->selectObject($selected_uuid)
+		if $selected_uuid && $this->{ctrls_by_uuid}->{$selected_uuid};
 	$this->Refresh();
 }
 
 
 sub newCtrl
 {
-	my ($this,$ypos,$obj,$path,$display_name,$color) = @_;
-	display($dbg_pop,1,"newCtrl($ypos,$display_name)");
+	my ($this,$ypos,$obj,$display_name,$color) = @_;
+	my $uuid = $obj->uuid();
+	display($dbg_pop,1,"newCtrl($ypos,$display_name) uuid=$uuid");
 	my $ctrl = apps::gitUI::myHyperlink->new(
 		$this,
 		-1,
@@ -342,7 +344,7 @@ sub newCtrl
 		$color);
 	$ctrl->{obj} = $obj;
 	push @{$this->{ctrls}},$ctrl;
-	$this->{ctrls_by_path}->{$path} = $ctrl;
+	$this->{ctrls_by_uuid}->{$uuid} = $ctrl;
 	EVT_LEFT_DOWN($ctrl, \&onLeftDown);
 	EVT_RIGHT_DOWN($ctrl, \&onRightDown);
 	EVT_ENTER_WINDOW($ctrl, \&onEnterLink);
@@ -356,30 +358,31 @@ sub notifyRepoChanged
 	# detects a change to a repo
 {
 	my ($this,$repo) = @_;
-	my $path = $repo->{path};
-	display($dbg_notify,0,"notifyRepoChanged($path)");
+	my $uuid = $repo->uuid();
+	display($dbg_notify,0,"notifyRepoChanged($uuid)");
 
 	if ($this->{sub_mode})
 	{
+		my $path = $repo->{path};
 		for my $group (@{$this->{groups}})
 		{
 			if ($group->matchesPath($path))
 			{
 				display($dbg_notify,0,"groupChanged($path)");
 				$group->setStatus();
-				my $group_path = $group->{path};	# actuall the id
+				my $group_uuid = $group->uuid();
 				my $color = $group->displayColor();
-				my $ctrl = $this->{ctrls_by_path}->{$group_path};
+				my $ctrl = $this->{ctrls_by_uuid}->{$group_uuid};
 				$ctrl->SetForegroundColour($color);
 				$ctrl->Refresh();
 				$this->{parent}->{right}->notifyObjectSelected($group)
-					if $group_path eq $this->{selected_path};
+					if $group_uuid eq $this->{selected_uuid};
 			}
 		}
 	}
 
-	my $ctrl = $this->{ctrls_by_path}->{$path};
-	return error("Could not find ctrl($path)") if
+	my $ctrl = $this->{ctrls_by_uuid}->{$uuid};
+	return error("Could not find ctrl($uuid)") if
 		!$this->{sub_mode} && !$ctrl;
 
 	if ($ctrl)
@@ -388,7 +391,7 @@ sub notifyRepoChanged
 		$ctrl->SetForegroundColour($color);
 		$ctrl->Refresh();
 		$this->{parent}->{right}->notifyObjectSelected($repo)
-			if $path eq $this->{selected_path};
+			if $uuid eq $this->{selected_uuid};
 	}
 
 	$this->Refresh();

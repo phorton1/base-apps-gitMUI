@@ -113,9 +113,9 @@ sub onLeftDown
 	my $event_id = $event->GetId();
 	my $this = $ctrl->GetParent();
 	my $repo = $this->repoFromIdNum($event_id);
-	my $path = $repo->{path};
-	display($dbg_win,0,"onLeftDown($event_id,$path)");
-	$this->{frame}->createPane($ID_INFO_WINDOW,undef,{repo_path=>$path});
+	my $uuid = $repo->uuid();
+	display($dbg_win,0,"onLeftDown($event_id,$uuid)");
+	$this->{frame}->createPane($ID_INFO_WINDOW,undef,{repo_uuid=>$uuid});
 }
 
 

@@ -165,11 +165,11 @@ sub gitStart
 
 	my $branch_changed = 0;
 	my $head = $git_repo->head();
-	my $branch = $head->shorthand();
+	my $branch = $head->shorthand() || '';
 	if ($repo->{branch} ne $branch)
 	{
 		$branch_changed = 1;
-		gitWarning($repo,"branch($repo->{branch}) changed to($branch)");
+		gitWarning($repo,"repo[$repo->{num}] branch($repo->{branch}) changed to($branch)");
 		$repo->{branch} = $branch;
 
 		# re-init remote portion repo
@@ -179,10 +179,12 @@ sub gitStart
 		$repo->{branch_changed} = 1;
 	}
 
-	my $head_commit = Git::Raw::Reference->lookup("HEAD", $git_repo)->peel('commit') || '';
+	my $head_ref = Git::Raw::Reference->lookup("HEAD", $git_repo);
+	my $head_commit = $head_ref ? $head_ref->peel('commit') : '';
 	display($dbg_start+1,1,"head_id="._def($head_commit));
 
-	my $master_commit = Git::Raw::Reference->lookup("refs/heads/$branch", $git_repo)->peel('commit') || '';
+	my $master_ref = Git::Raw::Reference->lookup("refs/heads/$branch", $git_repo);
+	my $master_commit = $master_ref ? $master_ref->peel('commit') : '';
 	display($dbg_start+1,1,"master_id="._def($master_commit));
 
 	my $remote_ref = Git::Raw::Reference->lookup("remotes/origin/$branch", $git_repo);
@@ -204,6 +206,8 @@ sub gitStart
 
 	gitWarning($repo,"DETACHED HEAD!!")
 		if $git_repo->is_head_detached();
+	gitWarning($repo,"NO MASTER_ID($branch)!")
+		if !$master_id;
 	gitWarning($repo,"HEAD_ID <> MASTER_ID!!")
 		if $head_id ne $master_id;
 
@@ -211,16 +215,16 @@ sub gitStart
 
 	delete $repo->{local_commits};
 
-	my ($head_id_found,
-		$master_id_found,
-		$remote_id_found) = (0,0,$remote_id?0:1);
+	my $head_id_found = $head_id ? 0 : 1;
+	my $master_id_found = $master_id ? 0 : 1;
+	my $remote_id_found = $remote_id ? 0 : 1;
 
 	# push all branches on the walker to do history
 	# and sort it in time order (most recent first)
 
 	my $log = $git_repo->walker();
-	$log->push($head_commit);
-	$log->push($master_commit);
+	$log->push($head_commit) if $head_commit;
+	$log->push($master_commit) if $master_commit;
 	$log->push($remote_commit) if $remote_commit;
 	$log->sorting(["time"]);	# ,"reverse"]);
 

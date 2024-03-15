@@ -60,6 +60,11 @@ sub popupRepoMenu
 		next if $id == $ID_REPO_OPEN_SUBS && (
 			$this->{window_id} == $ID_SUBS_WINDOW ||
 			(!$repo->{parent_repo} && !$repo->{used_in}));
+		next if $id == $ID_REPO_OPEN_EXPLORER && !$repo->{path};
+		next if $id == $ID_REPO_OPEN_GITUI && !$repo->{path};
+		next if $id == $ID_REPO_BRANCH_HISTORY && !$repo->{path};
+		next if $id == $ID_REPO_ALL_HISTORY && !$repo->{path};
+		next if $id == $ID_REPO_OPEN_GITHUB && !$repo->{id};
 
 		my $desc = $menu_desc->{$id};
 		my ($text,$hint) = @$desc;

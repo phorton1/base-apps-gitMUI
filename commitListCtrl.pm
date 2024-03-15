@@ -72,7 +72,7 @@ my $ACTION_DO_SINGLE_FILE = 3;		# do a single (unselected) file
 
 my $menu_desc = {
 	$ID_COMMIT_CTRL_REVERT_CHANGES  => ['Revert',	'Revert changes to one or more items' ],
-	$ID_COMMIT_CTRL_OPEN_IN_KOMODO	=> ['Komodo',	'Open one or more items in Komodo Editor' ],
+	$ID_COMMIT_CTRL_OPEN_IN_EDITOR	=> ['Edit',		'Open one or more items in System Editor' ],
 	$ID_COMMIT_CTRL_SHOW_EXPLORER   => ['Explorer',	'Open single item in Windows Explorer' ],
 	$ID_COMMIT_CTRL_OPEN_IN_SHELL   => ['Shell',	'Open single item in the Windows Shell' ],
 	$ID_COMMIT_CTRL_OPEN_IN_NOTEPAD => ['Notepad',	'Open single item in the Windows Notepad' ],
@@ -1048,20 +1048,6 @@ sub doAction
 #---------------------------------------------
 # context menu
 #---------------------------------------------
-# I build a custom menu that only shows the
-# allowed commands depending on the context.
-#
-# We can also open repos in other as yet created windows:
-#
-#		Dependencies,
-#		Doc Analysis,
-#		etc
-#
-# Items can be opened in komodo, the shell, or the notepad.
-# Only the clicked item is opned in the shell or notepad,
-# but if they click on a selection all selected items are opend in komodo,
-# and it is up to the user to not open multiple files of the
-
 
 sub onRightDown
 {
@@ -1134,7 +1120,7 @@ sub onItemMenu
 	{
 		execNoShell("notepad \"$repo->{path}/$fn\"");
 	}
-	elsif ($command_id == $ID_COMMIT_CTRL_OPEN_IN_KOMODO)
+	elsif ($command_id == $ID_COMMIT_CTRL_OPEN_IN_EDITOR)
 	{
 		my $filenames = [];
 		if (!$multiple)
@@ -1154,7 +1140,7 @@ sub onItemMenu
 				}
 			}
 		}
-		my $command = $komodo_exe." ".join(" ",@$filenames);
+		my $command = $DEFAULT_EDITOR." ".join(" ",@$filenames);
 		display($dbg_cmd,1,"calling '$command'");
 		execNoShell($command);
 		# system(1,$command);

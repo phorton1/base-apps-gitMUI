@@ -23,6 +23,7 @@ use Pub::Utils;
 use apps::gitUI::repo;
 use apps::gitUI::utils;
 
+my $ADD_UNTRACKED_REPOS = 1;
 
 
 my $dbg_parse = 0;
@@ -38,7 +39,12 @@ BEGIN
 		parseRepos
 
 		getRepoList
+		getReposByUUID
+		getReposByPath
+		getReposById
+
 		getRepoById
+		getRepoByUUID
 		getRepoByPath
 		addRepoToSystem
 
@@ -71,6 +77,7 @@ BEGIN
 my $repo_filename = '/base/bat/git_repositories.txt';
 
 my $repo_list:shared;
+my $repos_by_uuid:shared;
 my $repos_by_path:shared;
 my $repos_by_id:shared;
 
@@ -84,6 +91,7 @@ my $repos_commit_parent:shared;
 sub initParse
 {
 	$repo_list = shared_clone([]);
+	$repos_by_uuid = shared_clone({});
 	$repos_by_path = shared_clone({});
 	$repos_by_id = shared_clone({});
 
@@ -105,13 +113,29 @@ sub getRepoList
 {
 	return $repo_list;
 }
+sub getReposByUUID
+{
+	return $repos_by_uuid;
+}
+sub getReposByPath
+{
+	return $repos_by_path;
+}
+sub getReposById
+{
+	return $repos_by_id;
+}
 
+sub getRepoByUUID
+{
+	my ($uuid) = @_;
+	return $repos_by_uuid->{$uuid};
+}
 sub getRepoByPath
 {
 	my ($path) = @_;
 	return $repos_by_path->{$path};
 }
-
 sub getRepoById
 {
 	my ($id) = @_;
@@ -120,12 +144,51 @@ sub getRepoById
 
 
 sub addRepoToSystem
+	# We allow submodules to pass in blank for the $id so
+	# because they share the $id with the main_submodule.
+	# Nonetheless, they have paths and must have unique UUIDs.
 {
 	my ($repo,$id) = @_;
 	push @$repo_list,$repo;
-	$repos_by_path->{$repo->{path}} = $repo
-		if $repo->{path};
-	$repos_by_id->{$id} = $repo if $id;
+	my $path = $repo->{path};
+
+	if (1)
+	{
+		my $uuid = $repo->uuid();
+ 		my $exists = $repos_by_uuid->{$uuid};
+		if ($exists)
+		{
+			repoError($repo,"Attempt to add duplicate repo_uuid($uuid) prev=[$exists->{num}] ".$exists->uuid());
+		}
+		else
+		{
+			$repos_by_uuid->{$uuid} = $repo;
+		}
+	}
+	if ($path)
+	{
+		my $exists = $repos_by_path->{$path};
+		if ($exists)
+		{
+			repoError($repo,"Attempt to add duplicate repo_path($path) prev=[$exists->{num}] $exists->{id}");
+		}
+		else
+		{
+			$repos_by_path->{$path} = $repo;
+		}
+	}
+	if ($id)
+	{
+		my $exists = $repos_by_id->{$id};
+		if ($exists)
+		{
+			repoError($repo,"Attempt to add duplicate repo_id($id) prev=[$exists->{num}] $exists->{path}");
+		}
+		else
+		{
+			$repos_by_id->{$id} = $repo;
+		}
+	}
 }
 
 
@@ -246,11 +309,11 @@ sub parseRepos
 
 	initParse();
 
+	my $repo_num = 0;
+
 	my $text = getTextFile($repo_filename);
     if ($text)
     {
-		my $repo_num = 0;
-
 		my $repo;
 		my $section_path = '';
 		my $section_id = '';
@@ -275,7 +338,7 @@ sub parseRepos
 					$repo,
 					$rel_path,
 					$sub_path);
-				addRepoToSystem($sub_module,'');
+				addRepoToSystem($sub_module,'') if $sub_module;
 			}
 
 			# get section path RE and optional name if different
@@ -295,7 +358,7 @@ sub parseRepos
 			{
 				repoDisplay($dbg_parse+1,1,"repo($repo_num,$line,$section_path,$section_id)");
 				$repo = apps::gitUI::repo->new($REPO_LOCAL,$repo_num++,$line,$section_path,$section_id);
-				addRepoToSystem($repo,$repo->{id});
+				addRepoToSystem($repo,$repo->{id}) if $repo;
 			}
 			elsif ($repo)
 			{
@@ -379,9 +442,12 @@ sub parseRepos
 
 	# Call gitStart() to set head, master, and remote id's
 	# Set used_by list from USES modules
+	# Validate that referred FRIEND repos exist
 	# For submodules, set
 	#		{submodules} list of paths on parent
 	#		{used_in} list of paths on master module
+				# following are repos
+
 
 	for my $repo (@$repo_list)
 	{
@@ -402,6 +468,17 @@ sub parseRepos
 					$used_repo->{used_by} ||= shared_clone([]);
 					push @{$used_repo->{used_by}},$repo->{path};
 				}
+			}
+		}
+
+		my $friends = $repo->{friend};
+		if ($friends)
+		{
+			for my $friend (@$uses)
+			{
+				my $friend_repo = $repos_by_path->{$friend};
+				$repo->repoError("invalid FRIEND: $friend")
+					if !$friend_repo;
 			}
 		}
 
@@ -431,6 +508,45 @@ sub parseRepos
         error("No paths found in $repo_filename");
         return;
     }
+
+
+	if ($ADD_UNTRACKED_REPOS)
+	{
+		my $my_excludes = [
+			"/base_data",
+			"/junk/_maybe_save",
+			"/MBEBack",
+			"/MBEDocs",
+			"/mbeSystems",
+			"/mp3s",
+			"/mp3s_mini",
+			"/zip/_teensy/_SdFat_unused_libraries", ];
+
+		my $opts = {
+			GIT_UNTRACKED_USE_CACHE => 1,
+			GIT_UNTRACKED_SHOW_TRACKED_REPOS => 0,
+			GIT_UNTRACKED_SHOW_DIR_WARNINGS => 1,
+			GIT_UNTRACKED_EXCLUDES => $my_excludes,
+			GIT_UNTRACKED_USE_SYSTEM_EXCLUDES => 1,
+			GIT_UNTRACKED_USE_OPT_SYSTEM_EXCLUDES => 1,
+			GIT_UNTRACKED_COLLAPSE_COPIES => 0, };
+
+		my $untracked = apps::gitUI::reposUntracked::findUntrackedRepos($opts);
+		my $num_untracked = scalar(keys %$untracked);
+		repoDisplay($dbg_parse,1,"ADDING $num_untracked untracked repos");
+		for my $path (sort keys %$untracked)
+		{
+			repoDisplay($dbg_parse,2,"adding untracked_repo($path)");
+			my $repo = apps::gitUI::repo->new($REPO_LOCAL,$repo_num++,$path,"untrackedRepos","untrackedRepos");
+			if ($repo)
+			{
+				$repo->{is_untracked} = 1;
+				addRepoToSystem($repo,$repo->{id});
+				repoWarning($repo,$dbg_parse,2,"This is an untracked repo!");
+			}
+		}
+	}
+
 	return 1;
 }
 
