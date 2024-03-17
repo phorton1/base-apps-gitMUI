@@ -23,8 +23,9 @@ use Pub::Utils;
 use apps::gitUI::repo;
 use apps::gitUI::utils;
 
-my $ADD_UNTRACKED_REPOS = 1;
-
+my $ADD_UNTRACKED_REPOS = 0;
+	# Set this to one to scan the entire machine for untracked repos.
+	# Nascent feature to bootstrap the system for other users.
 
 my $dbg_parse = 0;
 	# -1 for repos
