@@ -23,6 +23,7 @@ use Wx::Event qw(
 	EVT_UPDATE_UI );
 use Time::HiRes qw(sleep);
 use Pub::Utils;
+use Pub::Prefs;
 use apps::gitUI::utils;
 use apps::gitUI::monitor;
 use apps::gitUI::repos;
@@ -1133,7 +1134,7 @@ sub mouseClick
 	}
 	elsif ($fxn =~ s/^EDIT //)
 	{
-		my $command = $DEFAULT_EDITOR." \"$fxn\"";
+		my $command = getPref('GIT_EDITOR')." \"$fxn\"";
 		execNoShell($command);
 	}
 	elsif ($fxn =~ s/^GITUI //)
@@ -1180,15 +1181,18 @@ sub getClickFunction
 	my $filename = $context->{file} ?
 		$repo->{path}.$context->{file} : '';
 
+	my $shell_exts = getPref('GIT_SHELL_EXTS');
+	my $editor_exts = getPref('GIT_EDITOR_EXTS');
+
 	if ($context->{url})
 	{
 		return "GITHUB $context->{url}";
 	}
-	elsif ($filename =~ /\.($DEFAULT_SHELL_EXTS)$/)
+	elsif ($filename =~ /\.($shell_exts)$/)
 	{
 		return "SYSTEM $filename";
 	}
-	elsif ($filename =~ /\.($DEFAULT_EDITOR_EXTS)$/)
+	elsif ($filename =~ /\.($editor_exts)$/)
 	{
 		return "EDIT $filename";
 	}

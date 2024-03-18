@@ -44,15 +44,6 @@ use Pub::Prefs;
 my $dbg_ids = 1;
 
 
-$temp_dir = "/base_data/temp/gitUI";
-$data_dir = "/base_data/data/gitUI";
-	# we set these here, even though they aren't used
-	# until gitUI::reposGithub.pm, cuz it's easy to find.
-my_mkdir $temp_dir if !-d $temp_dir;
-my_mkdir $data_dir if !-d $data_dir;
-
-Pub::Prefs::initPrefs("$data_dir/gitUI.prefs",{},"/base_data/_ssl/PubCryptKey.txt");
-
 
 BEGIN
 {
@@ -111,17 +102,79 @@ BEGIN
 }
 
 
+#----------------------------------
+# directories
+#----------------------------------
+
+$temp_dir = "/base_data/temp/gitUI";
+$data_dir = "/base_data/data/gitUI";
+	# we set these here, even though they aren't used
+	# until gitUI::reposGithub.pm, cuz it's easy to find.
+my_mkdir $temp_dir if !-d $temp_dir;
+my_mkdir $data_dir if !-d $data_dir;
+
+
+#----------------------------------------------
+# DEFAULT PREFERENCES
+#----------------------------------------------
+
+my $DEFAULT_UPDATE_INTERVAL = 90;
+	# seconds for default update interval
+	# getPref("GIT_UPDATE_INTERVAL") == 0 will turn off automatic updates
+my $DEFAULT_ADD_UNTRACKED_REPOS = 0;
+	# Set this to one to scan the entire machine for untracked repos.
+	# Nascent feature to bootstrap the system for other users.
+my $DEFAULT_EDITOR = "\"C:\\Windows\\notepad.exe\"";
+	# program gets passed multiple filenames
+
+my $DEFAULT_SHELL_EXTS = 'md|gif|png|jpg|jpeg|pdf';
+my $DEFAULT_EDITOR_EXTS = 'txt|pm|pl|ino|cpp|c|h|hpp|md';
+	# shell extensions are checked before editor extensions for
+	# default click behavior
+
+
+
+my $default_prefs = {
+
+	# main prefs
+	# GIT_USER
+	# GIT_API_TOKEN
+
+	GIT_REPO_FILENAME => "$data_dir/git_repos.txt",
+	GIT_UPDATE_INTERVAL => $DEFAULT_UPDATE_INTERVAL,
+
+	GIT_EDITOR => $DEFAULT_EDITOR,
+	GIT_SHELL_EXTS => $DEFAULT_SHELL_EXTS,
+	GIT_EDITOR_EXTS => $DEFAULT_EDITOR_EXTS,
+
+
+	# prefs related to adding untracked repos
+
+	GIT_ADD_UNTRACKED_REPOS => $DEFAULT_ADD_UNTRACKED_REPOS,
+	GIT_UNTRACKED_USE_CACHE => 1,
+	GIT_UNTRACKED_SHOW_TRACKED_REPOS => 0,
+	GIT_UNTRACKED_SHOW_DIR_WARNINGS => 1,
+	GIT_UNTRACKED_USE_SYSTEM_EXCLUDES => 1,
+	GIT_UNTRACKED_USE_OPT_SYSTEM_EXCLUDES => 1,
+	GIT_UNTRACKED_COLLAPSE_COPIES => 0,
+
+};
+
+
+Pub::Prefs::initPrefs(
+	"$data_dir/gitUI.prefs",
+	$default_prefs,
+	'',		# crypt file "/base_data/_ssl/PubCryptKey.txt",
+	0 );	# 1 == show_init_prefs
+
+
+#-------------------------------------------
+# constants
+#-------------------------------------------
+
+
 our $THREAD_EVENT:shared = Wx::NewEventType;
 	# This is a weird place for this, but it is includable by both gitUI & command
-
-# TODO: DEFAULT_EDITOR and DEFAULT_EXTS to become Prefs
-# shell extensions are checked before editor extensions for
-# default click behavior
-
-our $DEFAULT_EDITOR = "\"C:\\Program Files (x86)\\ActiveState Komodo Edit 8\\komodo.exe\"";
-our $DEFAULT_SHELL_EXTS = 'md|gif|png|jpg|jpeg|pdf';
-our $DEFAULT_EDITOR_EXTS = 'txt|pm|pl|ino|cpp|c|h|hpp|md';
-
 
 # PUSH callback types
 # PACK is called first, stage is 0 on first, 1 thereafter

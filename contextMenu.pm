@@ -20,7 +20,7 @@ use apps::gitUI::utils;
 use apps::gitUI::Resources;
 
 
-my $dbg_menu = 1;		# context menu and commands
+my $dbg_menu = 0;		# context menu and commands
 
 
 my $menu_desc = {
@@ -93,11 +93,10 @@ sub popupContextMenu
 	display($dbg_menu,1,"is_sub($is_sub_ref) is_same($is_same_repo) ".
 		"is_this_info($is_this_info) is_this_sub($is_this_sub)");
 
-
-	# I don't quite see how we are limiting the calls
-
 	my $menu_group_num = 0;
 	my $menu = Wx::Menu->new();
+	my $shell_exts = getPref('GIT_SHELL_EXTS');
+	my $editor_exts = getPref('GIT_EDITOR_EXTS');
 	foreach my $id ($ID_CONTEXT_COPY..$ID_CONTEXT_OPEN_IN_NOTEPAD)
 	{
 		my $desc = $menu_desc->{$id};
@@ -111,8 +110,8 @@ sub popupContextMenu
 		next if $id == $ID_CONTEXT_ALL_HISTORY && ($filename || !$repo_path);
 		next if $id == $ID_CONTEXT_OPEN_GITHUB && $filename || (!$repo_id && !$context->{url});
 		next if $id == $ID_CONTEXT_OPEN_EXPLORER && !$filename && !$repo_path && !$context->{path};
-		next if $id == $ID_CONTEXT_OPEN_IN_EDITOR && (!$filename || $filename !~ /\.($DEFAULT_EDITOR_EXTS)$/);
-		next if $id == $ID_CONTEXT_OPEN_IN_SHELL && (!$filename || $filename !~ /\.($DEFAULT_SHELL_EXTS)$/);
+		next if $id == $ID_CONTEXT_OPEN_IN_EDITOR && (!$filename || $filename !~ /\.($editor_exts)$/);
+		next if $id == $ID_CONTEXT_OPEN_IN_SHELL && (!$filename || $filename !~ /\.($shell_exts)$/);
 		next if $id == $ID_CONTEXT_OPEN_IN_NOTEPAD && !$filename;
 
 		$menu->AppendSeparator() if $menu_group_num && $menu_group_num != $gnum;
@@ -186,7 +185,7 @@ sub onContextMenu
 	}
 	elsif ($command_id == $ID_CONTEXT_OPEN_IN_EDITOR)
 	{
-		my $command = $DEFAULT_EDITOR." \"$filename\"";
+		my $command = getPref('GIT_EDITOR')." \"$filename\"";
 		execNoShell($command);
 	}
 	elsif ($command_id == $ID_CONTEXT_OPEN_IN_SHELL)

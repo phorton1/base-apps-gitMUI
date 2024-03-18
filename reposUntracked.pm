@@ -73,18 +73,18 @@ my $user_excludes = [
 
 sub buildExcludes
 {
-	my ($opts) = @_;
-	my $excludes = $opts->{excludes} = [];
+	my (@pref_excludes) = @_;
+	my $excludes = [];
 	my $run_as_admin = Win32::IsAdminUser() ? 1 : 0;
-	repoDisplay($dbg_opts,0,"USER($user_name) RUN_AS_ADMIN($run_as_admin)");
+	repoDisplay($dbg_opts,-2,"USER($user_name) RUN_AS_ADMIN($run_as_admin)");
 
 	push @$excludes,@$admin_excludes;
 	push @$excludes,@$user_excludes
 		if !$run_as_admin;
-	push @$excludes,@{$opts->{GIT_UNTRACKED_EXCLUDES}}
-		if $opts->{GIT_UNTRACKED_EXCLUDES};
+	push @$excludes,@pref_excludes
+		if @pref_excludes;
 	push @$excludes,@$opt_excludes
-		if $opts->{GIT_UNTRACKED_USE_OPT_SYSTEM_EXCLUDES};
+		if getPref('GIT_UNTRACKED_USE_OPT_SYSTEM_EXCLUDES');
 
 	for my $exclude (@$excludes)
 	{
@@ -95,6 +95,8 @@ sub buildExcludes
 	{
 		repoDisplay($dbg_excludes,0,"exclude=$exclude");
 	}
+
+	return $excludes;
 }
 
 
@@ -102,8 +104,8 @@ sub buildExcludes
 
 sub excludeDir
 {
-	my ($opts,$dir) = @_;
-	for my $re (@{$opts->{excludes}})
+	my ($dir,$excludes) = @_;
+	for my $re (@$excludes)
 	{
 		return 1 if $dir =~/$re/;
 	}
@@ -117,17 +119,25 @@ sub findUntrackedRepos
 	# recurse through the directory tree and
 	# add or update folders and tracks
 {
-	my ($opts,$dir,$untracked) = @_;
+	my ($dir,$untracked,$excludes) = @_;
+
 	my $level_0 = 0;
 	if (!$untracked)
 	{
 		$level_0 = 1;
 		$dir = '/';
 		$untracked = {};
+		$excludes = [];
 
-		display_hash($dbg_opts,-1,"findUntrackedRepos",$opts);
+		repoDisplay(0,-1,"findUntrackedRepos()");
+		repoDisplay($dbg_opts,-2,'GIT_UNTRACKED_USE_CACHE => '.getPref('GIT_UNTRACKED_USE_CACHE'));
+		repoDisplay($dbg_opts,-2,'GIT_UNTRACKED_SHOW_TRACKED_REPOS => '.getPref('GIT_UNTRACKED_SHOW_TRACKED_REPOS'));
+		repoDisplay($dbg_opts,-2,'GIT_UNTRACKED_SHOW_DIR_WARNINGS => '.getPref('GIT_UNTRACKED_SHOW_DIR_WARNINGS'));
+		repoDisplay($dbg_opts,-2,'GIT_UNTRACKED_USE_SYSTEM_EXCLUDES => '.getPref('GIT_UNTRACKED_USE_SYSTEM_EXCLUDES'));
+		repoDisplay($dbg_opts,-2,'GIT_UNTRACKED_USE_OPT_SYSTEM_EXCLUDES => '.getPref('GIT_UNTRACKED_USE_OPT_SYSTEM_EXCLUDES'));
+		repoDisplay($dbg_opts,-2,'GIT_UNTRACKED_COLLAPSE_COPIES => '.getPref('GIT_UNTRACKED_COLLAPSE_COPIES'));
 
-		if ($opts->{GIT_UNTRACKED_USE_CACHE} &&
+		if (getPref('GIT_UNTRACKED_USE_CACHE') &&
 			-f $untracked_cache_file)
 		{
 			my $num = 0;
@@ -141,20 +151,29 @@ sub findUntrackedRepos
 			return $untracked;
 		}
 
-		buildExcludes($opts) if
-			$opts->{GIT_UNTRACKED_USE_SYSTEM_EXCLUDES} ||
-			$opts->{GIT_UNTRACKED_EXCLUDES};
+		my @pref_excludes = getSequencedPref('GIT_UNTRACKED_EXCLUDES');
+		if (@pref_excludes)
+		{
+			repoDisplay($dbg_opts,-2,'GIT_UNTRACKED_EXCLUDES');
+			for my $pref_exclude (@pref_excludes)
+			{
+				repoDisplay($dbg_opts,-3,$pref_exclude);
+			}
+		}
+
+		$excludes = buildExcludes(@pref_excludes) if
+			@pref_excludes ||
+			getPref('GIT_UNTRACKED_USE_SYSTEM_EXCLUDES');
 	}
+
 	repoDisplay($dbg_scan,0,"dir=$dir");
-	return if $opts->{excludes} &&
-		excludeDir($opts,$dir);
 
 	my $dirh;
     my @subdirs;
     if (!opendir($dirh,$dir))
     {
         repoWarning(undef,0,-1,"Could not opendir $dir")
-			if $opts->{GIT_UNTRACKED_SHOW_DIR_WARNINGS};
+			if getPref('GIT_UNTRACKED_SHOW_DIR_WARNINGS');
         return;
     }
     while (my $entry=readdir($dirh))
@@ -167,7 +186,7 @@ sub findUntrackedRepos
 		{
 			my $use_dir = $dir;
 			$use_dir =~ s/ - Copy( \(\d+\))*//
-				if $opts->{GIT_UNTRACKED_COLLAPSE_COPIES};
+				if getPref('GIT_UNTRACKED_COLLAPSE_COPIES');
 			my $repo = getRepoByPath($use_dir);
 			if (!$repo)
 			{
@@ -175,19 +194,23 @@ sub findUntrackedRepos
 				$untracked->{$use_dir} = 1;
 				repoDisplay(0,-1,"UNTRACKED REPO: $use_dir") if !$already;
 			}
-			elsif ($opts->{GIT_UNTRACKED_SHOW_TRACKED_REPOS})
+			elsif (getPref('GIT_UNTRACKED_SHOW_TRACKED_REPOS'))
 			{
 				repoDisplay(0,-1,"EXISTING REPO: $use_dir");
 			}
 		}
 		elsif (-d $path)
         {
-			findUntrackedRepos($opts,$path,$untracked);
+			if (!$excludes || !excludeDir($path,$excludes))
+			{
+				repoDisplay(0,-2,"scanning $path") if $level_0;
+				findUntrackedRepos($path,$untracked,$excludes);
+			}
 		}
 	}
     closedir $dirh;
 
-	if ($level_0 && $opts->{GIT_UNTRACKED_USE_CACHE})
+	if ($level_0 && getPref('GIT_UNTRACKED_USE_CACHE'))
 	{
 		my $num = 0;
 		my $text = '';
@@ -206,61 +229,6 @@ sub findUntrackedRepos
 
 
 
-#----------------------------------------
-# test main
-#----------------------------------------
-
-
-if (0)
-{
-	if (parseRepos())
-	{
-		my $my_excludes = [
-			"/base_data",
-			"/junk/_maybe_save",
-			"/MBEBack",
-			"/MBEDocs",
-			"/mbeSystems",
-			"/mp3s",
-			"/mp3s_mini",
-			"/zip/_teensy/_SdFat_unused_libraries", ];
-
-		my $opts = {
-			GIT_UNTRACKED_USE_CACHE => 0,
-				# whether to use a cachefile
-
-			GIT_UNTRACKED_SHOW_TRACKED_REPOS => 0,
-				# whether to print tracked repos
-			GIT_UNTRACKED_SHOW_DIR_WARNINGS => 1,
-				# whether to show warnings on unreadable directories
-
-			GIT_UNTRACKED_EXCLUDES => $my_excludes,
-				# A list of root directories to exclude from the scan.
-
-			GIT_UNTRACKED_USE_SYSTEM_EXCLUDES => 1,
-				# Exclude directories from the scan, starting with
-				# known system directories that cannot be opened,
-				# based on $run_as_admin and the $user_name, even as admin,
-				# like /ProgramData and /System Volume Information, and
-				# if not run as admin, directories like /Users/All Users.
-			GIT_UNTRACKED_USE_OPT_SYSTEM_EXCLUDES => 1,
-				# if GIT_UNTRACKED_USE_SYSTEM_EXCLUDES, whether to exclude exclude common
-				# directories that the user should not place repos in, including
-				# /Windows, /Program Files, and so on.
-
-			GIT_UNTRACKED_COLLAPSE_COPIES => 1,
-				# whether to collapse BLAH - Copy dirs into
-				# BLAH to ignore directories that are Copies
-				# of other directories (since I often like to
-				# make backup copies of my repos while working).
-		};
-
-
-		my $untracked = findUntrackedRepos($opts);
-		my $num_untracked = scalar(keys %$untracked);
-		repoDisplay(0,0,"FOUND $num_untracked untracked repos");
-	}
-}
 
 
 1;

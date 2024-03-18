@@ -20,12 +20,12 @@ use warnings;
 use threads;
 use threads::shared;
 use Pub::Utils;
+use Pub::Prefs;
 use apps::gitUI::repo;
 use apps::gitUI::utils;
 
-my $ADD_UNTRACKED_REPOS = 0;
-	# Set this to one to scan the entire machine for untracked repos.
-	# Nascent feature to bootstrap the system for other users.
+
+
 
 my $dbg_parse = 0;
 	# -1 for repos
@@ -75,7 +75,6 @@ BEGIN
 	);
 }
 
-my $repo_filename = '/base/bat/git_repositories.txt';
 
 my $repo_list:shared;
 my $repos_by_uuid:shared;
@@ -307,6 +306,7 @@ sub setCanPushPull
 
 sub parseRepos
 {
+	my $repo_filename = getPref('GIT_REPO_FILENAME');
     repoDisplay($dbg_parse,0,"parseRepos($repo_filename)");
 
 	initParse();
@@ -531,28 +531,9 @@ sub parseRepos
     }
 
 
-	if ($ADD_UNTRACKED_REPOS)
+	if (getPref('GIT_ADD_UNTRACKED_REPOS'))
 	{
-		my $my_excludes = [
-			"/base_data",
-			"/junk/_maybe_save",
-			"/MBEBack",
-			"/MBEDocs",
-			"/mbeSystems",
-			"/mp3s",
-			"/mp3s_mini",
-			"/zip/_teensy/_SdFat_unused_libraries", ];
-
-		my $opts = {
-			GIT_UNTRACKED_USE_CACHE => 1,
-			GIT_UNTRACKED_SHOW_TRACKED_REPOS => 0,
-			GIT_UNTRACKED_SHOW_DIR_WARNINGS => 1,
-			GIT_UNTRACKED_EXCLUDES => $my_excludes,
-			GIT_UNTRACKED_USE_SYSTEM_EXCLUDES => 1,
-			GIT_UNTRACKED_USE_OPT_SYSTEM_EXCLUDES => 1,
-			GIT_UNTRACKED_COLLAPSE_COPIES => 0, };
-
-		my $untracked = apps::gitUI::reposUntracked::findUntrackedRepos($opts);
+		my $untracked = apps::gitUI::reposUntracked::findUntrackedRepos();
 		my $num_untracked = scalar(keys %$untracked);
 		repoDisplay($dbg_parse,1,"ADDING $num_untracked untracked repos");
 		for my $path (sort keys %$untracked)

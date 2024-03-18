@@ -60,9 +60,6 @@ my $MONITOR_PAUSE_SLEEP = 0.2;
 	# 0.2 does not seem to tax the machine (task manager)
 my $STATE_CHANGE_TIMEOUT = 2;
 	# amount of time to wait for stopMonitor or pauseMonitor
-my $DEFAULT_UPDATE_INTERVAL = 90;
-	# seconds for default update interval
-	# getPref("GIT_UPDATE_INTERVAL") == 0 will turn off automatic updates
 
 
 
@@ -139,8 +136,6 @@ my $monitor_state:shared = $MONITOR_STATE_NONE;
 my $etag = '';
 my $can_update:shared = 1;
 my $last_update:shared = 0;
-my $UPDATE_INTERVAL = $DEFAULT_UPDATE_INTERVAL;
-
 
 
 #------------------------------------------------
@@ -174,9 +169,6 @@ sub monitorInit
 	return !error("callback not specified")
 		if !$callback;
 	$the_callback = $callback,
-	$UPDATE_INTERVAL = getPref("GIT_UPDATE_INTERVAL");
-	$UPDATE_INTERVAL = $DEFAULT_UPDATE_INTERVAL
-		if !defined($UPDATE_INTERVAL);
 	return monitorStart();
 }
 
@@ -238,7 +230,8 @@ sub monitorUpdate
 	display($dbg_mon,-1,"monitorUpdate($reset_timer)");
 	if ($reset_timer)
 	{
-		$last_update = time() - $UPDATE_INTERVAL + 3;
+		my $update_interval = getPref("GIT_UPDATE_INTERVAL");
+		$last_update = time() - $update_interval + 3 if $update_interval;
 		return;
 	}
 
@@ -366,8 +359,9 @@ sub run
 		elsif ($monitor_state == $MONITOR_STATE_RUNNING)
 		{
 			display($dbg_thread+1,-1,"thread {running}");
-			if ($can_update && $UPDATE_INTERVAL &&
-				time() > $last_update + $UPDATE_INTERVAL)
+			my $update_interval = getPref("GIT_UPDATE_INTERVAL");
+			if ($can_update && $update_interval &&
+				time() > $last_update + $update_interval)
 			{
 				setMonitorState($MONITOR_STATE_UPDATE);
 			}

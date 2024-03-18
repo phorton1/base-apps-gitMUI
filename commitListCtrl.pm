@@ -40,7 +40,8 @@ use Wx::Event qw(
 	EVT_LEFT_DCLICK
 	EVT_RIGHT_DOWN
 	EVT_MENU_RANGE );
-	use Pub::Utils;
+use Pub::Utils;
+use Pub::Prefs;
 use Pub::WX::Dialogs;
 use apps::gitUI::utils;
 use apps::gitUI::repos;
@@ -1140,7 +1141,7 @@ sub onItemMenu
 				}
 			}
 		}
-		my $command = $DEFAULT_EDITOR." ".join(" ",@$filenames);
+		my $command = getPref('GIT_EDITOR')." ".join(" ",@$filenames);
 		display($dbg_cmd,1,"calling '$command'");
 		execNoShell($command);
 		# system(1,$command);
