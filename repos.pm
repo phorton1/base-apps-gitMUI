@@ -635,12 +635,13 @@ my $dbg_subs = 0;
 my $dbg_use_xxx = 0;
 my $dbg_path_id_map = 0;
 my $dbg_apply = 0;
+my $dbg_topo_map = 0;
 my $dbg_topo_ids = 0;
 my $dbg_sections = 0;
 my $dbg_final = 0;
 
 
-my $NUM_FOR_GROUP = 3;
+my $NUM_FOR_GROUP = 5;
 	# any repeated patterns that have 3 items will break into
 	# a new section.  This is done by re-iterating the list at
 	# each level backwards.
@@ -704,14 +705,16 @@ sub buildPathIdMap
 	# push a mapping onto the list if it doesn't already exist
 
 	$path =~ s/^\///;
-	my @id_parts = split(/-/,$id);
-	my @path_parts = split(/\//,$path);
+	$id =~ s/^-//;
 
+	# my @id_parts = split(/-/,$id);
+	# my @path_parts = split(/\//,$path);
 	# pop @id_parts if @id_parts > 1;
 	# pop @path_parts if @path_parts > 1;
+	# $id = join('-',@id_parts);
+	# $path = '/'.join('/',@path_parts);
 
-	$id = join('-',@id_parts);
-	$path = '/'.join('/',@path_parts);
+	$path = '/'.$path;
 
 	if (!$path_id_hash->{$path})
 	{
@@ -841,14 +844,14 @@ sub buildSections
 		my $map_id = $map->{id};
 		my $map_path = $map->{path};
 
-		display($dbg_sections+2,2,"check section_path($section_path) versus map_path($map_path) and map_id($map_id)");
+		display($dbg_sections+1,2,"check section_path($section_path) versus map_path($map_path) and map_id($map_id)");
 
 		if ($section_path =~ /^$map_id/)
 		{
 			$did_sub = 1;
 			my $new_path = $section_path;
 			$new_path =~ s/^$map_id/$map_path/;
-			display($dbg_sections,3,"substitute re($map_id) for path($map_path) = new_path($new_path)",0,$UTILS_COLOR_LIGHT_CYAN);
+			display($dbg_sections,1,"substitute re($map_id) for path($map_path) = new_path($new_path)",0,$UTILS_COLOR_LIGHT_CYAN);
 			$section_path = $new_path;
 		}
 	}
@@ -861,7 +864,7 @@ sub buildSections
 	$repo->{section_id} = $section_id;
 	$repo->{section_path} = $section_path;
 	my $uuid = $repo->uuid();
-	display($dbg_sections,1,"sections($uuid) path($repo->{section_path}) id($repo->{section_id})");
+	display($dbg_sections,0,"sections($uuid) section_path($repo->{section_path}) section_id($repo->{section_id})");
 }
 
 
@@ -960,7 +963,7 @@ sub writeNewReposFile()
 		{
 			$id = $repo->{path};
 			$id =~ s/\//-/g;
-			$id =~ s/^\///;
+			$id =~ s/^-//;
 		}
 		if (!$path)
 		{
@@ -988,6 +991,49 @@ sub writeNewReposFile()
 	{
 		buildPathIdMap($repo,$path_id_map,$path_id_hash);
 	}
+
+	# (1b) add boiled down sub paths to the path_id_map, i.e. for the mapping
+	#	   path(/src/Android/Artisan) => id{Android-Artisan)
+	#      create a sub-mapping /src/Android => id(Android),
+	#      insert them in the map and re-sort it.
+
+	display($dbg_topo,0,"boilPathIdMap()");
+	my @add_boiled;
+	for my $map (@$path_id_map)
+	{
+		my $id = $map->{id};
+		my $path = $map->{path};
+		$path =~ s/^\///;
+		my @id_parts = split(/-/,$id);
+		my @path_parts = split(/\//,$path);
+		while (@id_parts > 1 &&
+			   @path_parts>1 &&
+			   $id_parts[@id_parts-1] eq $path_parts[@path_parts-1])
+		{
+			pop @id_parts;
+			pop @path_parts;
+		}
+
+		my $new_id = join("-",@id_parts);
+		my $new_path = '/'.join("/",@path_parts);
+
+		if (!$path_id_hash->{$new_path})
+		{
+			$path_id_hash->{$new_path} = $new_id;
+			display($dbg_path_id_map,1,"adding boiled map path($new_path) => id($new_id)");
+			push @add_boiled,{
+				id => $new_id,
+				path => $new_path };
+		}
+	}
+
+	if (@add_boiled)
+	{
+		warning($dbg_path_id_map,1,"adding ".scalar(@add_boiled)." path_id_maps");
+		push @$path_id_map,@add_boiled;
+		$path_id_map = [ sort {lctilde($a->{path}) cmp lctilde($b->{path})} @$path_id_map ];
+	}
+
 	if ($dbg_path_id_map <= 0)
 	{
 		display($dbg_path_id_map,0,"path_id_map");
@@ -1010,13 +1056,11 @@ sub writeNewReposFile()
 		display($dbg_apply,0,"applied_map");
 		for my $repo (sort {lctilde($a->{use_path}) cmp lctilde($b->{use_path})} @$repo_list)
 		{
-			display($dbg_apply,1,"id($repo->{id} use_id($repo->{use_id}) use_path($repo->{path}) path($repo->{path}}");
+			display($dbg_apply,1,"id($repo->{id}) use_id($repo->{use_id}) use_path($repo->{use_path}) path($repo->{path}}");
 		}
 	}
 
 	# (3) build hash of by partial ids with {len} and {repos} members
-
-	my $dbg_topo_ids = 0;
 
 	display($dbg_topo,0,"buildTopoRepos()");
 	my $topo_id_map = {};
@@ -1024,13 +1068,13 @@ sub writeNewReposFile()
 	{
 		buildTopoRepos($repo,$topo_id_map);
 	}
-	if ($dbg_topo_ids < 0)
+	if ($dbg_topo_map < 0)
 	{
-		display($dbg_topo_ids,0,"topo_id_map");
+		display($dbg_topo_map,0,"topo_id_map");
 		for my $built_id (sort {lctilde($a) cmp lctilde($b)} keys %$topo_id_map)
 		{
 			my $all = $topo_id_map->{$built_id};
-			display($dbg_topo_ids,1,"topo_id_map($built_id} has ".scalar(@{$all->{repos}})." repos");
+			display($dbg_topo_map,1,"topo_id_map($built_id} has ".scalar(@{$all->{repos}})." repos");
 		}
 	}
 
@@ -1039,7 +1083,7 @@ sub writeNewReposFile()
 	# and create topo_ids for each repo that has that has more
 	# than $NUM_FOR_GROUP elements
 
-	display($dbg_topo,1,"buildTopoIds()");
+	display($dbg_topo,0,"buildTopoIds()");
 
 	sub sortTopo
 	{
@@ -1049,9 +1093,16 @@ sub writeNewReposFile()
 		return lctilde($aa->{topo_id}) cmp lctilde($bb->{topo_id});
 	}
 
+	my $last_len = -1;
 	for my $map (sort {sortTopo($a,$b)} values %$topo_id_map)
 	{
 		my $len = $map->{len};
+		if ($last_len != $len)
+		{
+			$last_len = $len;
+			display($dbg_topo_ids,1,"build topoIds at len($len)")
+		}
+
 		my $topo_id = $map->{topo_id};
 		my $repos = $map->{repos};
 		next if $len>1 && scalar(@$repos) < $NUM_FOR_GROUP;
@@ -1069,7 +1120,7 @@ sub writeNewReposFile()
 		{
 			next if $repo->{topo_id};
 			my $uuid = $repo->uuid();
-			display($dbg_topo,2,"repo($uuid) topo_id=$topo_id",0,$UTILS_COLOR_CYAN);
+			display($dbg_topo_ids,2,"len($len) repo($uuid) topo_id=$topo_id",0,$UTILS_COLOR_CYAN);
 			$repo->{topo_id} = $topo_id;
 		}
 	}
@@ -1077,7 +1128,7 @@ sub writeNewReposFile()
 
 	# (5) build sections
 
-	display($dbg_topo,1,"buildSections()");
+	display($dbg_topo,0,"buildSections()");
 	for my $repo (sort {lctilde($a->{topo_id}) cmp lctilde($b->{topo_id})} @$new_repos)
 	{
 		buildSections($repo,$path_id_map);
@@ -1100,14 +1151,14 @@ sub writeNewReposFile()
 	}
 
 
-	display($dbg_topo,1,"finalSort()");
+	display($dbg_topo,0,"finalSort()");
 
 	initParse();
 	my $new_num = 0;
 	for my $repo (sort {sortSections($a,$b)} @$new_repos)
 	{
 		my $uuid = $repo->uuid();
-		display($dbg_final,2,"final[$new_num] section_path($repo->{section_path}) section_id($repo->{section_id}) uuid($uuid)");
+		display($dbg_final,1,"final[$new_num] section_path($repo->{section_path}) section_id($repo->{section_id}) uuid($uuid)");
 
 		my $use_blank_id = $repo->{parent_repo} ? '' : undef;
 		addRepoToSystem($repo,$use_blank_id);
