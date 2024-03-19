@@ -1,13 +1,10 @@
-# gitUI - context
+# gitUI - Context Implementation Details
 
 The system has several notions of context for selecting getting to a repo.
 
 It used to be an invariant that all repos had Path members, and could
 always be located using that Path.  Along with the subversion caused by
-repoGroups, now with REMOTE_ONLY repos, some repos don't have Paths.
-
-**I think there is a currently a blink-out-of-existence bug when the
-  infoWindow() cannot restore the context from the INI file**
+repoGroups, now REMOTE_ONLY repos may exizt without paths,
 
 - The commitListCtrl on works on LOCAL repos, which always have a Path.
   Since it saves and restores the expanded state of the showing repos
@@ -19,20 +16,11 @@ repoGroups, now with REMOTE_ONLY repos, some repos don't have Paths.
 ## The infoWindow (aka the subsWindow)
 
 The infoWindow currently keeps a list of all controls
-by Path, has a selectObject($path) method, and remembers
-the {selected_path}.   Furthermore, repoGroups() use the
-'master_submodule' ID as their Path and have numbers that
+by uuid, which is the path if one exists, or the id if
+not.  It has a selectObject($uuid) method, and remembers
+the {selected_uuid}.   Furthermore, repoGroups() use the
+'master' gitHub ID as their Path and have numbers that
 start over at 0 (as compared to the repo_list).
-
-This *may* be fixable using the "pathOrId" notion more
-generally. If a repo has a Path they are guaranteed to
-be unique.   If it does not have a path, then it's ID
-on GitHub is guaranteed to be unique.
-
-Internal to the system (not in the INI file), we can
-unambiguously pass $repos around.
-
-I think I'm gonna call the repo_path_or_id the REPO_UUID.
 
 
 ## contextMenu
@@ -62,8 +50,6 @@ $ID_CONTEXT_OPEN_GITHUB
 $ID_CONTEXT_OPEN_IN_EDITOR
 $ID_CONTEXT_OPEN_IN_SHELL
 $ID_CONTEXT_OPEN_IN_NOTEPAD
-
-
 
 
 

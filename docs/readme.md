@@ -1,7 +1,17 @@
 # gitUI - a UI for working on multiple GIT repositories simultaneously
 
 - config.md
+- submodules.md
 - prefs.md
+- rethink.md
+- status.md
+
+Implementation details
+
+- context
+- todo
+- old_notes
+
 
 
 **gitUI** is a User Interface, written in *Perl*, for working with multiple
@@ -217,16 +227,35 @@ to show colors. This is the order of priorities:
 - **green** - if the rrepo is *up to date* and **public**.
 
 
+## Allows for multiple local repos with same gitHub ID
+
+Particularly for the case of submodules, it is necessary
+that the system work well with multiple local repos that
+have the same gitHub ID.
+
+But also for those who might want to work on different
+branches of the same gitHub repo locally, this lays the
+groundwork for allowing that.  However, at this time,
+all local repos *must/should* match the **default_branch**
+specified on gitHub.
+
+
 ## System Initialization
 
 If there is no git_repos.txt, AND the program is run with
-a single 'init' command_line parameter, the system will
-be scanned for untracked repos as per the preferences,
-but instead of being added as untracked repos, they will
-be added, in the order they are found, to a new git_repos.txt,
-and instead of VERYIFING them against github, they will be
-BUILT from the information from github, and the new git_repos.txt
-file will be WRITTEN at the end of the first doGitHub() call.
+a single 'init' command_line parameter, the entire hard disk,
+minus known unreadable system directories, will be scanned
+for 'untracked' .git repositories and a new git_repos.txt
+will be built.
+
+In doing so, a fairly complicated process will be performed
+to derive 'sections' for any repos that have $NUM_FOR_GROUP=5
+common ansestors, and for mapping gitHub id's to local paths
+in the process.
+
+This *should* work fairly well for any users who have some
+kind of a systematic mapping from local repository paths to
+gitHub remote ID's already in place.
 
 
 ## Also See (Dependencies)

@@ -18,14 +18,8 @@ Prefs:
 
 
 
-
-
 ## repoDocs.pm
 
-Is currently a stand-alone program that was a start at
-parsing MD's to automatically create and update headers.
-It requires all the DOC = lines to be setup correctly,
-and for the repo to have a
-
-
-	SECTION
+Is currently an untested, **broken** stand-alone program that was
+a start at parsing MD's to automatically create and update headers.
+It requires all the DOC = lines to be setup correctly.

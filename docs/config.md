@@ -4,12 +4,12 @@ The **repository configuration file** contains a *list*
 of all the repos you want gitUI to work with, and
 specifies individual *characteristics* of each repo.
 
-The default name is of the file is **gitUI_config.txt**
+The default name is of the file is **git_repos.txt**
 in the *data directory*. We will simply refer to it as
-gitUI_config hereafter, but it can be any name, in any
+*git_repos.txt* hereafter, but it can be any name, in any
 location.
 
-The gitUI_config file:
+The git_repos.txt file:
 
 - is a line oriented, human readable, simple text file
 - can contain # comments and blank lines
@@ -18,6 +18,21 @@ The gitUI_config file:
 
 It is, essentially, a list of repositories with verbs that
 describe things about them, and their relationship.
+
+## Automatic Generation of git_repos.txt
+
+The git_repos.txt file can be constructed for a new
+installation by running **gitUI** with a *command line
+parameters* of **init**:
+
+	C> gitUI init			- using installed EXE
+	C> perl gitUI.pm init	- using pure Perl
+
+When building a new git_repos.txt file, the system will do its best to:
+
+- identify submodules
+- group repos with $NUM_FOR_GROUP=5 common ancestors into sections
+
 
 
 ## Repo Path Line
@@ -28,32 +43,34 @@ delimited set of options
 
 	/some/path/to/a/repo  (LOCAL_ONLY)
 
-LOCAL_ONLY specifies that therepo is not expected to
+LOCAL_ONLY specifies that the repo is not expected to
 exist on github, its remote ID will not be checked,
 nor will it be updated if it happens to be found
 on gitHub.
 
 
 
-## Remote Only repo ID line
+## Remote Only ID Line
 
 A line that starts with a dash indicates the ID of (after
 removing the leading dash) of a REMOTE_ONLY repo on gitHub.
 
 	-some-repo-id  (REMOTE_ONLY)
 
-The REMOTE_ONLY clause is not required, but recommended.
+The REMOTE_ONLY clause is not required, but is *recommended*.
+
 
 
 ## SECTION
 
-The SECTION verb comes *before* a *Repo Path Line* and allows you to group
-related repos together into sections in the various gitUI windows.
+The SECTION verb comes *before* any *Repo Path* or *Remote Only ID* lines,
+and allows you to group related repos together into sections in the
+various gitUI windows.
 
 	SECTION path (optional_id_if_slash_dash_substitution_not_good_enough)
 
 The *path* will be removed from following paths, and the ID
-from following IDs, in DISPLAY ONLY of the repos in certain
+from following IDs, in the DISPLAY ONLY of the repos in certain
 gitUI windows. For example, given a SECTION with two
 paths as follows:
 
@@ -78,17 +95,18 @@ to the given repo.
 ## SUBMODULE rel_path
 
 This verb defines a submodule within a repo, and
-telss us where to find it.
+tells gitUI where to find it.
 
-In our vision of subModules, there is one repo
-someplace on our machine that represents the
-'master' repository for the submodule.  Typically
-this will be a .gitignored subfolder of some
-other repo.
+In our vision of subModules, although not absolutely
+necessary, there *may* be one or more repos someplace on
+the machine that ARE NOT, per-se, submodules of any repo,
+but which (likely) represent the 'master' repository for the
+submodule. Typically this would be a .gitignored subfolder
+of some other repo.
 
 The ID of the submodule is gotten from GIT.
-The presence of the SUBMODULE
-verb defines several key facts for gitUI to use:
+The presence of the SUBMODULE verb defines several key facts
+for gitUI to use:
 
 - it defines a **separate repo** that exists on the machine,
   which is independently monitored for changes, and which
@@ -96,11 +114,12 @@ verb defines several key facts for gitUI to use:
   unstaged changes which can be staged, unstaged, reverted
   and/or committed, Pushed, or Pulled independently of hte
   parent (super) repo.
-- it **groups** the main_module and all of the cloned submodules
+- it **groups** any 'main' modules and all of the cloned
+  submodules that share the same gitHub ID,
   together into a group that can be monitored and
   acted on as a whole in the *subsWindow*, making it
   much easier to *normalize* a change in a submodule,
-  or the main_module, to all of the clones of it,
+  or the main_module(s), to all of the clones of it,
   as well as providing a mechanism to automatically
   *commit the submodule change* within the parent (super)
   repos that use it.
@@ -109,9 +128,7 @@ verb defines several key facts for gitUI to use:
   possible to automatically *commit the submodule change*
   to the parent repo.
 
-*following to be moved to design.md or implementation.md*
-
-Internally, implementation wise, it does the following
+Internally, implementation wise, it does the following.
 As mentioned, it will CREATE a new 'submodule repo'
 within the *repoList*. The submodule repo have the
 following members:
@@ -119,8 +136,8 @@ following members:
 - path - the path will be the absoluate path
   of the submodule, which will be within the
   parent repo's path.
-- id (overloaded) - the id of the submodule repo will be that of the
-  main submodule, i.e. where it lives on gitHub.
+- id (overloaded) - the id of the submodule repo will be
+  that of repo on gitHub.
 - parent_repo (added) - will be set as a pointer to
   the actual parent repo object in the gitUI program
 - rel_path (added) - will be stored on the object.
@@ -131,13 +148,15 @@ In addition, the path of the submodule repo will be pushed
 onto lists in the parent repo and the main module repo:
 
 - parent repo - {submodules} list gets all it's fully qualified submodules paths
-- main_module repo - {used_in} gets a list of all cloned copies of the main module
+- main_module repo(s) - {used_in} gets a list of all cloned copies of the main module
 
 
-## Important VERBS within Repos
+## Most Important VERBS within Repos
 
-These verbs are used for integrity checks, and to
-to help getting more information abou the repo from gitHub
+These verbs are used for integrity checks agains gitHub,
+and to help gitUI get more information about the repo from gitHub.
+These are set automatically to the gitHub values with the
+*gitUI init* command:
 
 - **PRIVATE** - is an integrity check against the visibility
   of the repo on gitHub, to make sure it is what I think
@@ -149,11 +168,17 @@ to help getting more information abou the repo from gitHub
   repository, and a separate gitHub request will be
   made to get information about the fork.
   FORKED may be binary, or contain text that is shown
-  in the infoWindow.
+  in the infoWindow. Set automatically with *gitUI init*.
+
+## Fairly Important VERBS with REPOS
+
+These verbs are available for use to build local
+integrity checks about relationships between repos.
+
 - **USES** abs_repo_path - speficies that this repo USES
-  another repo. In turn creates USED_BY members
-  on those repos, both of which end up being shortcuts
-  to opening the refererd repo in the infoWindow.
+  another repo on the local machine. In turn, this creates
+  USED_BY members on those repos, both of which end up being
+  shortcuts to opening the referred repo in the infoWindow.
   *USES* creates a repository dependency graph.
 - **NEEDS** abs_path - an absolute path to a directory that
   must exist on the local machine. For dependencies other
@@ -192,8 +217,6 @@ to help getting more information abou the repo from gitHub
 
 ## Description Mapping
 
-*this goes into design.md or implementation.md*
-
 The *description* of a repo is gotten from GitHub.
 
 IF the description includes "Copied from blah" followed
@@ -209,10 +232,6 @@ for any untracked repos that might not be in the git_repos.txt
 file.   It is currently turned on, and uses a cache file
 in the base_data/temp/gitUI folder for re-use without
 rescanning.
-
-TODO: reposUntracked.pm is part of the bootstrap process
-for a new machine when I do all the Prefs stuff and
-make an installer.
 
 
 -- end of readme ---

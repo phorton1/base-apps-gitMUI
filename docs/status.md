@@ -1,10 +1,13 @@
-# gitStatus and Updating
+# gitUI - Status and Updating
+
+TODO: implement an actual *statusWindow*
+
 
 Maintaining the status of the local repositories versus gitHub
 is rather complicated, and a bit time consuming.
 
 This document describes how the general scheme by which
-monitorUpdate() sets the repo gitHub_ID, remote_commits,
+monitorUpdate() sets the repo gitHub ID, remote_commits,
 and {BEHIND} members. {BEHIND} indicates that a repo is
 out of date with respect to gitHub and needs to be pulled.
 
@@ -120,9 +123,6 @@ found in the gitHub event list.
 
 An explicit command, monitorUpdate() may be called
 to invoke a manual refresh of the status.
-
-
-
 
 
 ## gitPull()

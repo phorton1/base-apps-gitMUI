@@ -1,6 +1,6 @@
 # Submodules
 
-This readme describes the concepts behind my usage of submodules,
+This readme describes the concepts behind the usage of submodules,
 provides a cookbook for using them, and describes how the gitUI
 program can facilitate maintenance of them.
 
@@ -40,24 +40,22 @@ The parent repo will get
 - {submodules} - an array of the relative paths to submodules
   within the parent repo.
 
-The 'master' submodule repo will get
+The 'master' submodule repo(s), if any, will get
 
 - {used_in} - an array of the full paths of all submodules
   that are references to this master submodule.
 
-
-Thus the 'master' submodule, and all the repos it is {used_in}
+Thus the 'master' submodule(s), and all the repos it is {used_in}
 constitutes a SUBMODULE GROUP, that can be checked for consistency,
 update, etc.
 
 
 
-## USING SUBMODULES
+## USING SUBMODULES (Cookbook)
 
-Adding a submodule to an existing project. For example, to add
-the /src/Arduino/libraries/myIOT/data_master submodule to the myIOT/examples
-folder (after removing and commiting the removal of the old data folder,
-if one existed):
+To add the /src/Arduino/libraries/myIOT/data_master submodule to the
+myIOT/examples folder (after removing and commiting the removal of the
+old data folder, if one existed):
 
 	cd /src/Arduino/libraries/myIOT
 	git submodule add https://gitHub.com/phorton1/Arduino-libraries-myIOT-data_master examples/testDevice/data
@@ -69,8 +67,9 @@ clone the src-Arduino-theClock3 repo into your Arduino projects folder:
 	cd /src/Arduino
 	git clone --recursive https://gitHub.com/phorton1/src-Arduino-theClock3 theClock3
 
-After cloning a new submodules you *NEED TO* checkout the 'master' branch before proceeding,
-possibly from the directory:
+After cloning a new submodules you **MUST** checkout the 'master' branch
+before proceeding, via the normal gitGUI, or possibly from the command line
+version of git:
 
 	cd /src/Arduino/theClock3/data
 	git checkout master
@@ -95,8 +94,15 @@ Note that updating a submodule creates an UNSTAGED CHANGE
 on the parent repo which then needs to, itself, be committed
 and or pushed.
 
+This is one of the big hassles, especially if you have many
+copies of the submodule, that the **subsWindow* helps to
+alleviate.
 
-### Notes vis-a-vis Pub::ServiceUpdate
+
+### Personal Notes vis-a-vis Pub::ServiceUpdate
+
+This is an implementation detail about other system
+that I have created to update repos from within applications.
 
 On the rPi, which alreaady had a myIOTServer project, after my built-in
 ServiceUpdate, it had the submodule, but an empty directy.
@@ -124,8 +130,9 @@ notice if any are out of date with respect to gitHub, and they
 will show as 'Need Pull' or 'Pull+Stash' (in red).
 
 
-
 ## Cannonical Example
+
+**This process is now facilitated by the *subModules window***.
 
 The myIOT/data_master repo contains a version of jquery, bootstrap,
 and some common JS, CSS, and HTML that are served by myIOT projects.
@@ -138,7 +145,7 @@ following repos:
 - /src/Arduino/theClock3/data
 - /base/apps/myIOTServer/site/myIOT
 
-In the cannonical example, we will will:
+In the cannonical example, we will would:
 
 - make a change to readme.md in /theClock3/data
 - commit and push that to gitHub
@@ -156,15 +163,6 @@ The parent repo, theClock3, **data** submodule change
 can be committed, if desired, at this point, or via the
 automatic process described in the next section.
 
-
-
-## Automatic Updating of SUBMODULE_GROUP
-
-The system should flag {unstaged} or {staged} changes
-in more than one repo in a SUBMODULE group.
-
-- All the {BEHIND} repos need to be pulled
-- A commit needs to be added to every parent_repo for the submodule update.
 
 
 
