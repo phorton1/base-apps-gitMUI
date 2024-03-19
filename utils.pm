@@ -40,15 +40,26 @@ use warnings;
 use Wx qw(:everything);
 use Pub::Utils;
 use Pub::Prefs;
+use Pub::WX::Dialogs;
 
 my $dbg_ids = 1;
 
+
+our $INIT_SYSTEM = 0;
+
+our $TEST_INIT_SYSTEM = 0;
+	# if set, command line 'init' will force a rebuild of git_repos.txt,
+	# but will use the caches if present.  Otherwise, $INIT_SYSTEM will
+	# clear the temp direotory.
 
 
 BEGIN
 {
  	use Exporter qw( import );
 	our @EXPORT = qw(
+
+		$INIT_SYSTEM
+		$TEST_INIT_SYSTEM
 
 		$THREAD_EVENT
 
@@ -83,6 +94,7 @@ BEGIN
 		$color_dark_cyan
 
 		linkDisplayColor
+		lctilde
 
 		$color_git_staged
         $color_git_unstaged
@@ -151,7 +163,7 @@ my $default_prefs = {
 	# prefs related to adding untracked repos
 
 	GIT_ADD_UNTRACKED_REPOS => $DEFAULT_ADD_UNTRACKED_REPOS,
-	GIT_UNTRACKED_USE_CACHE => 1,
+	GIT_UNTRACKED_USE_CACHE => 0,
 	GIT_UNTRACKED_SHOW_TRACKED_REPOS => 0,
 	GIT_UNTRACKED_SHOW_DIR_WARNINGS => 1,
 	GIT_UNTRACKED_USE_SYSTEM_EXCLUDES => 1,
@@ -166,6 +178,59 @@ Pub::Prefs::initPrefs(
 	$default_prefs,
 	'',		# crypt file "/base_data/_ssl/PubCryptKey.txt",
 	0 );	# 1 == show_init_prefs
+
+
+sub checkCommandLine
+{
+	if ($ARGV[0] && $ARGV[0] eq 'init')
+	{
+		my $repo_filename = getPref('GIT_REPO_FILENAME');
+		my $repo_file_exists = -f $repo_filename ? 1 : 0;
+
+		if ($repo_file_exists && !$TEST_INIT_SYSTEM)
+		{
+			error("You must manually delete\n$repo_filename\nto use the 'init' parameter");
+			return 0;
+		}
+		elsif (!$TEST_INIT_SYSTEM)
+		{
+			my $msg = "Creating new $repo_filename";
+			my $title = 'INIT_SYSTEM';
+			my $dlg = Wx::MessageDialog->new(undef,$msg,$title,wxOK|wxICON_EXCLAMATION);
+			$dlg->ShowModal();
+		}
+
+		unlink getPref('GIT_REPO_FILENAME') if $TEST_INIT_SYSTEM;
+		warning(0,0,"INITIALIZING SYSTEM to new ".getPref('GIT_REPO_FILENAME'));
+		$INIT_SYSTEM = 1;
+	}
+
+
+	if ($INIT_SYSTEM && !$TEST_INIT_SYSTEM)
+	{
+		warning(0,0,"INIT SYSTEM CLEARING temp directory");
+		my $dirh;
+		my @unlinks;
+		if (opendir($dirh,$temp_dir))
+		{
+			while (my $entry=readdir($dirh))
+			{
+				next if $entry !~ /\.txt$/;
+				push @unlinks,$entry;
+			}
+			closedir($dirh);
+
+			for my $unlink (@unlinks)
+			{
+				my $path = "$temp_dir/$unlink";
+				display(0,1,"unlinking $unlink");
+				unlink $path;
+			}
+		}
+	}
+
+	return 1;
+}
 
 
 #-------------------------------------------
@@ -250,6 +315,18 @@ sub linkDisplayColor
 		$repo->{forked} ? $color_medium_cyan :
 		$repo->{private} ? $color_blue :
 		$color_green;
+}
+
+
+sub lctilde
+	# for sorting paths or ids
+	# replace dashes or forward slashes with tildes
+	# so that they sort after any characters
+	# and lowercase for case insensitive compare
+{
+	my ($path) = @_;
+	$path =~ s/\/|-/~/g;
+	return lc($path);
 }
 
 

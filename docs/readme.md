@@ -217,6 +217,18 @@ to show colors. This is the order of priorities:
 - **green** - if the rrepo is *up to date* and **public**.
 
 
+## System Initialization
+
+If there is no git_repos.txt, AND the program is run with
+a single 'init' command_line parameter, the system will
+be scanned for untracked repos as per the preferences,
+but instead of being added as untracked repos, they will
+be added, in the order they are found, to a new git_repos.txt,
+and instead of VERYIFING them against github, they will be
+BUILT from the information from github, and the new git_repos.txt
+file will be WRITTEN at the end of the first doGitHub() call.
+
+
 ## Also See (Dependencies)
 
 Besides being run as an installed EXE file, for developers

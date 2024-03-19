@@ -22,6 +22,7 @@ use Wx::Event qw(
 use Pub::Utils;
 use Pub::WX::Frame;
 use Pub::WX::Dialogs;
+use Pub::WX::AppConfig;
 use apps::gitUI::repo;
 use apps::gitUI::repos;
 use apps::gitUI::reposGithub;
@@ -71,16 +72,25 @@ Win32::OLE::prhSetThreadNum(1);
 sub new
 {
 	my ($class, $parent) = @_;
+	display($dbg_frame,0,"apps::gitUI::Frame->new()");
 
 	setAppFrame(1);
 		# recent mod to wxFrame to allow errors to be reported
 		# during startup.  We'll see how it goes before turning
 		# it on in other apps.
 
+	if (!apps::gitUI::utils::checkCommandLine())
+	{
+		setAppFrame(undef);
+		return;
+	}
+	warning(0,0,"INITIALIZING SYSTEM") if $INIT_SYSTEM;
+	unlink $ini_file if $INIT_SYSTEM;
+
 	my $dlg = apps::gitUI::dialogDisplay->new(undef,'gitUI display');
 	setRepoUI($dlg);
 	return if !parseRepos();		# parseRepos only fails on hard errors
-	doGitHub(1,1);  				# use cache, validate_configs
+	doGitHub(1);  					# use cache,
 	setRepoUI(undef);
 	apps::gitUI::dialogDisplay::closeSelfIfNoErrors();
 
@@ -88,8 +98,9 @@ sub new
 	# Pub::WX::Frame::showError(undef,"blah");
 	# setAppFrame(undef);
 
-	Pub::WX::Frame::setHowRestore($RESTORE_ALL);
-		# $RESTORE_MAIN_RECT);
+	Pub::WX::Frame::setHowRestore($INIT_SYSTEM ?
+		$RESTORE_MAIN_RECT :
+		$RESTORE_ALL);
 
 	my $this = $class->SUPER::new($parent);	# ,-1,'gitUI',[50,50],[600,680]);
 
@@ -206,7 +217,7 @@ sub onCommandId
 		my $dlg = apps::gitUI::dialogDisplay->new($this,'gitUI display');
 		setRepoUI($dlg);
 		return if !parseRepos();		# parseRepos only fails on hard errors
-		doGitHub(0,1)  				# no cache, validate_configs
+		doGitHub(0)  					# no cache
 			if $id == $ID_COMMAND_REBUILD_CACHE;
 		setRepoUI(undef);
 		# could leave the dialog open and require manual close

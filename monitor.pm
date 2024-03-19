@@ -649,41 +649,31 @@ sub oneEvent
 	my $repo_id = $github_repo->{name} || '';
 	$repo_id =~ s/^$git_user\///;
 
-	my $repo = getRepoById($repo_id) || '';
-	return !error("Could not find repo($repo_id) in event($event_id)")
-		if !$repo;
-
 	my $payload = $event->{payload} || '';
 	my $head = $payload ? $payload->{head} || '' : '';
 	my $before = $payload ? $payload->{before} || '' : '';
 	my $commits = $payload ? $payload->{commits} : '';
 
-	return !error("No 'before' in event($event_id) path($repo->{path})")
+	return !error("No 'before' in event($event_id) for id($repo_id)")
 		if !$before;
-	return !error("No 'head' in event($event_id) path($repo->{path})")
+	return !error("No 'head' in event($event_id) for id($repo_id))")
 		if !$head;
 	if (!$commits || !@$commits)
 	{
-		warning($dbg_events,-2,"No commits in event($event_id) path($repo->{path})");
+		warning($dbg_events,-2,"No commits in event($event_id) for id($repo_id)");
 		return 1;
 	}
 
-	display($dbg_events,-2,"commits for repo($repo_id=$repo->{path}) at $time_str");
+	display($dbg_events,-2,"commits for repo($repo_id=$repo_id) at $time_str");
 	display($dbg_events,-3,"before=$before") if $before;
 
-	return 0 if !oneRepoEvent($repo,$event_id,$time,$head,$before,$commits);
+	# add the event to all repos with matching id ..
 
-	# add the event analogously to all submodules
-
-	if ($repo->{used_in})
+	my $repo_list = getRepoList();
+	for my $repo (@$repo_list)
 	{
-		for my $sub_path (@{$repo->{used_in}})
-		{
-			my $sub_repo = getRepoByPath($sub_path);
-			return !error("Could not find submodule($sub_path) in event($event_id) path($repo->{path})")
-				if !$sub_repo;
-			return 0 if !oneRepoEvent($sub_repo,$event_id,$time,$head,$before,$commits);
-		}
+		next if $repo->{id} ne $repo_id;
+		return 0 if !oneRepoEvent($repo,$event_id,$time,$head,$before,$commits);
 	}
 
 	return 1;

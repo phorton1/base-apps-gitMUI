@@ -137,8 +137,11 @@ sub findUntrackedRepos
 		repoDisplay($dbg_opts,-2,'GIT_UNTRACKED_USE_OPT_SYSTEM_EXCLUDES => '.getPref('GIT_UNTRACKED_USE_OPT_SYSTEM_EXCLUDES'));
 		repoDisplay($dbg_opts,-2,'GIT_UNTRACKED_COLLAPSE_COPIES => '.getPref('GIT_UNTRACKED_COLLAPSE_COPIES'));
 
-		if (getPref('GIT_UNTRACKED_USE_CACHE') &&
-			-f $untracked_cache_file)
+		my $use_cache = getPref('GIT_UNTRACKED_USE_CACHE');
+		$use_cache = 0 if $INIT_SYSTEM && !$TEST_INIT_SYSTEM;
+		$use_cache = 1 if $INIT_SYSTEM && $TEST_INIT_SYSTEM;
+
+		if ($use_cache && -f $untracked_cache_file)
 		{
 			my $num = 0;
 			my @lines = getTextLines($untracked_cache_file);
@@ -210,7 +213,10 @@ sub findUntrackedRepos
 	}
     closedir $dirh;
 
-	if ($level_0 && getPref('GIT_UNTRACKED_USE_CACHE'))
+	# We invariantly write out the cache file
+	# unless we read it in the frist place
+
+	if ($level_0) # && getPref('GIT_UNTRACKED_USE_CACHE'))
 	{
 		my $num = 0;
 		my $text = '';

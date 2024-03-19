@@ -554,6 +554,7 @@ sub idWithinSection
 		$id =~ s/^$re//;
 		$id =~ s/^-//;
 		$id ||= $this->{id};
+		$id = '-'.$id if !$this->{path};
 	}
 
 	$id = '...'.substr($id,-$MAX_DISPLAY_PATH)
@@ -589,6 +590,9 @@ sub contentLine
 
 	if ($is_main_module_ref)
 	{
+		# TODO: there may be more than one "main" module
+		# We take the first
+
 		my $repo = apps::gitUI::repos::getRepoById($value);
 		$value = $repo->{path};
 		$context = { repo => $repo };

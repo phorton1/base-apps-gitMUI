@@ -37,11 +37,11 @@ use apps::gitUI::repos;
 use apps::gitUI::utils;
 
 
-my $dbg_new = 1;
+my $dbg_new = 0;
 	# ctor
-my $dbg_config = 1;
-	# 0 show header in checkConfig
-	# -1 = show details in checkConfig
+my $dbg_groups = 0;
+	# group_by framework
+
 
 
 BEGIN
@@ -53,17 +53,93 @@ BEGIN
 }
 
 
+
+
+
 sub groupReposAsSubmodules
+	# henceforth it is not required to have a master
+	# module to use submodules ... however, if a master
+	# module does exist, it takes precedence over blind
+	# submodule groups.
 {
-	my $groups = shared_clone([]);
-	my $group_num = 0;
 	my $repo_list = getRepoList();
+		# hash by id of array of repos with parent_repos
+	display($dbg_groups,0,"groupReposAsSubmodules()");
+
+	# pass 1 - initial temp_groups
+
+	display($dbg_groups,1,"initial temp_groups");
+
+	my $temp_groups = {};
 	for my $repo (@$repo_list)
 	{
-		next if !$repo->{used_in};
-		my $group = apps::gitUI::repoGroup->new($group_num++,$repo);
+		next if !$repo->{path};
+		next if !$repo->{parent_repo};
+		my $id = $repo->{id};
+		display($dbg_groups,2,"temp_group($id) += $repo->{path}");
+		$temp_groups->{$id} ||= shared_clone({});
+		$temp_groups->{$id}->{$repo->{path}} = $repo;
+		$repo->{found_master} = 0;
+	}
+
+	# pass 2 - add MASTER submodules
+
+	display($dbg_groups,1,"add master submodules");
+	for my $repo (@$repo_list)
+	{
+		next if !$repo->{path};
+		my $used_in = $repo->{used_in};
+		next if !$used_in;
+
+		my $id = $repo->{id};
+		display($dbg_groups,2,"master_group($id) += $repo->{path}");
+		$temp_groups->{$id} ||= shared_clone({});
+		my $temp_group = $temp_groups->{$id};
+		$temp_group->{$repo->{path}} = $repo;
+
+		for my $sub_path (@{$repo->{used_in}})
+		{
+			my $sub_repo = getRepoByPath($sub_path);
+			if (!$temp_group->{$sub_path})
+			{
+				warning($dbg_groups,3,"repo_group($id} used_in($sub_path) not found");
+				if (!$sub_repo)
+				{
+					error("Could not find master($repo->{path}) used_in($sub_path)!!");
+				}
+				else
+				{
+					$temp_group->{$sub_path} = $sub_repo;
+				}
+			}
+			else
+			{
+				$sub_repo->{found_master} = 1;
+			}
+		}
+	}
+
+	# pass 3 - build_the_groups
+	# with warning for any submodule without found_master
+
+	display($dbg_groups,1,"build_groups");
+	my $group_num = 0;
+	my $groups = shared_clone([]);
+	for my $id (sort {lctilde($a) cmp lctilde($b)} keys %$temp_groups)
+	{
+		my $temp_group = $temp_groups->{$id};
+		for my $repo (sort {lctilde($a->{path}) cmp lctilde($b->{path})} values %$temp_group)
+		{
+			next if $repo->{used_in};
+			warning($dbg_groups,1,"submodule($repo->{path}) was not found in any master($repo->{id})")
+				if !$repo->{found_master};
+		}
+
+		my $group = apps::gitUI::repoGroup->new($group_num++,$id,$temp_group);
 		push @$groups,$group;
 	}
+
+
 	return $groups;
 }
 
@@ -82,14 +158,12 @@ sub uuid
 
 sub new
 {
-	my ($class, $group_num, $master_module) = @_;
-	my $id = $master_module->{id};
-	display($dbg_new,0,"repoGroup->new($id)");
+	my ($class, $group_num, $id, $sub_hash) = @_;
+	display($dbg_new,1,"repoGroup->new($id)");
 
-	my $subs = $master_module->{used_in};
 	my $repos = shared_clone([]);
 
-	my ($this) = shared_clone({
+	my $this = shared_clone({
 		num => $group_num,			# as if it were a repo
 		id => $id,					# as if it were a repo
 		path => $id,				# as if it were a repo, we overload the path to the id of the master_module
@@ -97,21 +171,29 @@ sub new
 		repos => $repos,			# as if it was a section
 		is_subgroup => 1,			# to differentiate from regular repo
 
-		# inherited from master
-
-		private => $master_module->{private},
-
 		# debugging
 
 		dbg_last_can_commit_parent => -1,
 	});
 
 	bless $this,$class;
-	push @$repos,$master_module;
-	for my $path (@$subs)
+
+	# private inherited from any repos that have it
+
+	sub sortMastersFirst
 	{
-		my $repo = getRepoByPath($path);
+		my ($aa,$bb) = @_;
+		return 1 if !$aa->{used_in} && $bb->{used_in};
+		return -1 if $aa->{used_in} && !$bb->{used_in};
+		return lctilde($aa->{path}) cmp lctilde($bb->{path});
+	}
+
+
+	for my $repo (sort {sortMastersFirst($a,$b)} values %$sub_hash)
+	{
+		display($dbg_new,2,($repo->{used_in}?"MASTER":"SUB")." $repo->{path}");
 		push @$repos,$repo;
+		$this->{private} = 1 if $repo->{private};
 	}
 
 	$this->setStatus();

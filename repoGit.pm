@@ -157,6 +157,8 @@ sub gitStart
 	# returns the $git_repo otherwise
 {
 	my ($repo,$git_repo) = @_;
+	return if !$repo->{path};
+
 	# my $branch = $repo->{branch};
 
 	display($dbg_start,0,"gitStart($repo->{path}) branch=$repo->{branch}");
