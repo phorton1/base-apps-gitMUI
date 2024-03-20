@@ -79,7 +79,7 @@ sub new
 		# during startup.  We'll see how it goes before turning
 		# it on in other apps.
 
-	if (!apps::gitUI::utils::checkCommandLine())
+	if (!apps::gitUI::utils::checkInitSystem())
 	{
 		setAppFrame(undef);
 		return;
@@ -401,11 +401,8 @@ use threads;
 use threads::shared;
 use Pub::Utils;
 use Pub::WX::Main;
-use Pub::WX::AppConfig;
 use apps::gitUI::utils;
 use base 'Wx::App';
-
-$ini_file = "$temp_dir/gitUI.ini";
 
 
 $USE_SHARED_LOCK_SEM = 1;

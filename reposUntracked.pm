@@ -73,7 +73,7 @@ my $user_excludes = [
 
 sub buildExcludes
 {
-	my (@pref_excludes) = @_;
+	my ($pref_excludes) = @_;
 	my $excludes = [];
 	my $run_as_admin = Win32::IsAdminUser() ? 1 : 0;
 	repoDisplay($dbg_opts,-2,"USER($user_name) RUN_AS_ADMIN($run_as_admin)");
@@ -81,8 +81,7 @@ sub buildExcludes
 	push @$excludes,@$admin_excludes;
 	push @$excludes,@$user_excludes
 		if !$run_as_admin;
-	push @$excludes,@pref_excludes
-		if @pref_excludes;
+	push @$excludes,@$pref_excludes;
 	push @$excludes,@$opt_excludes
 		if getPref('GIT_UNTRACKED_USE_OPT_SYSTEM_EXCLUDES');
 
@@ -154,18 +153,12 @@ sub findUntrackedRepos
 			return $untracked;
 		}
 
-		my @pref_excludes = getSequencedPref('GIT_UNTRACKED_EXCLUDES');
-		if (@pref_excludes)
-		{
-			repoDisplay($dbg_opts,-2,'GIT_UNTRACKED_EXCLUDES');
-			for my $pref_exclude (@pref_excludes)
-			{
-				repoDisplay($dbg_opts,-3,$pref_exclude);
-			}
-		}
+		my $pref_excludes = getSequencedPref('GIT_UNTRACKED_EXCLUDES');
+		repoDisplay($dbg_opts,-2,"GIT_UNTRACKED_EXCLUDES\r".join("\r",@$pref_excludes))
+			if @$pref_excludes;
 
-		$excludes = buildExcludes(@pref_excludes) if
-			@pref_excludes ||
+		$excludes = buildExcludes($pref_excludes) if
+			@$pref_excludes ||
 			getPref('GIT_UNTRACKED_USE_SYSTEM_EXCLUDES');
 	}
 

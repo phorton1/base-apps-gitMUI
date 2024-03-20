@@ -40,7 +40,10 @@ use warnings;
 use Wx qw(:everything);
 use Pub::Utils;
 use Pub::Prefs;
+use Pub::WX::AppConfig;
 use Pub::WX::Dialogs;
+use apps::gitUI::dialogCredentials;
+
 
 my $dbg_ids = 1;
 
@@ -118,12 +121,21 @@ BEGIN
 # directories
 #----------------------------------
 
-$temp_dir = "/base_data/temp/gitUI";
-$data_dir = "/base_data/data/gitUI";
-	# we set these here, even though they aren't used
-	# until gitUI::reposGithub.pm, cuz it's easy to find.
-my_mkdir $temp_dir if !-d $temp_dir;
-my_mkdir $data_dir if !-d $data_dir;
+# $temp_dir = "/base_data/temp/gitUI";
+# $data_dir = "/base_data/data/gitUI";
+# 	# we set these here, even though they aren't used
+# 	# until gitUI::reposGithub.pm, cuz it's easy to find.
+# my_mkdir $temp_dir if !-d $temp_dir;
+# my_mkdir $data_dir if !-d $data_dir;
+
+my $program_name = 'gitUI';
+
+setStandardTempDir($program_name);
+setStandardDataDir($program_name);
+
+$ini_file = "$temp_dir/$program_name.ini";
+
+
 
 
 #----------------------------------------------
@@ -174,37 +186,40 @@ my $default_prefs = {
 
 
 Pub::Prefs::initPrefs(
-	"$data_dir/gitUI.prefs",
+	"$data_dir/$program_name.prefs",
 	$default_prefs,
 	'',		# crypt file "/base_data/_ssl/PubCryptKey.txt",
 	0 );	# 1 == show_init_prefs
 
 
-sub checkCommandLine
+sub checkInitSystem
 {
-	if ($ARGV[0] && $ARGV[0] eq 'init')
+	# credentials must exist in preferences
+
+	if (!getPref('GIT_USER') || !getPref('GIT_API_TOKEN'))
 	{
-		my $repo_filename = getPref('GIT_REPO_FILENAME');
-		my $repo_file_exists = -f $repo_filename ? 1 : 0;
+		return 0 if !apps::gitUI::dialogCredentials->getCredentials()
+	}
 
-		if ($repo_file_exists && !$TEST_INIT_SYSTEM)
-		{
-			error("You must manually delete\n$repo_filename\nto use the 'init' parameter");
-			return 0;
-		}
-		elsif (!$TEST_INIT_SYSTEM)
-		{
-			my $msg = "Creating new $repo_filename";
-			my $title = 'INIT_SYSTEM';
-			my $dlg = Wx::MessageDialog->new(undef,$msg,$title,wxOK|wxICON_EXCLAMATION);
-			$dlg->ShowModal();
-		}
+	# and then if no repo filename, they get an option to
+	# init the system
 
-		unlink getPref('GIT_REPO_FILENAME') if $TEST_INIT_SYSTEM;
+	my $repo_filename = getPref('GIT_REPO_FILENAME');
+	unlink $repo_filename if $TEST_INIT_SYSTEM;
+	my $repo_file_exists = -f $repo_filename ? 1 : 0;
+
+	if (!$repo_file_exists)
+	{
+		my $msg = "Could not find $repo_filename.\n".
+			"Do you want to scan the entire hard-drive for\n".
+			"repos and create a new $repo_filename?";
+		my $title = 'INIT_SYSTEM';
+		my $dlg = Wx::MessageDialog->new(undef,$msg,$title,wxCANCEL|wxOK|wxICON_EXCLAMATION);
+		my $rslt = $dlg->ShowModal();
+		return 0 if $rslt != wxID_OK;
 		warning(0,0,"INITIALIZING SYSTEM to new ".getPref('GIT_REPO_FILENAME'));
 		$INIT_SYSTEM = 1;
 	}
-
 
 	if ($INIT_SYSTEM && !$TEST_INIT_SYSTEM)
 	{
