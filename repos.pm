@@ -488,35 +488,30 @@ sub parseRepos
 
 		# uses
 
-		my $uses = $repo->{uses};
-		if ($uses)
-		{
-			for my $use (@$uses)
-			{
-				my $used_repo = $repos_by_path->{$use};
-				if (!$used_repo)
-				{
-					$repo->repoError("invalid USES: $use");
-				}
-				else
-				{
-					$used_repo->{used_by} ||= shared_clone([]);
-					push @{$used_repo->{used_by}},$repo->{path};
-				}
-			}
-		}
+		setUsedBy($repo);
 
 		# friends
 
 		my $friends = $repo->{friend};
 		if ($friends)
 		{
-			for my $friend (@$uses)
+			for my $friend (@$friends)
 			{
 				my $friend_repo = $repos_by_path->{$friend};
 				$repo->repoError("invalid FRIEND: $friend")
 					if !$friend_repo;
 			}
+		}
+	}
+
+	# sort used_by repos by depth, name
+
+	for my $repo (@$repo_list)
+	{
+		my $used_by = $repo->{used_by};
+		if ($used_by)
+		{
+			$repo->{used_by} = shared_clone([sort {cmpUsedBy($a,$b)} @$used_by]);
 		}
 	}
 
@@ -571,6 +566,56 @@ sub parseRepos
 }
 
 
+
+my $RECURSE_USED_BY = 1;
+
+
+sub cmpUsedBy
+{
+	my ($aa,$bb) = @_;
+	my $level_a = $aa =~ s/^(-+)// ? length($1) : 0;
+	my $level_b = $bb =~ s/^(-+)// ? length($1) : 0;
+	return 1 if $level_a > $level_b;
+	return -1 if $level_a < $level_b;
+	return lctilde($aa) cmp lctilde($bb);
+}
+
+
+sub setUsedBy
+{
+	my ($repo,$base_repo,$level,$already_used) = @_;
+
+	$level ||= 0;
+	$already_used ||= {};
+	$base_repo ||= $repo;
+	my @recurse;
+
+	my $uses = $repo->{uses};
+	if ($uses)
+	{
+		for my $use (@$uses)
+		{
+			next if $already_used->{$use};
+			$already_used->{$use} = 1;
+
+			my $used_repo = $repos_by_path->{$use};
+			if (!$used_repo)
+			{
+				$repo->repoError("invalid USES: $use");
+			}
+			else
+			{
+				$used_repo->{used_by} ||= shared_clone([]);
+				my $show = ('-' x $level).$base_repo->{path};
+
+				push @{$used_repo->{used_by}},$show;
+			}
+
+			setUsedBy($used_repo,$base_repo,$level+1,$already_used)
+				if $RECURSE_USED_BY;
+		}
+	}
+}
 
 #--------------------------------------------------------------------
 # repo grouping utilities

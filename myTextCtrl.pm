@@ -1,10 +1,6 @@
 #-------------------------------------------
 # apps::gitUI::myTextCtrl
 #-------------------------------------------
-# ALT-mouse selects rectangle
-# Regular mouse selects lines
-# Refresh is not optimized.
-
 
 package apps::gitUI::myTextCtrl;
 use strict;
@@ -85,11 +81,28 @@ sub new
 	$this->{hits} = [];
 	$this->{hit} = '';
 
-	$this->{drag_alt} = 0;
-	$this->{drag_start} = '';
-	$this->{drag_end} = '';
-	$this->{drag_started} = 0;
-	$this->{in_drag} = 0;
+	# The drag cycle goes like this:
+	#
+	# 	(0) They left click someplace
+	#       This calls init_drag() to start a new drag.
+	#		init_drag() calls refreshDrag(undef) to clear any previous drag
+	#       We set {drag_start} to indicate a possible new drag
+	#       We set {drag_alt} if the shift key (rectangular selection) was pressed at the start
+	#
+	#   (1) They move the mouse while still having the left button down.
+	#		This sets {in_drag} if it's not already set, indicating we are dragging
+	#       and calls refreshDrag(new_drag_end) with the current position
+	#		which may need to invalidate disjoint regions, or is optimized to only
+	#       refresh new additions/subtractions to the drag.
+	#
+	#	(2) They let the mouse button up. This sets {in_drag} to zero
+	#
+	# The presence of {drag_end} indicates a selected area.
+
+	$this->{drag_start} = '';			# unscrolled coords of drag_start is set first
+	$this->{drag_alt} = 0;				# shift was pressed when starting drag (select rectangle)
+	$this->{in_drag} = 0;				# the drag has started
+	$this->{drag_end} = '';				# the end position of the drag, set by refreshDrag ONLY
 
 	$this->{scroll_inc} = 0;
 
@@ -187,14 +200,22 @@ sub setRepoContext
 }
 
 
+sub dbgDrag
+{
+	my ($this,$what) = @_;
+	return $this->{$what} ?
+		"$this->{$what}->[0],$this->{$what}->[1]" : '';
+}
+
 sub init_drag
 {
 	my ($this) = @_;
+	my $dbg_end = $this->dbgDrag('drag_end');
+	display($dbg_mouse,0,"init_drag($dbg_end)");
 	$this->refreshDrag() if $this->{drag_end};
 	$this->{drag_alt} = 0;
 	$this->{drag_start} = '';
 	$this->{drag_end} = '';
-	$this->{drag_started} = 0;
 	$this->{in_drag} = 0;
 	$this->{scroll_inc} = 0;
 }
@@ -263,8 +284,7 @@ sub addPart
 		my $rect = Wx::Rect->new(
 			$line->{width} + $LEFT_MARGIN,
 			(@$content-1) * $LINE_HEIGHT,
-			$char_width + $CHAR_WIDTH,
-				# doesn't make sense, but refresh rect was wrong
+			$char_width,
 			$LINE_HEIGHT);
 
 		my $hit = {
@@ -553,67 +573,61 @@ sub selectWordAt
 	display($dbg_word,0,"selectWordAt($ux,$uy) l($l) c($c)");
 
 	my $line = $this->{content}->[$l];
-	if ($line)
+	if (!$line)
 	{
-		my $at = 0;
-		my $parts = $line->{parts};
-		for my $part (@$parts)
-		{
-			my $text = $part->{text};
-			my $len  = length($text);
-			display($dbg_word,1,"part_at($at) len($len) '$text'");
-
-			if ($c >= $at && $c <= $at + $len - 1)
-			{
-				my $off = $c - $at;
-				my $char = substr($text,$off,1);
-				display($dbg_word,2,"off($off) char($char)");
-
-				if ($char !~ /^\s$/)
-				{
-					if ($off > 0)
-					{
-						while ($off > 0 && $char !~ /^\s/)
-						{
-							$off--;
-							$char = substr($text,$off,1);
-							display($dbg_word,3,"next($off) char($char)");
-						}
-
-						display($dbg_word,2,"ended at off($off) char($char)");
-
-						$off++ if $char =~ /^\s/;
-						my $sub = substr($text,$off);
-						my ($piece) = split(/\s/,$sub);
-
-						display($dbg_word,2,"sub($sub) char($piece)");
-
-						my $x = ($at + $off) * $CHAR_WIDTH + $LEFT_MARGIN;
-						my $y = $l * $LINE_HEIGHT;
-						my $w = length($piece) * $CHAR_WIDTH;
-						my $h = $LINE_HEIGHT;
-
-						display($dbg_word,2,"selecting($x,$y,$w,$h)");
-
-						$this->{drag_start} = [$x,$y];
-						$this->{drag_end}   = [$x + $w -1, $y + $LINE_HEIGHT];
-						$this->refreshScrolled(Wx::Rect->new($x,$y,$w,$h));
-						return;
-					}
-				}
-				else
-				{
-					display($dbg_word,2,"clicked on blank");
-				}
-			}	# $c is in part
-
-			$at += $len;
-
-		}	# for each part
-
-		display($dbg_word,1,"clicked outside of parts");
+		display($dbg_word,1,"clicked outside of line");
+		return;
 	}
-	display($dbg_word,0,"no word found");
+
+	my $text = '';
+	my $parts = $line->{parts};
+	for my $part (@$parts)
+	{
+		$text .= $part->{text};
+	}
+
+	if ($c >= length($text))
+	{
+		display($dbg_word,1,"clicked outside of line");
+		return;
+	}
+
+	my $char = substr($text,$c,1);
+	if ($char eq ' ')
+	{
+		display($dbg_word,1,"clicked on space");
+		return;
+	}
+
+	display($dbg_word,1,"clicked on char($char)");
+
+
+	my $end = $c;
+	my $start = $c;
+	my $delim_re = " |,";
+	while ($start && substr($text,$start-1,1) !~ /$delim_re/)
+	{
+		$start--;
+	}
+	while ($end < length($text)-1 && substr($text,$end+1,1) !~ /$delim_re/)
+	{
+		$end++;
+	}
+
+	my $dbg_text = substr($text,$start,$end-$start+1);
+	display($dbg_word,1,"got s($start) e($end) word($dbg_text)");
+
+	my $cw = $end-$start+1;
+	my $sy = $l * $LINE_HEIGHT;
+	my $sx = $start * $CHAR_WIDTH + $LEFT_MARGIN;
+	my $ex = $sx + $cw * $CHAR_WIDTH - 1;
+	my $ey = $sy + $LINE_HEIGHT - 1;
+
+	display($dbg_word,1,"selecting $cw chars($sx,$sy,$ex,$ey)");
+
+	$this->{drag_start} = [$sx,$sy];
+	$this->{drag_end}   = [$ex,$ey];
+	$this->refreshScrolled(Wx::Rect->new($sx,$sy,$ex-$sx+1,$LINE_HEIGHT));
 }
 
 
@@ -899,19 +913,35 @@ sub refreshDiff
 
 
 sub refreshDrag
-	# refresh using current {drag_end}, if any, and new $end,
+	# refresh using current {drag_end}, if any, and $new end,
 	# either of which might be ''
 {
 	my ($this,$new) = @_;
-	my $old = $this->{drag_started} ? $this->{drag_end} : '';
+	my $old = $this->{drag_end} || '';
 	my $start = $this->{drag_start};
-	$this->{in_drag} = 1;
-	$this->{drag_started} = 1;
 
 	my $show_old = $old ? $old->[0].",".$old->[1] : '';
 	my $show_new = $new ? $new->[0].",".$new->[1] : '';
 	my $show_start = $start->[0].",".$start->[1];
-	display($dbg_refresh+1,0,"refreshDrag start($show_start) old($show_old) new($show_new)");
+
+	if ($new && !$old)
+	{
+		warning($dbg_refresh,0,"DRAG_STARTED($show_start} new($show_new)");
+	}
+	elsif ($old && !$new)
+	{
+		warning($dbg_refresh,0,"CLEARING_DRAG($show_start} old($show_old)");
+	}
+	elsif (!$old && !$new)
+	{
+		warning($dbg_refresh,0,"DRAG_REFRESH CALLED WITH NO OLD OR NEW!");
+	}
+	else
+	{
+		display($dbg_refresh,0,"refreshDrag start($show_start) old($show_old) new($show_new)");
+	}
+
+	$this->{in_drag} = 1 if $new;
 
 	if ($this->{drag_alt})
 	{
@@ -973,13 +1003,7 @@ sub refreshDrag
 # 		open_main_sub = 0/1 = use the id from the repo in the subs window
 #		open_repo_sub = 0/1 = use the path from the repo in the subs window
 
-sub dbgDrag
-{
-	my ($this,$what) = @_;
-	return $this->{$what} ?
-		"$this->{$what}->[0],$this->{$what}->[1]" :
-		'undef';
-}
+
 
 sub onMouse
 {
@@ -991,6 +1015,7 @@ sub onMouse
 	my $lclick = $dclick || $event->LeftDown();
 	my $rclick = $event->RightDown() || $event->RightDClick();
 	my $dragging = $event->Dragging();
+	my $lup = $event->LeftUp();
 
 	my $VK_ALT = 0x12;
 	my $VK_SHIFT = 0x10;
@@ -1009,8 +1034,8 @@ sub onMouse
 	my $dbg = $lclick || $rclick || $dragging ? 0 : 1;
 	my $dbg_start = $this->dbgDrag('drag_start');
 	my $dbg_end = $this->dbgDrag('drag_end');
-	display($dbg_mouse + $dbg,0,"onMouse($sx,$sy) unscrolled($ux,$uy) left($lclick) right($rclick) ".
-			" dragging($dragging) alt($alt) shift($shift) ".
+	display($dbg_mouse + $dbg,0,"onMouse($sx,$sy) unscrolled($ux,$uy) right($rclick) dclick($dclick) left($lclick) lup($lup)".
+			" drag($dragging) alt($alt) shift($shift) ".
 			" start($dbg_start) end($dbg_end)");
 
 	my $hit = '';
@@ -1023,46 +1048,75 @@ sub onMouse
 		}
 	}
 
-	if ($lclick && !$shift)
-	{
-		$this->refreshDrag() if $this->{drag_end};
-		init_drag();
-	}
 
-	if ($rclick)
-	{
-		if ($hit)
-		{
-			my $context = getHitContext($hit);
-			$this->popupContextMenu($context);
-		}
-	}
-	elsif ($event->LeftUp())
+	my $do_skip = 1;
+
+	if ($this->{in_drag} && $lup)
 	{
 		$this->{in_drag} = 0;
+		warning($dbg_refresh,0,"DRAG_END($dbg_end)");
 	}
 
-	if ($dclick && !$hit)
+	# a right click pops up the context menu one way or the other
+	# either for the given hit + drag, or the selected_word plus hit
+
+	elsif ($rclick)
 	{
-		# set the drag rectangle to the word under the mouse if any
+		my $context = $hit ? getHitContext($hit) : {};
+		$this->selectWordAt($ux,$uy) if !$this->{drag_end};
+		$this->popupContextMenu($context);
+	}
+
+	# a double click on anything selects the word under the cursor
+
+	elsif ($dclick)
+	{
+		$this->init_drag();
 		$this->selectWordAt($ux,$uy);
 	}
-	elsif ($lclick && !$hit)
+
+	# if they left click,
+	#	if (shift) we extend the drag to the new location, and start dragging again
+	# otherwise,
+	#	if on a hit, the link is activated,
+	# 	otherwise a new drag is started
+
+	elsif ($lclick)
 	{
-		if ($this->{drag_start} && $shift)
+		if ($shift)
 		{
+			warning($dbg_refresh,0,"RESTARTING DRAG FROM SHIFT($dbg_end)");
+			$this->{in_drag} = 1;
 			$this->refreshDrag([$ux,$uy]);
 		}
 		else
 		{
-			$this->{drag_alt} = $alt;
-			$this->{drag_start} = [$ux,$uy];
+			$this->init_drag();
+			if ($hit)
+			{
+				$this->mouseClick($hit) ;
+				$do_skip = 0;
+			}
+			else
+			{
+				$this->{drag_alt} = $alt;
+				$this->{drag_start} = [$ux,$uy];
+			}
 		}
 	}
+
+
+	# a leftUp means the drag has ended
+	# in_drag is needed to communicate to onIdle()
+
+
+	# otherwise, update the drag() and
+	# handleScrolling ..
+
 	elsif ($this->{drag_start} && $dragging)
 	{
 		$this->refreshDrag([$ux,$uy]);
-		$this->handleScroll($sx,$sy); # if $this->{drag_end};
+		$this->handleScroll($sx,$sy);
 	}
 	else
 	{
@@ -1073,12 +1127,6 @@ sub onMouse
 	# the window changes appropriate if a link
 	# to the infoWindow is clicked from the commitWindow
 
-	my $do_skip = 1;
-	if ($hit && $lclick)
-	{
-		$this->mouseClick($hit);
-		$do_skip = 0;
-	}
 	$event->Skip() if $do_skip;
 		# needed or else wont get key events
 }
@@ -1178,8 +1226,10 @@ sub getClickFunction
 		if $is_click;
 
 	my $repo = $context->{repo};
-	my $filename = $context->{file} ?
-		$repo->{path}.$context->{file} : '';
+	my $filename = $context->{filename} ?
+		$context->{filename} :
+		$context->{file} ?
+			$repo->{path}.$context->{file} : '';
 
 	my $shell_exts = getPref('GIT_SHELL_EXTS');
 	my $editor_exts = getPref('GIT_EDITOR_EXTS');
@@ -1312,6 +1362,7 @@ sub onChar
 	my ($this,$event) = @_;
 	my $key_code = $event->GetKeyCode();
 	display($dbg_copy,0,"onChar($key_code)");
+	$this->init_drag() if $key_code == 27;
 	$this->doCopy() if $key_code == 3 && $this->canCopy();
 	$event->Skip();
 }
@@ -1335,11 +1386,20 @@ sub doCopy
 
 
 sub getSelectedText
+	# the selection in alt mode is easy. It includes the entire rectangle
+	# 	including the start and end.
+	# line mode is complicated, and depends on the orientation of the
+	# 	selection.  The selection always includes the starting character
+	#   and ending character, and any linefeeds between them.
 {
 	my ($this) = @_;
 	my $alt = $this->{drag_alt};
 	my ($sx,$sy) = @{$this->{drag_start}};
 	my ($ex,$ey) = @{$this->{drag_end}};
+	display($dbg_copy,0,"getSelectedText start($sx,$sy) end($ex,$ey)");
+
+	my $fwd = 1;
+
 	my ($sl,$sc,$el,$ec) = (
 		int($sy / $LINE_HEIGHT),
 		int(($sx - $LEFT_MARGIN) / $CHAR_WIDTH),
@@ -1347,105 +1407,76 @@ sub getSelectedText
 		int(($ex - $LEFT_MARGIN) / $CHAR_WIDTH));
 	$sc=0 if $sc<0;
 	$ec=0 if $ec<0;
-	my $num_lines = abs($sl-$el+1);
-	my $fwd = $el>$sl || ($el==$sl && $ec>=$sc)?1:0;
 
-	display($dbg_copy,0,"get($fwd,$num_lines) start($sx,$sy) end($ex,$ey) begin($sl,$sc) end($el,$ec)");
+	display($dbg_copy,0,"initial start_lc($sl,$sc) end_lc($el,$ec)");
 
-	swap(\$sl,\$el) if $alt && $sl > $el;
-	swap(\$sc,\$ec) if $alt && $sc > $ec;
+	if ($alt)
+	{
+		swap(\$sl,\$el) if $el < $sl;
+		swap(\$sc,\$ec) if $ec < $sc;
+	}
+	elsif ($el<$sl || ($el==$sl && $ec<$sc))
+	{
+		$fwd = 0;
+		swap(\$sl,\$el);
+		swap(\$sc,\$ec);
+	}
+
+	my $num_lines = $el-$sl+1;
+
+	display($dbg_copy,0,"get($fwd,$num_lines) final start_lc($sl,$sc) end_lc($el,$ec)");
 
 	my $retval = '';
 	my $content = $this->{content};
 
-	my ($l1,$l2) = ($sl,$el);
-	swap(\$l1,\$l2) if $l1>$l2;
-
-	display($dbg_copy,1,"loop $l1 .. $l2");
-	for my $line_num ($l1..$l2)
+	for my $line_num ($sl..$el)
 	{
+		$retval .= "\n" if $line_num != $sl;
+
+		# build $text for the full line
+
+		my $text = '';
 		my $line = $content->[$line_num];
 		my $parts = $line->{parts};
-		my $cn = 0;
-			# character num within line
-			# 'start of the text'
-
-		my $MAX_LINE = 100000000;
-		my ($left_x, $right_x) = ($sc,$ec);
-
-		# for line selection mode, we need to know the orientation
-		# of the start & end, and whether we are on the first, middle
-		# or last lines ...
-
-		if (!$alt)
-		{
-			if ($line_num == $sl)						# first line
-			{
-				$left_x = $fwd ?
-					$sc :
-					$sl==$el ? $ec : 0 ;
-				$right_x = $fwd ?
-					$sl==$el ? $ec : $MAX_LINE :
-					$sc;
-				display($dbg_copy,0,"first line left($left_x) right($right_x)");
-			}
-			elsif ($num_lines > 2 && $line_num != $sl && $line_num != $el)
-			{
-				$left_x = 0;
-				$right_x = $MAX_LINE;
-			}
-			elsif ($num_lines > 1 && $line_num == $el)	# last line
-			{
-				$left_x = $fwd ?
-					0 : $ec;
-				$right_x = $fwd ?
-					$ec : $MAX_LINE;
-				display($dbg_copy,0,"last line left($left_x) right($right_x)");
-			}
-		}
-
-		display($dbg_copy,1,"line_num($line_num) left_x($left_x) right_x($right_x)");;
-
 		for my $part (@$parts)
 		{
-			my $text = $part->{text};
-			my $len = length($text);
-			my $text_end = $cn+$len-1;
+			$text .= $part->{text};
+		}
 
-			# if the part starts before right_x and ends after left_x ...
+		display($dbg_copy+1,1,"full_line="._lim($text,80));
 
-			if ($cn <= $right_x && $text_end >= $left_x)
+		if ($alt)
+		{
+			my $part = substr($text,$sc,$ec-$sc+1);
+			display($dbg_copy,2,"alt part=$part");
+			$retval .= $part;
+		}
+		elsif ($line_num == $sl)
+		{
+			my $part;
+			if ($line_num == $el)
 			{
-				# if the string starts before the rectangle, then the copy position
-				# is the offset of the rectangle within the string, otherwise we
-				# copy the string starting from zero.
-
-				my $cs = $cn < $left_x ? $left_x - $cn : 0;
-
-				# the copy end is the min of the right and the end of the text
-				# and the copy length is the usual ...
-
-				my $ce = $text_end > $right_x ? $right_x : $text_end;
-				my $cl = $ce - $cs + 1;
-
-				display($dbg_copy,2,"cn($cn) len($len) end($text_end) cs($cs) ce($ce) cl($cl) substr($cs,$cl,"._lim($text,40).")");
-
-				my $txt = substr($text,$cs,$cl);
-				display($dbg_copy,3,"($txt)");
-				$retval .= $txt;
-
-			}	# copy from this part
-
-			$cn += $len;
-
-		}	# for each part
-
-		# I could pad the alt rectangle as needed ... but for now
-		# contrarily, I'm removing any trialing whitepace
-
-		$retval =~ s/\s+$//;
-		$retval .= "\n";
-			# for now all lines are \n terminated
+				$part = substr($text,$sc,$ec-$sc+1);
+				display($dbg_copy,2,"single line part=$part");
+			}
+			else
+			{
+				$part = substr($text,$sc);
+				display($dbg_copy,2,"first line part=$part");
+			}
+			$retval .= $part;
+		}
+		elsif ($line_num == $el)
+		{
+			my $part = substr($text,0,$ec+1);
+			display($dbg_copy,2,"last line part=$part");
+			$retval .= $part;
+		}
+		else
+		{
+			display($dbg_copy,2,"middle line part=$text");
+			$retval .= $text;
+		}
 
 	}	# for each line
 

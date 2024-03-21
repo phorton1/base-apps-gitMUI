@@ -56,6 +56,7 @@ sub addContextMenu
 sub popupContextMenu
 {
 	my ($this,$context) = @_;
+	$context ||= {};
 	$this->{popup_context} = $context;
 
 	display_hash($dbg_menu,0,"popupContextMenu()",$context);
@@ -68,7 +69,9 @@ sub popupContextMenu
 
 	my $is_sub_ref = 0;
 	my $is_same_repo = 0;
-	my $filename = '';
+	my $path = $context->{path} || '';
+	my $filename = $context->{filename} || '';
+
 	my $repo = $context->{repo};
 	my $repo_path = $repo ? $repo->{path} : '';
 	my $repo_id = $repo ? $repo->{id} : '';
@@ -89,7 +92,7 @@ sub popupContextMenu
 	my $is_this_sub = $is_same_repo &&
 		$this->{window_id} == $ID_SUBS_WINDOW;
 
-	display($dbg_menu,1,"filename($filename) rpath($repo_path) rid($repo_id)");
+	display($dbg_menu,1,"path($path) filename($filename) rpath($repo_path) rid($repo_id)");
 	display($dbg_menu,1,"is_sub($is_sub_ref) is_same($is_same_repo) ".
 		"is_this_info($is_this_info) is_this_sub($is_this_sub)");
 
@@ -108,8 +111,8 @@ sub popupContextMenu
 		next if $id == $ID_CONTEXT_OPEN_GITUI && ($filename || !$repo_path);
 		next if $id == $ID_CONTEXT_BRANCH_HISTORY && ($filename || !$repo_path);
 		next if $id == $ID_CONTEXT_ALL_HISTORY && ($filename || !$repo_path);
-		next if $id == $ID_CONTEXT_OPEN_GITHUB && $filename || (!$repo_id && !$context->{url});
-		next if $id == $ID_CONTEXT_OPEN_EXPLORER && !$filename && !$repo_path && !$context->{path};
+		next if $id == $ID_CONTEXT_OPEN_GITHUB && ($filename || (!$repo_id && !$context->{url}));
+		next if $id == $ID_CONTEXT_OPEN_EXPLORER && !$path && !$filename && !$repo_path;
 		next if $id == $ID_CONTEXT_OPEN_IN_EDITOR && (!$filename || $filename !~ /\.($editor_exts)$/);
 		next if $id == $ID_CONTEXT_OPEN_IN_SHELL && (!$filename || $filename !~ /\.($shell_exts)$/);
 		next if $id == $ID_CONTEXT_OPEN_IN_NOTEPAD && !$filename;
@@ -130,8 +133,10 @@ sub onContextMenu
 	my $context = $this->{popup_context};
 
 	my $repo = $context->{repo};
-	my $filename = $repo && $context->{file} ?
-		$repo->{path}.$context->{file} : '';
+	my $filename =
+		$context->{filename} ? $context->{filename} :
+		$repo && $context->{file} ?
+			$repo->{path}.$context->{file} : '';
 
 	display_hash($dbg_menu,0,"onContextMenu($command_id)",$context);
 

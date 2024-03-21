@@ -639,25 +639,35 @@ sub contentLine
 
 sub contentArray
 {
-	my ($this,$text_ctrl,$bold,$key,$color,$ucase,$sub_context) = @_;
+	my ($this,$text_ctrl,$bold,$key,$color,$ucase,$sub_context,$level,$already_uses) = @_;
 	$ucase ||= 0;
+	$level ||= 0;
+	$already_uses ||= {};
+
 	my $label = $key;
 	$label = uc($label) if $ucase;
 	my $array = $this->{$key};
 	return '' if !$array || !@$array;
 
-	my $line = $text_ctrl->addLine();
-	$text_ctrl->addPart($line, $bold, $color_black, $label, $sub_context);
+	if (!$level)
+	{
+		my $line = $text_ctrl->addLine();
+		$text_ctrl->addPart($line, $bold, $color_black, $label, $sub_context);
+	}
 
 	$color = $color_blue if !defined($color);
 	for my $item (@$array)
 	{
+		next if $key eq 'uses' && $already_uses->{$item};
+		$already_uses->{$item} = 1 if $key eq 'uses';
+
+		my $repo;
 		my $context;
 		my $value = $item;
 
 		if ($key eq 'submodules')
 		{
-			my $repo = apps::gitUI::repos::getRepoByPath($value);
+			$repo = apps::gitUI::repos::getRepoByPath($value);
 			$context = { repo => $repo, open_repo_sub => 1 };
 			$color = linkDisplayColor($repo);
 		}
@@ -666,7 +676,10 @@ sub contentArray
 			$key eq 'friend' ||
 			$key eq 'used_in')
 		{
-			my $repo = apps::gitUI::repos::getRepoByPath($value);
+			my $path = $value;
+			$path =~ s/^-+// if $key eq 'used_by';
+				# remove -'s that show how deeply it is used_by
+			$repo = apps::gitUI::repos::getRepoByPath($path);
 			$context = { repo => $repo };
 			$color = linkDisplayColor($repo);
 		}
@@ -684,13 +697,130 @@ sub contentArray
 			$context = { repo => $top_repo, file=>"/$value.md" };
 		}
 
-		# GROUPS are recursive through USES and FRIEND.
-		# only the highest level repos need to be specified as groups.
-		# The recursion should be handled in parseRepos()
-
-		$line = $text_ctrl->addLine();
-		$text_ctrl->addPart($line, 0, $color_black, pad('',4));
+		my $line = $text_ctrl->addLine();
+		$text_ctrl->addPart($line, 0, $color_black, pad('',($level+1) * 4));
 		$text_ctrl->addPart($line, $bold, $color, $value, $context);
+
+		# Inline recursion through 'uses' so that sub-uses
+		# are indented under their parents.
+
+		if ($key eq 'uses')
+		{
+			contentArray($repo,$text_ctrl,$bold,$key,$color,$ucase,$sub_context,$level+1,$already_uses);
+		}
+	}
+}
+
+# Recursion
+#
+# GROUPS are recursive through USES and FRIEND.
+#     not implemented yet
+#     only the highest level repos need to be specified as groups.
+#     The recursion should be handled in parseRepos()
+# 'uses' are recursed inline in contentArray
+#
+# For 'needs' we have a separate method that shows the direct NEEDS
+#   then recurses through uses adding "FROM" subheaders and any
+#   as yet unshown needs
+
+sub contentNeeds
+{
+	my ($this,$text_ctrl,$header_shown,$level,$already_uses,$already_needs) = @_;
+
+	$header_shown ||= 0;
+	$level ||= 0;
+	$already_uses ||= {};
+	$already_needs ||= {};
+	$already_uses->{$this->{path}} = 1;
+
+	my $from_header_shown = 0;
+
+	my $needs = $this->{needs};
+	if ($needs)
+	{
+		if (!$header_shown)
+		{
+			$header_shown = 1;
+			$text_ctrl->addSingleLine(0, $color_black, 'needs');
+		}
+		for my $need (@$needs)
+		{
+			next if $already_needs->{$need};
+			$already_needs->{$need} = 1;
+			if ($level && !$from_header_shown)
+			{
+				$from_header_shown = 1;
+				$text_ctrl->addSingleLine(0, $color_black,
+					pad('',$level*4)."from: ".$this->{path})
+			}
+			my $context = { path => $need };
+			my $line = $text_ctrl->addLine();
+			$text_ctrl->addPart($line, 0, $color_black, pad('',($level+1) * 4));
+			$text_ctrl->addPart($line, 0, $color_blue, $need, $context);
+		}
+	}
+
+	my $uses = $this->{uses};
+	if ($uses)
+	{
+		for my $use (@$uses)
+		{
+			next if $already_uses->{$use};
+			my $repo = apps::gitUI::repos::getRepoByPath($use);
+			contentNeeds($repo,$text_ctrl,$header_shown,$level+1,$already_uses,$already_needs)
+		}
+	}
+}
+
+
+sub contentEWN
+	# Errors, Warnings, and Notes can contain references to local repos by path
+{
+	my ($this,$text_ctrl,$bold,$key,$main_color) = @_;
+	$main_color ||= $color_black;
+
+	my $array = $this->{$key};
+	return if !$array || !@$array;
+
+	$text_ctrl->addSingleLine($bold, $main_color, $key);
+
+	for my $item (@$array)
+	{
+		my $text = '    ';
+		my $count = 0;
+		my $line = $text_ctrl->addLine();
+		my @parts = split(/\s/,$item);
+		for my $part (@parts)
+		{
+			my $repo = '';
+			my $path = '';
+			my $filename = '';
+			if ($part =~ /^\//)
+			{
+				$repo = apps::gitUI::repos::getRepoByPath($part);
+				$path = $part if -d $part;
+				$filename = $part if -f $part;
+			}
+			if ($repo || $path || $filename)
+			{
+				$text .= ' ' if $count;
+				$text_ctrl->addPart($line, 0, $main_color, $text) if $text;
+				$text = '';
+				my $context =
+					$repo ? { repo => $repo } :
+					$path ? { path => $path } :
+					{ filename => $filename };
+				my $color = $repo ? linkDisplayColor($repo) : $color_blue;
+				$text_ctrl->addPart($line, 0, $color, $part, $context);
+			}
+			else
+			{
+				$text .= ' ' if $count;
+				$text .= $part;
+			}
+			$count++;
+		}
+		$text_ctrl->addPart($line, 0, $main_color, $text) if $text;
 	}
 }
 
@@ -867,9 +997,9 @@ sub toTextCtrl
 		@{$this->{notes}})
 	{
 		$text_ctrl->addLine();
-		$this->contentArray($text_ctrl,1,'errors',$color_red);
-		$this->contentArray($text_ctrl,1,'warnings',$color_magenta);
-		$this->contentArray($text_ctrl,0,'notes');
+		$this->contentEWN($text_ctrl,1,'errors',$color_red);
+		$this->contentEWN($text_ctrl,1,'warnings',$color_magenta);
+		$this->contentEWN($text_ctrl,0,'notes');
 	}
 
 	# COMMIT INFORMATION for debugging visible without scrolling
@@ -896,7 +1026,8 @@ sub toTextCtrl
 		$this->contentArray($text_ctrl,0,'docs');
 		$this->contentArray($text_ctrl,0,'uses');
 		$this->contentArray($text_ctrl,0,'used_by');
-		$this->contentArray($text_ctrl,0,'needs');
+		$this->contentNeeds($text_ctrl);
+		# $this->contentArray($text_ctrl,0,'needs');
 		$this->contentArray($text_ctrl,0,'friend');
 		$this->contentArray($text_ctrl,0,'group');
 		$text_ctrl->addLine();
