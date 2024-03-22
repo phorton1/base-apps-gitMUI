@@ -19,7 +19,7 @@ BEGIN
  	use Exporter qw( import );
 	our @EXPORT = ( qw(
 
-		$ID_PATH_WINDOW
+		$ID_REPOS_WINDOW
 		$ID_INFO_WINDOW
 		$ID_COMMIT_WINDOW
 		$ID_SUBS_WINDOW
@@ -92,7 +92,7 @@ our (
 
 	# Windows handled by appFrame::createPane
 
-	$ID_PATH_WINDOW,
+	$ID_REPOS_WINDOW,
 	$ID_COMMIT_WINDOW,
 	$ID_INFO_WINDOW,
 	$ID_SUBS_WINDOW,
@@ -175,7 +175,7 @@ our (
 # But notice we merge with the base Resources Class
 
 mergeHash($resources->{command_data},{
-	$ID_PATH_WINDOW				=> ['Paths',			'View all repositories by path grouped by sections'],
+	$ID_REPOS_WINDOW			=> ['Repos',			'View all repositories in a single window'],
 	$ID_COMMIT_WINDOW       	=> ['Commit',			'A gitGUI like window that allows staging, commit, and push' ],
 	$ID_INFO_WINDOW				=> ['Info',				'List of Repos with Details' ],
 	$ID_SUBS_WINDOW				=> ['Subs',				'Show status of all submodules' ],
@@ -206,7 +206,7 @@ my @main_menu = (
 );
 
 unshift @{$resources->{view_menu}},(
-	$ID_PATH_WINDOW,
+	$ID_REPOS_WINDOW,
 	$ID_INFO_WINDOW,
 	$ID_COMMIT_WINDOW,
 	$ID_SUBS_WINDOW,

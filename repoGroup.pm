@@ -5,7 +5,7 @@
 # {name} and {repo} members, and somethwat orthogonal to
 # a repo object, that has {id}, and other members, and
 # canPush() and other methods that are called from the
-# infoWindow for UpdateUI and to gather sub-repos that
+# winInfo for UpdateUI and to gather sub-repos that
 # need pushing and pulling.
 #
 # It has a {is_subgroup} member to allow clients to
@@ -14,10 +14,10 @@
 #
 # NOTE THAT THE {path} MEMBER OF A SUBGROUP IS SPECIAL.
 # It is the ID of the master module to keep it separate
-# in the infoWindowList, and must be turned into a real
+# in the winInfoLeft, and must be turned into a real
 # path when a path is needed.
 #
-# # Used only in the sub_mode of the infoWindow, it is also
+# # Used only in the sub_mode of the winInfo, it is also
 # WX aware and adds buttons, updateUI, and a commandHandler
 # to the myTextCtrl for repoGroups.
 
@@ -456,7 +456,7 @@ sub getShortStatus
 
 
 sub toTextCtrl
-	# text ctrl has been cleared by infoWindowRight
+	# text ctrl has been cleared by winInfoRight
 
 {
 	my ($this,$text_ctrl) = @_;	#,$window_id) = @_;

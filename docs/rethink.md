@@ -23,7 +23,7 @@ In addition the system allows for LOCAL_ONLY and REMOTE_ONLY repos.
 LOCAL_ONLY repos can be used for Commits, but (obviously) cannot be
 Pushed or Pulled.
 
-REMOTE_ONLY repos can be viewed in the infoWindow but are not otherwise
+REMOTE_ONLY repos can be viewed in the winInfo but are not otherwise
 used within the program.
 
 LOCAL_ONLY and REMOTE_ONLY repos generate Warnings during
@@ -53,7 +53,7 @@ a given LOCAL repo using Git::Raw::Repository->head() and
 the shorthand() method.
 
 
-There is an explicit warning given in the infoWindow if
+There is an explicit warning given in the winInfo if
 the local branch does not match the gitHub default_branch.
 
 

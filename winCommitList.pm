@@ -1,13 +1,13 @@
 #-------------------------------------------
-# apps::gitMUI::commitList
+# apps::gitMUI::winCommitList
 #-------------------------------------------
 # The two 'staged' and 'unstaged' areas
-# in the left hand part of the commitWindow.
+# in the left hand part of the winCommit.
 #
 # Presumably a wxListCtrl is faster than anything I could write.
 
 
-package apps::gitMUI::commitList;
+package apps::gitMUI::winCommitList;
 use strict;
 use warnings;
 use threads;
@@ -20,7 +20,7 @@ use apps::gitMUI::utils;
 use apps::gitMUI::repo;
 use apps::gitMUI::repos;
 use apps::gitMUI::Resources;
-use apps::gitMUI::commitListCtrl;
+use apps::gitMUI::winCommitCtrl;
 use Pub::Utils;
 use base qw(Wx::Window);
 
@@ -43,7 +43,7 @@ my $PANE_TOP = 25;
 sub new
 {
     my ($class,$parent,$is_staged,$splitter,$data) = @_;
-	display($dbg_life,0,"new commitList($is_staged) data="._def($data));
+	display($dbg_life,0,"new winCommitList($is_staged) data="._def($data));
 	$data ||= {};
 
     my $this = $class->SUPER::new($splitter);
@@ -61,7 +61,7 @@ sub new
 		'Staged Changed (Will Commit)' : 'Unstaged Changes',
 		[86,5]);
 
-	$this->{list_ctrl} = apps::gitMUI::commitListCtrl->new($this,$is_staged,$PANE_TOP,$data->{list_ctrl});
+	$this->{list_ctrl} = apps::gitMUI::winCommitCtrl->new($this,$is_staged,$PANE_TOP,$data->{list_ctrl});
 
 	$this->populate();
 

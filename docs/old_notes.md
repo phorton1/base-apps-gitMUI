@@ -234,7 +234,7 @@ With Multiple windows presenting the list.
 With Commands that can modify it.
 
 
-- current pathWindow ALL BY SECTIONS
+- current winRepos ALL BY SECTIONS
 - CHANGED REPOS showing files
 - whole UI with STAGE and FILE DIFFS splitters
 

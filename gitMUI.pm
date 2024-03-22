@@ -31,9 +31,9 @@ use apps::gitMUI::utils;
 use apps::gitMUI::Resources;
 use apps::gitMUI::command;
 use apps::gitMUI::monitor;
-use apps::gitMUI::pathWindow;
-use apps::gitMUI::infoWindow;
-use apps::gitMUI::commitWindow;
+use apps::gitMUI::winRepos;
+use apps::gitMUI::winInfo;
+use apps::gitMUI::winCommit;
 use apps::gitMUI::progressDialog;
 use apps::gitMUI::dialogDisplay;
 use base qw(Pub::WX::Frame);
@@ -107,7 +107,7 @@ sub new
     $this->CreateStatusBar();
 	$this->SetMinSize([100,100]);
 
-	EVT_MENU_RANGE($this, $ID_PATH_WINDOW, $ID_STATUS_WINDOW, \&onOpenWindowById);
+	EVT_MENU_RANGE($this, $ID_REPOS_WINDOW, $ID_STATUS_WINDOW, \&onOpenWindowById);
 	EVT_MENU_RANGE($this, $ID_COMMAND_RESCAN, $ID_COMMAND_PULL_ALL, \&onCommand);
 	EVT_UPDATE_UI_RANGE($this, $ID_COMMAND_RESCAN, $ID_COMMAND_PULL_ALL, \&onUpdateUI);
 
@@ -136,24 +136,24 @@ sub createPane
 		" book="._def($book).
 		" data="._def($data) );
 
-	if ($id == $ID_PATH_WINDOW)
+	if ($id == $ID_REPOS_WINDOW)
 	{
 		my $pane = $this->activateSingleInstancePane($id,$book,$data);
 		return $pane if $pane;
 	    $book ||= $this->{book};
-        return apps::gitMUI::pathWindow->new($this,$id,$book,$data);
+        return apps::gitMUI::winRepos->new($this,$id,$book,$data);
     }
 	elsif ($id == $ID_INFO_WINDOW || $id == $ID_SUBS_WINDOW)
 	{
 		my $pane = $this->activateSingleInstancePane($id,$book,$data);
 		return $pane if $pane;
 		$book ||= $this->{book};
-        return apps::gitMUI::infoWindow->new($this,$id,$book,$data);
+        return apps::gitMUI::winInfo->new($this,$id,$book,$data);
 	}
 	elsif ($id == $ID_COMMIT_WINDOW)
 	{
 		$book ||= $this->{book};
-        return apps::gitMUI::commitWindow->new($this,$id,$book,$data);
+        return apps::gitMUI::winCommit->new($this,$id,$book,$data);
 	}
 
     return $this->SUPER::createPane($id,$book,$data);

@@ -399,7 +399,7 @@ sub canCommit
 	# Do we prevent commits when the repo is BEHIND
 	# or needs a REBASE?  I think instead I will give
 	# a warning message in the only place that Commit
-	# occurs - from the commitWindow, warning the user
+	# occurs - from the winCommit, warning the user
 	# that the commit will cause a need for a Merge,
 	# and allowing it if they want to do something weird.
 {
@@ -903,7 +903,7 @@ sub addTextForHashNum
 
 
 sub toTextCtrl
-	# text ctrl has been cleared by infoWindowRight
+	# text ctrl has been cleared by winInfoRight
 {
 	my ($this,$text_ctrl,$window_id) = @_;
 	$text_ctrl->addLine();	# blank first line

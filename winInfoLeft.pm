@@ -1,7 +1,7 @@
 #-------------------------------------------
-# apps::gitMUI::infoWindowList
+# apps::gitMUI::winInfoLeft
 #-------------------------------------------
-# The left portion of the infoWindow sections
+# The left portion of the winInfo sections
 # containing lists of repos. Based on {sub_mode}
 # these will be the entire list of repos, with
 # possibly unclickable black section headers,
@@ -12,7 +12,7 @@
 # from repos.pm, or a list of subGroups from subGroups.pm.
 # subGroups present an orthognal API that looks like
 # a 'section', as well as looking like a 'repo' for use
-# by this infoWindowList, the infoWindowRight, and the
+# by this winInfoLeft, the winInfoRight, and the
 # myTextCtrl.
 #
 # Note that the subGroups are kept in a separate set
@@ -21,7 +21,7 @@
 # PS, I think much of this ID_NUMBER complexity could go away
 # if I made the repo and/or path a member of the HyperLinks.
 
-package apps::gitMUI::infoWindowList;
+package apps::gitMUI::winInfoLeft;
 use strict;
 use warnings;
 use threads;
@@ -63,7 +63,7 @@ BEGIN {
 sub new
 {
     my ($class,$parent,$splitter) = @_;
-	display($dbg_life,0,"new infoWindowList()");
+	display($dbg_life,0,"new winInfoLeft()");
 
     my $this = $class->SUPER::new($splitter,-1,[0,0],[-1,-1]);
 
@@ -172,7 +172,7 @@ sub selectObject
 	display($dbg_sel,0,"selectObject($uuid)");
 
 	# $this->{parent}->SetFocus();
-		# switch to the infoWindow if called
+		# switch to the winInfo if called
 		# from another window
 
 	my $ctrl = $this->{ctrls_by_uuid}->{$uuid};
@@ -354,7 +354,7 @@ sub newCtrl
 
 
 sub notifyRepoChanged
-	# Called by infoWindow when the monitor
+	# Called by winInfo when the monitor
 	# detects a change to a repo
 {
 	my ($this,$repo) = @_;

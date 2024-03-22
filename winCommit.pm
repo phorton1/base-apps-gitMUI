@@ -1,9 +1,9 @@
 #------------------------------------------------------------
-# apps::gitMUI::commitWindow
+# apps::gitMUI::winCommit
 #------------------------------------------------------------
 # A gitGUI like window that acts on multiple repositories
 
-package apps::gitMUI::commitWindow;
+package apps::gitMUI::winCommit;
 use strict;
 use warnings;
 use threads;
@@ -13,8 +13,8 @@ use Wx::Event qw(
 	EVT_SPLITTER_SASH_POS_CHANGED
 	EVT_SIZE );
 use apps::gitMUI::Resources;
-use apps::gitMUI::commitList;
-use apps::gitMUI::commitRight;
+use apps::gitMUI::winCommitList;
+use apps::gitMUI::winCommitRight;
 use Pub::Utils;
 use Pub::WX::Window;
 use base qw(Pub::WX::Window);
@@ -54,7 +54,7 @@ sub new
 	# the 'data' member is the name of the connection information
 {
 	my ($class,$frame,$id,$book,$data) = @_;
-	display($dbg_life,0,"commitWindow:new("._def($data).")");
+	display($dbg_life,0,"winCommit:new("._def($data).")");
 	$data ||= {};
 
 	# use $data if provided
@@ -91,9 +91,9 @@ sub new
 	$vert_splitter->SetMinimumPaneSize(20);
 	$left_splitter->SetMinimumPaneSize(20);
 
-	my $unstaged  = $this->{unstaged} = apps::gitMUI::commitList->new($this,0,$left_splitter,$data->{unstaged});
-	my $staged    = $this->{staged}   = apps::gitMUI::commitList->new($this,1,$left_splitter,$data->{staged});
-	my $right     = $this->{right} 	  = apps::gitMUI::commitRight->new($this,$vert_splitter,$data->{right});
+	my $unstaged  = $this->{unstaged} = apps::gitMUI::winCommitList->new($this,0,$left_splitter,$data->{unstaged});
+	my $staged    = $this->{staged}   = apps::gitMUI::winCommitList->new($this,1,$left_splitter,$data->{staged});
+	my $right     = $this->{right} 	  = apps::gitMUI::winCommitRight->new($this,$vert_splitter,$data->{right});
 
     $vert_splitter->SplitVertically($left_splitter,$right,300);
     $left_splitter->SplitHorizontally($unstaged,$staged,100);
@@ -177,7 +177,7 @@ sub onSashPosChanged
 sub populate
 {
 	my ($this) = @_;
-	display($dbg_pop,0,"commitWindow::populate()");
+	display($dbg_pop,0,"winCommit::populate()");
 	$this->{unstaged}->populate();
 	$this->{staged}->populate();
 }

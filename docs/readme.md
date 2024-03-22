@@ -43,7 +43,7 @@ multiple repositories simultaneously include:
   Anytime you save a changed file to the disk, gitMUI will automatically
   notice it, and update the system to reflect the changed file,
   including adding it to the *unstaged changes* and updating
-  the *diff pannel* in the *commitWindow* if that file happens
+  the *diff pannel* in the *winCommit* if that file happens
   to be showing.
 - The ability to **Push** and **Pull** multiple different
   repos in a single operation, including the ability to
@@ -110,12 +110,12 @@ repo on a different machine.
 
 So I expanded the program from a simple list of repos
 that linked to gitGUI into a multi-window application,
-where the list became the **pathWindow** as I added the
-new **commitWindow**.  At first I used "shell" commands
+where the list became the **winRepos** as I added the
+new **winCommit**.  At first I used "shell" commands
 to call git command line operations, but I had several
 issues running git as a shell command from within a wxPerl UI.
 
-I spent several months implementing the commitWindow, as well as the
+I spent several months implementing the winCommit, as well as the
 ability to Diff and Push repos using the Perl Git::Raw module.
 Git::Raw allows me to directly manipulate repos from Perl without
 doing shell commands all over the place.
@@ -186,12 +186,12 @@ The program consists of four main windows:
 
 - **pathsWinow** - shows all of the repos on your machine
   in a single glance.
-- **commitWindow** - shows any *unstaged* or *staged* changes
+- **winCommit** - shows any *unstaged* or *staged* changes
   in *any repo* on your machine, allowing you to
   *stage, unstage, revert, or commit* those changes.
   This window also contains the **diffPanel** which
   allows you to see changes to any individual file.
-- **infoWindow** - presents a list of all the repos on
+- **winInfo** - presents a list of all the repos on
   your machine in a left *infoList* panel, and shows
   information about the selected repo, including its
   *status and history* in the right *information* panel.

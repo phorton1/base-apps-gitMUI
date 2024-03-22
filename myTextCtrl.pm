@@ -1125,7 +1125,7 @@ sub onMouse
 
 	# eat the event if it's a click, so that
 	# the window changes appropriate if a link
-	# to the infoWindow is clicked from the commitWindow
+	# to the winInfo is clicked from the winCommit
 
 	$event->Skip() if $do_skip;
 		# needed or else wont get key events

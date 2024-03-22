@@ -1,5 +1,5 @@
 #------------------------------------------------------------
-# apps::gitMUI::infoWindow
+# apps::gitMUI::winInfo
 #------------------------------------------------------------
 # A window that shows a list of repos on the left,
 # 	and details on the right.
@@ -8,7 +8,7 @@
 #   $ID_SUBS_WINDOW = list of MAIN_MODULES, with SUBMODULES under them
 
 
-package apps::gitMUI::infoWindow;
+package apps::gitMUI::winInfo;
 use strict;
 use warnings;
 use threads;
@@ -21,8 +21,8 @@ use Pub::Utils;
 use Pub::WX::Window;
 use apps::gitMUI::utils;
 use apps::gitMUI::Resources;
-use apps::gitMUI::infoWindowList;
-use apps::gitMUI::infoWindowRight;
+use apps::gitMUI::winInfoLeft;
+use apps::gitMUI::winInfoRight;
 use base qw(Pub::WX::Window);
 
 
@@ -53,7 +53,7 @@ sub new
 	# the 'data' member is the name of the connection information
 {
 	my ($class,$frame,$id,$book,$data) = @_;
-	display($dbg_life,0,"infoWindow:new($id,"._def($data).")");
+	display($dbg_life,0,"winInfo:new($id,"._def($data).")");
 	$data ||= {};
 
 	# use $data if provided
@@ -80,8 +80,8 @@ sub new
 	my $vert_splitter  = $this->{vert_splitter}  = Wx::SplitterWindow->new($this, 		   $ID_INFO_SPLITTER_VERT, [0, 0]);
 	$vert_splitter->SetMinimumPaneSize(20);
 
-	my $left = $this->{left} = apps::gitMUI::infoWindowList->new($this,$vert_splitter);
-	my $right = $this->{right} = apps::gitMUI::infoWindowRight->new($this,$vert_splitter);
+	my $left = $this->{left} = apps::gitMUI::winInfoLeft->new($this,$vert_splitter);
+	my $right = $this->{right} = apps::gitMUI::winInfoRight->new($this,$vert_splitter);
 
     $vert_splitter->SplitVertically($left,$right,300);
 
@@ -159,7 +159,7 @@ sub onSashPosChanged
 sub populate
 {
 	my ($this) = @_;
-	display($dbg_pop,0,"infoWindow::populate()");
+	display($dbg_pop,0,"winInfo::populate()");
 	$this->{left}->populate();
 }
 

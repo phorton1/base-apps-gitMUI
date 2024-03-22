@@ -282,9 +282,9 @@ our $color_black 	     = Wx::Colour->new(0x00, 0x00, 0x00);
 our $color_red     	     = Wx::Colour->new(0xE0, 0x00, 0x00);		# commit: deletes; link: errors or needs pull; dialog: repoError
 our $color_green   	     = Wx::Colour->new(0x00, 0x60, 0x00);		# commit: staged M's; link: public
 our $color_blue    	     = Wx::Colour->new(0x00, 0x00, 0xC0);		# commit: icons and repo line; link: private
-our $color_cyan          = Wx::Colour->new(0x00, 0xE0, 0xE0);		# infoWindowRight header
+our $color_cyan          = Wx::Colour->new(0x00, 0xE0, 0xE0);		# winInfoRight header
 our $color_magenta       = Wx::Colour->new(0xC0, 0x00, 0xC0);		# link: staged or unstaged changes
-our $color_yellow        = Wx::Colour->new(0xFF, 0xD7, 0x00);		# commitRight title background; dialog: repoWarning
+our $color_yellow        = Wx::Colour->new(0xFF, 0xD7, 0x00);		# winCommitRight title background; dialog: repoWarning
 our $color_dark_yellow   = Wx::Colour->new(0xA0, 0xA0, 0x00);		# default branch warning
 our $color_grey          = Wx::Colour->new(0x99, 0x99, 0x99);		# unused
 our $color_purple        = Wx::Colour->new(0x60, 0x00, 0xC0);		# unused
@@ -293,12 +293,12 @@ our $color_white         = Wx::Colour->new(0xFF, 0xFF, 0xFF);		# dialog: repoNot
 our $color_medium_cyan   = Wx::Colour->new(0x00, 0x60, 0xC0);		# repo: forked
 our $color_dark_cyan     = Wx::Colour->new(0x00, 0x60, 0x60);		# unused
 our $color_lime  	     = Wx::Colour->new(0x50, 0xA0, 0x00);		# hitory: tags
-our $color_light_grey    = Wx::Colour->new(0xF0, 0xF0, 0xF0);		# commitRight panel; dialog: repoDisplay
-our $color_medium_grey   = Wx::Colour->new(0xC0, 0xC0, 0xC0);		# infoWindowList selected item
+our $color_light_grey    = Wx::Colour->new(0xF0, 0xF0, 0xF0);		# winCommitRight panel; dialog: repoDisplay
+our $color_medium_grey   = Wx::Colour->new(0xC0, 0xC0, 0xC0);		# winInfoLeft selected item
 
-our $color_git_staged    = Wx::Colour->new(0xA0, 0xFF, 0xA0);		# commitList(staged) green headeer
-our $color_git_unstaged  = Wx::Colour->new(0xff, 0xB0, 0xA0);		# commitList(unstqaged) orange header
-our $color_item_selected = Wx::Colour->new(0x00, 0x78, 0xD7);		# commitList selected item background
+our $color_git_staged    = Wx::Colour->new(0xA0, 0xFF, 0xA0);		# winCommitList(staged) green headeer
+our $color_git_unstaged  = Wx::Colour->new(0xff, 0xB0, 0xA0);		# winCommitList(unstqaged) orange header
+our $color_item_selected = Wx::Colour->new(0x00, 0x78, 0xD7);		# winCommitList selected item background
 	# 120, 215 from git highlight
 
 

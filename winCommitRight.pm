@@ -1,10 +1,10 @@
 #-------------------------------------------
-# apps::gitMUI::commitRight
+# apps::gitMUI::winCommitRight
 #-------------------------------------------
-# The right side of the commitWindow contains
+# The right side of the winCommit contains
 # the diff_ctrl and command portions
 
-package apps::gitMUI::commitRight;
+package apps::gitMUI::winCommitRight;
 use strict;
 use warnings;
 use threads;
@@ -56,7 +56,7 @@ my $COMMIT_MSG_HEIGHT = $DEFAULT_COMMAND_AREA_HEIGHT - 10;
 sub new
 {
     my ($class,$parent,$main_splitter) = @_;
-	display($dbg_life,0,"new commitRight()");
+	display($dbg_life,0,"new winCommitRight()");
 		# $parent,$main_splitter) frame="._def($parent->{frame}));
     my $this = $class->SUPER::new($main_splitter);
     $this->{parent} = $parent;
@@ -190,7 +190,7 @@ sub onButton
 {
 	my ($this,$event) = @_;
 	my $id = $event->GetId();
-	display($dbg_cmds,0,"commitRight::onButton($id)");
+	display($dbg_cmds,0,"winCommitRight::onButton($id)");
 
 	my $frame = $this->{frame};
 	if ($id == $ID_COMMAND_RESCAN ||
@@ -432,7 +432,7 @@ sub notifyItemSelected
 	my $id = $repo ? $repo->{id} : '';
 	my $fn = $item ? $item->{fn} : '';
 	my $type = $item ? $item->{type} : '';
-	display($dbg_notify,0,"commitRight::notifyItemSelected($is_staged,$id,$fn,$type) called");
+	display($dbg_notify,0,"winCommitRight::notifyItemSelected($is_staged,$id,$fn,$type) called");
 
 	$this->{diff_binary} = 0;
 	my $diff_ctrl = $this->{diff_ctrl};

@@ -1,10 +1,10 @@
 #-------------------------------------------
-# apps::gitMUI::infoWindowRight
+# apps::gitMUI::winInfoRight
 #-------------------------------------------
-# The right side of the infoWindow myTextCtrl display area
+# The right side of the winInfo myTextCtrl display area
 # and a Pane with possible future command buttons
 
-package apps::gitMUI::infoWindowRight;
+package apps::gitMUI::winInfoRight;
 use strict;
 use warnings;
 use threads;
@@ -47,7 +47,7 @@ my $RIGHT_MARGIN = 10;
 sub new
 {
     my ($class,$parent,$splitter) = @_;
-	display($dbg_life,0,"new infoWindowRight()");
+	display($dbg_life,0,"new winInfoRight()");
     my $this = $class->SUPER::new($splitter);
     $this->{parent} = $parent;
 
@@ -166,7 +166,7 @@ sub onButton
 {
 	my ($this,$event) = @_;
 	my $id = $event->GetId();
-	display($dbg_cmds,0,"infoWindowRight::onButton($id) repo=".($this->{repo}?$this->{repo}->{path}:'undef'));
+	display($dbg_cmds,0,"winInfoRight::onButton($id) repo=".($this->{repo}?$this->{repo}->{path}:'undef'));
 
 	if ($id == $ID_COMMAND_REFRESH_STATUS)
 	{
@@ -202,7 +202,7 @@ sub onButton
 sub notifyObjectSelected
 {
 	my ($this,$obj) = @_;
-	display($dbg_notify,0,"infoWindowRight::notifyObjectSelected($obj->{path})");
+	display($dbg_notify,0,"winInfoRight::notifyObjectSelected($obj->{path})");
 
 	my $text_ctrl = $this->{text_ctrl};
 	$text_ctrl->clearContent();

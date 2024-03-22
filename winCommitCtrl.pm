@@ -2,9 +2,9 @@
 # PRH TODO: NEED ARROW KEYS
 #
 #-------------------------------------------
-# apps::gitMUI::commitListCtrl
+# apps::gitMUI::winCommitCtrl
 #-------------------------------------------
-# custom listCtrl for use by commitList
+# custom listCtrl for use by winCommitList
 #
 # layout:
 #
@@ -27,7 +27,7 @@
 #          see comments on onLeftDown() for gruesome
 #          details of SHIFT and CTRL handling
 
-package apps::gitMUI::commitListCtrl;
+package apps::gitMUI::winCommitCtrl;
 use strict;
 use warnings;
 use threads;
@@ -95,7 +95,7 @@ sub new
     my ($class,$parent,$is_staged,$PAGE_TOP,$data) = @_;
     my $name = $is_staged ? 'staged' : 'unstaged';
 
-	display($dbg_ctrl,0,"new commitListCtrl($name,$PAGE_TOP) data="._def($data));
+	display($dbg_ctrl,0,"new winCommitCtrl($name,$PAGE_TOP) data="._def($data));
 	$data ||= { contracted => {} };
 	display_hash($dbg_ctrl,0,"expanded",$data->{contracted});
 

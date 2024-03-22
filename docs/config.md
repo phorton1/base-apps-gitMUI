@@ -168,7 +168,7 @@ These are set automatically to the gitHub values with the
   repository, and a separate gitHub request will be
   made to get information about the fork.
   FORKED may be binary, or contain text that is shown
-  in the infoWindow. Set automatically with *gitMUI init*.
+  in the winInfo. Set automatically with *gitMUI init*.
 
 ## Fairly Important VERBS with REPOS
 
@@ -178,19 +178,19 @@ integrity checks about relationships between repos.
 - **USES** abs_repo_path - speficies that this repo USES
   another repo on the local machine. In turn, this creates
   USED_BY members on those repos, both of which end up being
-  shortcuts to opening the referred repo in the infoWindow.
+  shortcuts to opening the referred repo in the winInfo.
   *USES* creates a repository dependency graph.
 - **NEEDS** abs_path - an absolute path to a directory that
   must exist on the local machine. For dependencies other
   than repos. Provides shortcut to Windows Explorer
-  in the infoWindow.
+  in the winInfo.
 - **NOTES|WARNINGS|ERRORS** (value) - arbitrary
   keywords that let you push the rest of the line onto
   one of the arrays on the repo object. These are then,
   in turn, added to any Notes, Warnings, or Errors
   found while scanning the repos or getting information
   from gitHub, all of which affect the color of the repo's
-  links, and are shown in the infoWindow for the repo.
+  links, and are shown in the winInfo for the repo.
 
 
 ## Less important VERBS within Repos
@@ -222,7 +222,7 @@ The *description* of a repo is gotten from GitHub.
 IF the description includes "Copied from blah" followed
 by a space, the {parent} member will be display as (blah),
 and like a FORKED repo, a Browser link to the GitHub repo
-will be provided in the infoWindow.
+will be provided in the winInfo.
 
 
 ## Untracked Repos

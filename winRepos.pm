@@ -1,8 +1,9 @@
 #-------------------------------------------------------------------------
-# Window to show repos by path with section breaks
+# Window to show all repos
 #-------------------------------------------------------------------------
+# Sorted by sections, and displayedby IDs within sections
 
-package apps::gitMUI::pathWindow;
+package apps::gitMUI::winRepos;
 use strict;
 use warnings;
 use Wx qw(:everything);
@@ -38,9 +39,9 @@ sub new
 	# single instance window
 {
 	my ($class,$frame,$id,$book,$data) = @_;
-	my $name = 'Paths';
+	my $name = 'Repos';
 
-	display($dbg_win,0,"pathWindow::new($frame,$id,"._def($book).","._def($data).")");
+	display($dbg_win,0,"winRepos::new($frame,$id,"._def($book).","._def($data).")");
 	my $this = $class->SUPER::new($book,$id);
 	$this->MyWindow($frame,$book,$id,$name,$data);
 
@@ -50,7 +51,7 @@ sub new
 
 	$this->populate();
 
-	$this->addRepoMenu($ID_PATH_WINDOW);
+	$this->addRepoMenu($ID_REPOS_WINDOW);
 	EVT_SIZE($this, \&onSize);
 	return $this;
 }
