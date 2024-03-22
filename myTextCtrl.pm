@@ -1,8 +1,8 @@
 #-------------------------------------------
-# apps::gitUI::myTextCtrl
+# apps::gitMUI::myTextCtrl
 #-------------------------------------------
 
-package apps::gitUI::myTextCtrl;
+package apps::gitMUI::myTextCtrl;
 use strict;
 use warnings;
 use threads;
@@ -20,13 +20,13 @@ use Wx::Event qw(
 use Time::HiRes qw(sleep);
 use Pub::Utils;
 use Pub::Prefs;
-use apps::gitUI::utils;
-use apps::gitUI::monitor;
-use apps::gitUI::repos;
-use apps::gitUI::repoGroup;
-use apps::gitUI::Resources;
-use apps::gitUI::contextMenu;
-use base qw(Wx::ScrolledWindow apps::gitUI::contextMenu);
+use apps::gitMUI::utils;
+use apps::gitMUI::monitor;
+use apps::gitMUI::repos;
+use apps::gitMUI::repoGroup;
+use apps::gitMUI::Resources;
+use apps::gitMUI::contextMenu;
+use base qw(Wx::ScrolledWindow apps::gitMUI::contextMenu);
 
 
 my $dbg_ctrl = 0;

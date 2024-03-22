@@ -1,4 +1,4 @@
-# gitUI - Status and Updating
+# gitMUI - Status and Updating
 
 TODO: implement an actual *statusWindow*
 

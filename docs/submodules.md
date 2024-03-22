@@ -1,7 +1,7 @@
 # Submodules
 
 This readme describes the concepts behind the usage of submodules,
-provides a cookbook for using them, and describes how the gitUI
+provides a cookbook for using them, and describes how the gitMUI
 program can facilitate maintenance of them.
 
 The cannonical example is the /src/Arduino/library/myIOT/data_master
@@ -118,7 +118,7 @@ still get the rest of the myIOTServer source code changes ok.
 
 My ServiceUpdate mechanism, and updating submodules in general
 is "Work in Progress" as part of the GIT STATUS  project, currently
-under the umbrella of this apps/gitUI project.
+under the umbrella of this apps/gitMUI project.
 
 
 

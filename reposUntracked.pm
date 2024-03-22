@@ -2,7 +2,7 @@
 # find any repos that are not in git_repos.txt
 #----------------------------------------------------
 
-package apps::gitUI::reposUntracked;
+package apps::gitMUI::reposUntracked;
 use strict;
 use warnings;
 use threads;
@@ -10,11 +10,11 @@ use threads::shared;
 use Win32;
 use Pub::Utils;
 use Pub::Prefs;
-use apps::gitUI::utils;
-use apps::gitUI::repo;
-use apps::gitUI::repos;
-use apps::gitUI::repoGit;
-use apps::gitUI::reposGithub;
+use apps::gitMUI::utils;
+use apps::gitMUI::repo;
+use apps::gitMUI::repos;
+use apps::gitMUI::repoGit;
+use apps::gitMUI::reposGithub;
 
 my $dbg_scan = 1;
 my $dbg_opts = 0;

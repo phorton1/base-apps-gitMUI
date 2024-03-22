@@ -1,5 +1,5 @@
 #--------------------------------------------------
-# apps::gitUI::progressDialog
+# apps::gitMUI::progressDialog
 #--------------------------------------------------
 # A somewhat generic progress dialog
 #
@@ -12,7 +12,7 @@
 #    [sub_gauge   sub_done ... sub_range             ]
 #
 
-package apps::gitUI::progressDialog;
+package apps::gitMUI::progressDialog;
 use strict;
 use warnings;
 use threads;
@@ -21,8 +21,8 @@ use Time::HiRes qw( sleep );
 use Wx qw(:everything);
 use Wx::Event qw(EVT_BUTTON);
 use Pub::Utils;
-use apps::gitUI::utils;
-use apps::gitUI::Resources;
+use apps::gitMUI::utils;
+use apps::gitMUI::Resources;
 use base qw(Wx::Dialog);
 
 

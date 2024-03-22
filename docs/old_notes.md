@@ -1,4 +1,4 @@
-# gitUI - old notes
+# gitMUI - old notes
 
 #-----------------------------------------------
 # History, events, and change detection
@@ -203,7 +203,7 @@ I think of several different presentation paradigmns:
   - shows a tree like structure that can be expanded to
     show details, like dependencies, descriptions, etc
 - Stage/Commit/Diff ui
-  - like current gitUI but works on multiple repositories
+  - like current gitMUI but works on multiple repositories
     with tree like structures in the left hand windows.
 - Details
   - tree like structure in left, details on right

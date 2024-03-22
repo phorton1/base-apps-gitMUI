@@ -2,7 +2,7 @@
 # call github APIs to flesh out repos
 #----------------------------------------------------
 
-package apps::gitUI::reposGithub;
+package apps::gitMUI::reposGithub;
 use strict;
 use warnings;
 use threads;
@@ -15,11 +15,11 @@ use LWP::Protocol::http;
 use Mozilla::CA;
 use Pub::Utils;
 use Pub::Prefs;
-use apps::gitUI::utils;
-use apps::gitUI::repo;
-use apps::gitUI::repos;
-use apps::gitUI::repoGit;
-use apps::gitUI::monitor;
+use apps::gitMUI::utils;
+use apps::gitMUI::repo;
+use apps::gitMUI::repos;
+use apps::gitMUI::repoGit;
+use apps::gitMUI::monitor;
 
 
 $Data::Dumper::Indent = 1;
@@ -346,7 +346,7 @@ sub doGitHub
 				my $dbg_num = scalar(@$repo_list);
 				repoDisplay($dbg_github,0,"creating remoteOnlyRepo($dbg_num,$entry->{name})");
 
-				my $repo = apps::gitUI::repo->new({
+				my $repo = apps::gitMUI::repo->new({
 					where => $REPO_REMOTE,
 					id => $id,
 					section_id => 'remoteOnly',
@@ -382,7 +382,7 @@ sub doGitHub
 	if ($INIT_SYSTEM)
 	{
 		$INIT_SYSTEM = 0;
-		apps::gitUI::repos::writeNewReposFile();
+		apps::gitMUI::repos::writeNewReposFile();
 	}
 
 

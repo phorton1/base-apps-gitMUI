@@ -1,4 +1,4 @@
-# gitUI - Context Implementation Details
+# gitMUI - Context Implementation Details
 
 The system has several notions of context for selecting getting to a repo.
 

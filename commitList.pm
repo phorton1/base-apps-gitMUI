@@ -1,5 +1,5 @@
 #-------------------------------------------
-# apps::gitUI::commitList
+# apps::gitMUI::commitList
 #-------------------------------------------
 # The two 'staged' and 'unstaged' areas
 # in the left hand part of the commitWindow.
@@ -7,7 +7,7 @@
 # Presumably a wxListCtrl is faster than anything I could write.
 
 
-package apps::gitUI::commitList;
+package apps::gitMUI::commitList;
 use strict;
 use warnings;
 use threads;
@@ -16,11 +16,11 @@ use Wx qw(:everything);
 use Wx::Event qw(
 	EVT_SIZE
 	EVT_BUTTON );
-use apps::gitUI::utils;
-use apps::gitUI::repo;
-use apps::gitUI::repos;
-use apps::gitUI::Resources;
-use apps::gitUI::commitListCtrl;
+use apps::gitMUI::utils;
+use apps::gitMUI::repo;
+use apps::gitMUI::repos;
+use apps::gitMUI::Resources;
+use apps::gitMUI::commitListCtrl;
 use Pub::Utils;
 use base qw(Wx::Window);
 
@@ -61,7 +61,7 @@ sub new
 		'Staged Changed (Will Commit)' : 'Unstaged Changes',
 		[86,5]);
 
-	$this->{list_ctrl} = apps::gitUI::commitListCtrl->new($this,$is_staged,$PANE_TOP,$data->{list_ctrl});
+	$this->{list_ctrl} = apps::gitMUI::commitListCtrl->new($this,$is_staged,$PANE_TOP,$data->{list_ctrl});
 
 	$this->populate();
 

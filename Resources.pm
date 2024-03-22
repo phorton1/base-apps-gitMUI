@@ -6,7 +6,7 @@
 # Derived classes should merge their values into the base
 # class $resources member.
 
-package apps::gitUI::Resources;
+package apps::gitMUI::Resources;
 use strict;
 use warnings;
 use threads;
@@ -98,7 +98,7 @@ our (
 	$ID_SUBS_WINDOW,
 	$ID_STATUS_WINDOW,	# Not implemented yet
 
-	# UI Commands handled by gitUI.pm
+	# UI Commands handled by gitMUI.pm
 
 	$ID_COMMAND_RESCAN,
 	$ID_COMMAND_REFRESH_STATUS,
@@ -171,12 +171,12 @@ our (
 
 
 # Command data for this application.
-# Only commands for gitUI.pm have entries
+# Only commands for gitMUI.pm have entries
 # But notice we merge with the base Resources Class
 
 mergeHash($resources->{command_data},{
 	$ID_PATH_WINDOW				=> ['Paths',			'View all repositories by path grouped by sections'],
-	$ID_COMMIT_WINDOW       	=> ['Commit',			'A gitUI like window that allows staging, commit, and push' ],
+	$ID_COMMIT_WINDOW       	=> ['Commit',			'A gitGUI like window that allows staging, commit, and push' ],
 	$ID_INFO_WINDOW				=> ['Info',				'List of Repos with Details' ],
 	$ID_SUBS_WINDOW				=> ['Subs',				'Show status of all submodules' ],
 	$ID_STATUS_WINDOW			=> ['Status',			'DOES PULLS! A tabular report of Repos showing their status vis-a-vis github' ],
@@ -229,7 +229,7 @@ my @actions_menu = (
 #-----------------------------------------
 
 $resources = { %$resources,
-    app_title => 'gitUI',
+    app_title => 'gitMUI',
     main_menu => \@main_menu,
 	actions_menu => \@actions_menu,
 };

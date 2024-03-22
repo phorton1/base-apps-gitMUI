@@ -1,4 +1,4 @@
-# gitUI - a UI for working on multiple GIT repositories simultaneously
+# gitMUI - a UI for working on multiple GIT repositories simultaneously
 
 - config.md
 - submodules.md
@@ -14,7 +14,7 @@ Implementation details
 
 
 
-**gitUI** is a User Interface, written in *Perl*, for working with multiple
+**gitMUI** is a User Interface, written in *Perl*, for working with multiple
 different GIT repositories from within a single program.
 
 I have provided a **Windows Installer** to install an executable
@@ -40,7 +40,7 @@ multiple repositories simultaneously include:
 - **Automatic monitoring of file changes** in all your repos
   so that you don't need to **rescan** or do any manual
   operations to see new *changes* or *diffs*.
-  Anytime you save a changed file to the disk, gitUI will automatically
+  Anytime you save a changed file to the disk, gitMUI will automatically
   notice it, and update the system to reflect the changed file,
   including adding it to the *unstaged changes* and updating
   the *diff pannel* in the *commitWindow* if that file happens
@@ -64,7 +64,7 @@ multiple repositories simultaneously include:
   other repos, and you would like to make changes in the
   master, or any of the clones you happen to be working on,
   and then **normalize** those changes to all of the other
-  repos that use the submodule. In gitUI this can be done
+  repos that use the submodule. In gitMUI this can be done
   in a **few simple operations** rather than the unweildly
   processes that would be required using git manuallly
   from the command line or in multiple gitGUI windows.
@@ -77,27 +77,27 @@ on a Windows machine, you may find this program useful.
 ## Motivation and History
 
 This program started as a simple list of all the repositories on
-my local machine.  I didn't like the way gitUI manages the list of
+my local machine.  I didn't like the way gitMUI manages the list of
 "recent repos", and I often ended up having to go to Windows Explorer
 to navigate to a folder containing a repo, and then right-click
 to select the "Git GUI Here* option.  So, at first I merely had
 a process of modifying my system-wide git_config to replace the
 list of recent repos with a list of all the repos on my machine.
 Then I added a program showing that list of repos that could
-"shell" to the gitUI command.
+"shell" to the gitMUI command.
 
-I continued to fight with gitUI, as anytime you modify any repo,
+I continued to fight with gitMUI, as anytime you modify any repo,
 it re-orders the list of 'recentRepos' into what it *thinks* you
 want to see, which was *never* what i wanted to see, which would
 have simply been an alphabetical list of all the repos on my machine.
 So this program began it's life as a simple app that merely
-served as a launcher for gitUI, listing all my repos, and
-allowing me to open a new gitUI window to any of them.
+served as a launcher for gitMUI, listing all my repos, and
+allowing me to open a new gitMUI window to any of them.
 
 Over time I found that I would have many gitGUI windows open,
 often be making a set of changes that crossed several different repos,
 yet would have the same **commit message**.
-I would have to open, and go to, each relevant gitUI window, do a **rescan**
+I would have to open, and go to, each relevant gitMUI window, do a **rescan**
 to see the changes, *paste* in the *copied* commit message, and
 make the commits. Then I would need to manually **push** each repo
 to gitHub. In order to do all of this I had to **remember** which
@@ -201,7 +201,7 @@ The program consists of four main windows:
   the submodule changes* to their parent (super)
   repos in a series of simple operations.
 
-Whenever a **repository** is shown in gitUI, it will
+Whenever a **repository** is shown in gitMUI, it will
 be presented as a *hyperlink* of a certain *color*.
 The colors are important enough that we present them
 here, even though gitHub has no good way for a readme
@@ -212,7 +212,7 @@ to show colors. This is the order of priorities:
   It will also be red if there were any **errors** encounted while
   scanning or getting information about the repo from gitHub
   or the repo violates one of the **invariants** required to
-  use the repo wihtin gitUI (no detached HEADS, must
+  use the repo wihtin gitMUI (no detached HEADS, must
   have the default branch checked out, etc).
 - **orange** - if the repo is **AHEAD** of gitHub,
   meaning that one or more commits have been made to it
@@ -261,20 +261,20 @@ gitHub remote ID's already in place.
 ## Also See (Dependencies)
 
 Besides being run as an installed EXE file, for developers
-gitUI can be run directly from the **Perl source**
+gitMUI can be run directly from the **Perl source**
 in this folder.
 
-From a Perl point of view, gitUI **depends** on my
+From a Perl point of view, gitMUI **depends** on my
 [base-Pub](https://gitHub.com/phorton1/base-Pub) library,
 which must also be installed.  And there are many other
-Perl libraries that must be installed for gitUI to work,
+Perl libraries that must be installed for gitMUI to work,
 notably:
 
 - Git::Raw
 - Win32::ChangeNotify
 - wxPerl
 
-gitUI and all of my other Windows GUI applications depend on
+gitMUI and all of my other Windows GUI applications depend on
 [wxPerl](https://gitHub.com/phorton1/src-wx-wxPerl). My repo
 contains a slighly modified version of wxPerl that I have worked
 with for years, but the program *should* work with any Perl
@@ -283,7 +283,7 @@ that supports Wx::Perl.
 You can also see my
 [Strawberry Perl](https://gitHub.com/phorton1/Strawberry) repository for
 an example of how to install a **Wx enabled** Perl Interpreter with the
-required *Perl Modules* in order to run gitUI directly from the source.
+required *Perl Modules* in order to run gitMUI directly from the source.
 
 
 ## License

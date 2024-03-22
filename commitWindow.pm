@@ -1,9 +1,9 @@
 #------------------------------------------------------------
-# apps::gitUI::commitWindow
+# apps::gitMUI::commitWindow
 #------------------------------------------------------------
-# A gitUI like window that acts on multiple repositories
+# A gitGUI like window that acts on multiple repositories
 
-package apps::gitUI::commitWindow;
+package apps::gitMUI::commitWindow;
 use strict;
 use warnings;
 use threads;
@@ -12,9 +12,9 @@ use Wx qw(:everything);
 use Wx::Event qw(
 	EVT_SPLITTER_SASH_POS_CHANGED
 	EVT_SIZE );
-use apps::gitUI::Resources;
-use apps::gitUI::commitList;
-use apps::gitUI::commitRight;
+use apps::gitMUI::Resources;
+use apps::gitMUI::commitList;
+use apps::gitMUI::commitRight;
 use Pub::Utils;
 use Pub::WX::Window;
 use base qw(Pub::WX::Window);
@@ -76,7 +76,7 @@ sub new
 	$this->{left_width} = $left_width;
 	$this->{left_top_pct} = $left_top_pct;
 	$this->{wants_null_changes} = 1;
-		# tell gitUI that we want null changes
+		# tell gitMUI that we want null changes
 		# so we can update the diffs myTextCtrl
 		# if only a file changed, but not the repo state
 
@@ -91,9 +91,9 @@ sub new
 	$vert_splitter->SetMinimumPaneSize(20);
 	$left_splitter->SetMinimumPaneSize(20);
 
-	my $unstaged  = $this->{unstaged} = apps::gitUI::commitList->new($this,0,$left_splitter,$data->{unstaged});
-	my $staged    = $this->{staged}   = apps::gitUI::commitList->new($this,1,$left_splitter,$data->{staged});
-	my $right     = $this->{right} 	  = apps::gitUI::commitRight->new($this,$vert_splitter,$data->{right});
+	my $unstaged  = $this->{unstaged} = apps::gitMUI::commitList->new($this,0,$left_splitter,$data->{unstaged});
+	my $staged    = $this->{staged}   = apps::gitMUI::commitList->new($this,1,$left_splitter,$data->{staged});
+	my $right     = $this->{right} 	  = apps::gitMUI::commitRight->new($this,$vert_splitter,$data->{right});
 
     $vert_splitter->SplitVertically($left_splitter,$right,300);
     $left_splitter->SplitHorizontally($unstaged,$staged,100);

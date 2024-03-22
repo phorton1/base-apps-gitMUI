@@ -1,12 +1,12 @@
 
 #----------------------------------------------------
-# base::apps::gitUI::repo
+# base::apps::gitMUI::repo
 #----------------------------------------------------
 # Facilitates a UI with repoDisplay, repoError,
 # repoWarning, and repoNote methods, which can
 # yet can be used without including WX.
 
-package apps::gitUI::repo;
+package apps::gitMUI::repo;
 use strict;
 use warnings;
 use threads;
@@ -14,8 +14,8 @@ use threads::shared;
 use Time::HiRes qw(sleep);
 use Pub::Utils;
 use Pub::Prefs;
-use apps::gitUI::Resources;
-use apps::gitUI::utils;
+use apps::gitMUI::Resources;
+use apps::gitMUI::utils;
 
 
 my $dbg_new = 1;
@@ -213,7 +213,7 @@ sub getId
 sub new
 {
 	my ($class, $params) = @_;
-	my $num = scalar(@{apps::gitUI::repos::getRepoList()});
+	my $num = scalar(@{apps::gitMUI::repos::getRepoList()});
 	display_hash($dbg_new,0,"repo->new($num)",$params);
 
 	# my ($where, $num, $path, $section_path, $section_id, $parent_repo, $rel_path, $sub_path) = @_;
@@ -593,14 +593,14 @@ sub contentLine
 		# TODO: there may be more than one "main" module
 		# We take the first
 
-		my $repo = apps::gitUI::repos::getRepoById($value);
+		my $repo = apps::gitMUI::repos::getRepoById($value);
 		$value = $repo->{path};
 		$context = { repo => $repo };
 		$color = linkDisplayColor($repo);
 	}
 	elsif ($key eq 'section_path')
 	{
-		my $repo = apps::gitUI::repos::getRepoByPath($value);
+		my $repo = apps::gitMUI::repos::getRepoByPath($value);
 		$context = $repo ?
 			{ repo => $repo } :
 			{ path => $value };
@@ -608,7 +608,7 @@ sub contentLine
 	elsif ($key eq 'path' ||
 		$key eq 'parent_repo')
 	{
-		my $repo = apps::gitUI::repos::getRepoByPath($value);
+		my $repo = apps::gitMUI::repos::getRepoByPath($value);
 		$context = { repo => $repo };
 		$color = linkDisplayColor($repo);
 	}
@@ -667,7 +667,7 @@ sub contentArray
 
 		if ($key eq 'submodules')
 		{
-			$repo = apps::gitUI::repos::getRepoByPath($value);
+			$repo = apps::gitMUI::repos::getRepoByPath($value);
 			$context = { repo => $repo, open_repo_sub => 1 };
 			$color = linkDisplayColor($repo);
 		}
@@ -679,7 +679,7 @@ sub contentArray
 			my $path = $value;
 			$path =~ s/^-+// if $key eq 'used_by';
 				# remove -'s that show how deeply it is used_by
-			$repo = apps::gitUI::repos::getRepoByPath($path);
+			$repo = apps::gitMUI::repos::getRepoByPath($path);
 			$context = { repo => $repo };
 			$color = linkDisplayColor($repo);
 		}
@@ -693,7 +693,7 @@ sub contentArray
 		}
 		elsif ($key eq 'group')
 		{
-			my $top_repo = apps::gitUI::repos::getRepoByPath('/src/phorton1');
+			my $top_repo = apps::gitMUI::repos::getRepoByPath('/src/phorton1');
 			$context = { repo => $top_repo, file=>"/$value.md" };
 		}
 
@@ -766,7 +766,7 @@ sub contentNeeds
 		for my $use (@$uses)
 		{
 			next if $already_uses->{$use};
-			my $repo = apps::gitUI::repos::getRepoByPath($use);
+			my $repo = apps::gitMUI::repos::getRepoByPath($use);
 			contentNeeds($repo,$text_ctrl,$header_shown,$level+1,$already_uses,$already_needs)
 		}
 	}
@@ -797,7 +797,7 @@ sub contentEWN
 			my $filename = '';
 			if ($part =~ /^\//)
 			{
-				$repo = apps::gitUI::repos::getRepoByPath($part);
+				$repo = apps::gitMUI::repos::getRepoByPath($part);
 				$path = $part if -d $part;
 				$filename = $part if -f $part;
 			}

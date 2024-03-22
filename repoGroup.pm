@@ -1,5 +1,5 @@
 #----------------------------------------------------
-# base::apps::gitUI::repoGroup
+# base::apps::gitMUI::repoGroup
 #----------------------------------------------------
 # An object that is orthogonal to a 'section' which has
 # {name} and {repo} members, and somethwat orthogonal to
@@ -22,7 +22,7 @@
 # to the myTextCtrl for repoGroups.
 
 
-package apps::gitUI::repoGroup;
+package apps::gitMUI::repoGroup;
 use strict;
 use warnings;
 use threads;
@@ -31,10 +31,10 @@ use Time::HiRes qw(sleep);
 use Wx qw(:everything);
 use Pub::Utils;
 use Pub::Prefs;
-use apps::gitUI::Resources;
-use apps::gitUI::repo;
-use apps::gitUI::repos;
-use apps::gitUI::utils;
+use apps::gitMUI::Resources;
+use apps::gitMUI::repo;
+use apps::gitMUI::repos;
+use apps::gitMUI::utils;
 
 
 my $dbg_new = 0;
@@ -135,7 +135,7 @@ sub groupReposAsSubmodules
 				if !$repo->{found_master};
 		}
 
-		my $group = apps::gitUI::repoGroup->new($group_num++,$id,$temp_group);
+		my $group = apps::gitMUI::repoGroup->new($group_num++,$id,$temp_group);
 		push @$groups,$group;
 	}
 

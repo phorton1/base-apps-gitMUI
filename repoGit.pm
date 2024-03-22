@@ -1,5 +1,5 @@
 #----------------------------------------------------
-# base::apps::gitUI::repoGit
+# base::apps::gitMUI::repoGit
 #----------------------------------------------------
 # Contains gitXXX methods that change repositories using Git::Raw
 # Some changes (i.e. real 'gitChanges') will generate monitor events,
@@ -24,10 +24,10 @@
 # Stashes automatically get cleaned up after two weeks, by default,
 # in gc_prune during repository cleanup.
 # I am going to not call 'git stash clear' at this time.
-# They slightly pollute the regular gitUI history, but are probably
+# They slightly pollute the regular git history, but are probably
 # useful.
 
-package apps::gitUI::repoGit;
+package apps::gitMUI::repoGit;
 use strict;
 use warnings;
 use threads;
@@ -36,8 +36,8 @@ use Time::HiRes qw(sleep);
 use Git::Raw;
 use Pub::Utils;
 use Pub::Prefs;
-use apps::gitUI::repos;
-use apps::gitUI::utils;
+use apps::gitMUI::repos;
+use apps::gitMUI::utils;
 
 
 my $STASH_UNTRACKED_FILES = 1;
@@ -419,7 +419,7 @@ sub assignHashIfChanged
 	if ($changed)
 	{
 		display($dbg_chgs,0,"assignHashIfChanged($key,$repo->{path})");
-		my $repo_list = apps::gitUI::repos::getRepoList();
+		my $repo_list = apps::gitMUI::repos::getRepoList();
 		$repo->{$key} = $changes;
 	}
 	return $changed;
@@ -542,7 +542,7 @@ sub gitIndex
 	# CHMOD NOTE:  Git::Raw does not have a 'chmod' function or
 	#   hooks which support setting the executable bit on new files
 	#   from windows, as is done with the pre-commit
-	#   script for .pm/pl/cgi files in the regular gitUI.
+	#   script for .pm/pl/cgi files in the regular git/gitGUI.
 	#   The only way I was able to find to set the EXE bits
 	#   was to Add the file as a single path, using add_frombuffer.
 	#	THEREFORE, if there are any EXE files (pm|pl|cgi) in the
@@ -941,7 +941,7 @@ sub gitPush
 
 		error($msg);
 
-		# strip off the 'at /base/apps/gitUI/repo.pm line XXX part
+		# strip off the 'at /base/apps/xxx.pm line XXX part
 		# and pass it as a callback.
 
 		$msg =~ s/at \/base.*$//;
@@ -959,7 +959,7 @@ sub gitPush
 	setCanPushPull($repo);
 	getAppFrame()->notifyRepoChanged($repo)
 		if getAppFrame();
-	apps::gitUI::monitor::monitorUpdate(1);
+	apps::gitMUI::monitor::monitorUpdate(1);
 
 	display($dbg_push,1,"gitPush() returning rslt="._def($rslt));
 	return $rslt;
@@ -1054,8 +1054,8 @@ sub gitPull
 	# have to spend hours figuring out, I simply call the
 	# command line git from backticks.
 	#
-	# This is currently the only place that my gitUI calls
-	# the git command line ....
+	# This is currently one of only very few places that my
+	# gitMUI calls the git command line ....
 
 	if ($rslt)
 	{
@@ -1089,7 +1089,7 @@ sub gitPull
 	setCanPushPull($repo);
 	getAppFrame()->notifyRepoChanged($repo)
 		if getAppFrame();
-	apps::gitUI::monitor::monitorUpdate(1);
+	apps::gitMUI::monitor::monitorUpdate(1);
 
 	display($dbg_pull,1,"gitPull() returning rslt="._def($rslt));
 	return $rslt;

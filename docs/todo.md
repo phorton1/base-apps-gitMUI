@@ -1,4 +1,4 @@
-# gitUI - ToDo list
+# gitMUI - ToDo list
 
 TODO TO CREATE RELEASEABLE PRODUCT
 

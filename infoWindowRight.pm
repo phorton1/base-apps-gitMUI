@@ -1,10 +1,10 @@
 #-------------------------------------------
-# apps::gitUI::infoWindowRight
+# apps::gitMUI::infoWindowRight
 #-------------------------------------------
 # The right side of the infoWindow myTextCtrl display area
 # and a Pane with possible future command buttons
 
-package apps::gitUI::infoWindowRight;
+package apps::gitMUI::infoWindowRight;
 use strict;
 use warnings;
 use threads;
@@ -16,13 +16,13 @@ use Wx::Event qw(
 	EVT_BUTTON
 	EVT_UPDATE_UI );
 use Pub::Utils;
-use apps::gitUI::utils;
-use apps::gitUI::repos;
-use apps::gitUI::repoHistory;
-use apps::gitUI::monitor;
-use apps::gitUI::myTextCtrl;
-use apps::gitUI::myHyperlink;
-use apps::gitUI::Resources;
+use apps::gitMUI::utils;
+use apps::gitMUI::repos;
+use apps::gitMUI::repoHistory;
+use apps::gitMUI::monitor;
+use apps::gitMUI::myTextCtrl;
+use apps::gitMUI::myHyperlink;
+use apps::gitMUI::Resources;
 use base qw(Wx::Window);
 
 
@@ -58,8 +58,8 @@ sub new
 	$this->SetBackgroundColour($color_cyan);
 
 	$this->{title_ctrl} = Wx::StaticText->new($this,-1,'Repo:',[5,8],[$TITLE_LEFT_MARGIN-10,20]);
-	my $repo_name = $this->{repo_name} = apps::gitUI::myHyperlink->new($this,-1,'',[$TITLE_LEFT_MARGIN + $TITLE_WIDTH,7]);
-	$this->{text_ctrl} = apps::gitUI::myTextCtrl->new($this, $this->{sub_mode} ?
+	my $repo_name = $this->{repo_name} = apps::gitMUI::myHyperlink->new($this,-1,'',[$TITLE_LEFT_MARGIN + $TITLE_WIDTH,7]);
+	$this->{text_ctrl} = apps::gitMUI::myTextCtrl->new($this, $this->{sub_mode} ?
 		$ID_SUBS_WINDOW :
 		$ID_INFO_WINDOW);
 

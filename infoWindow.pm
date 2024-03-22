@@ -1,5 +1,5 @@
 #------------------------------------------------------------
-# apps::gitUI::infoWindow
+# apps::gitMUI::infoWindow
 #------------------------------------------------------------
 # A window that shows a list of repos on the left,
 # 	and details on the right.
@@ -8,7 +8,7 @@
 #   $ID_SUBS_WINDOW = list of MAIN_MODULES, with SUBMODULES under them
 
 
-package apps::gitUI::infoWindow;
+package apps::gitMUI::infoWindow;
 use strict;
 use warnings;
 use threads;
@@ -19,10 +19,10 @@ use Wx::Event qw(
 	EVT_SIZE );
 use Pub::Utils;
 use Pub::WX::Window;
-use apps::gitUI::utils;
-use apps::gitUI::Resources;
-use apps::gitUI::infoWindowList;
-use apps::gitUI::infoWindowRight;
+use apps::gitMUI::utils;
+use apps::gitMUI::Resources;
+use apps::gitMUI::infoWindowList;
+use apps::gitMUI::infoWindowRight;
 use base qw(Pub::WX::Window);
 
 
@@ -80,8 +80,8 @@ sub new
 	my $vert_splitter  = $this->{vert_splitter}  = Wx::SplitterWindow->new($this, 		   $ID_INFO_SPLITTER_VERT, [0, 0]);
 	$vert_splitter->SetMinimumPaneSize(20);
 
-	my $left = $this->{left} = apps::gitUI::infoWindowList->new($this,$vert_splitter);
-	my $right = $this->{right} = apps::gitUI::infoWindowRight->new($this,$vert_splitter);
+	my $left = $this->{left} = apps::gitMUI::infoWindowList->new($this,$vert_splitter);
+	my $right = $this->{right} = apps::gitMUI::infoWindowRight->new($this,$vert_splitter);
 
     $vert_splitter->SplitVertically($left,$right,300);
 

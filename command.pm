@@ -5,18 +5,18 @@
 #   currently only used for gitPush as gitTag and gitCommit are
 # 	known to be quick (or at least workabele without threads/dialogs)
 
-package apps::gitUI::Frame;		# continued
+package apps::gitMUI::Frame;		# continued
 use strict;
 use warnings;
 use threads;
 use threads::shared;
 use Pub::Utils;
-use apps::gitUI::repo;
-use apps::gitUI::utils;
-use apps::gitUI::repoGit;
-use apps::gitUI::monitor;
-use apps::gitUI::Resources;
-use apps::gitUI::progressDialog;
+use apps::gitMUI::repo;
+use apps::gitMUI::utils;
+use apps::gitMUI::repoGit;
+use apps::gitMUI::monitor;
+use apps::gitMUI::Resources;
+use apps::gitMUI::progressDialog;
 use base qw(Pub::WX::Frame);
 
 my $dbg_cmds = 0;
@@ -156,7 +156,7 @@ sub doThreadedCommand
 
 	$this->initCommand();
 
-	my $progress = $this->{progress} = apps::gitUI::progressDialog->new(
+	my $progress = $this->{progress} = apps::gitMUI::progressDialog->new(
 		$this,
 		$this->{command_name},
 		\&abortCommand);

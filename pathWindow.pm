@@ -2,7 +2,7 @@
 # Window to show repos by path with section breaks
 #-------------------------------------------------------------------------
 
-package apps::gitUI::pathWindow;
+package apps::gitMUI::pathWindow;
 use strict;
 use warnings;
 use Wx qw(:everything);
@@ -14,12 +14,12 @@ use Wx::Event qw(
 	EVT_LEAVE_WINDOW);
 use Pub::Utils;
 use Pub::WX::Window;
-use apps::gitUI::repos;
-use apps::gitUI::utils;
-use apps::gitUI::repoMenu;
-use apps::gitUI::Resources;
-use apps::gitUI::myHyperlink;
-use base qw(Pub::WX::Window apps::gitUI::repoMenu);
+use apps::gitMUI::repos;
+use apps::gitMUI::utils;
+use apps::gitMUI::repoMenu;
+use apps::gitMUI::Resources;
+use apps::gitMUI::myHyperlink;
+use base qw(Pub::WX::Window apps::gitMUI::repoMenu);
 
 my $dbg_win = 0;
 my $dbg_pop = 1;
@@ -219,7 +219,7 @@ sub populate
 			display($dbg_pop,1,"hyperLink($display_name)");
 
 			my $color = linkDisplayColor($repo);
-			my $ctrl = apps::gitUI::myHyperlink->new(
+			my $ctrl = apps::gitMUI::myHyperlink->new(
 				$this,
 				-1,
 				$display_name,

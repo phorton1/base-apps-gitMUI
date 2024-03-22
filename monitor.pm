@@ -33,16 +33,16 @@
 # broken into groups of 64 for Win32::ChangeNotify::wait_any()
 # (Win32::IPC::wait_any) to work on more than 64.
 
-package apps::gitUI::monitor;
+package apps::gitMUI::monitor;
 use strict;
 use warnings;
 use threads;
 use threads::shared;
 use Win32::ChangeNotify;
 use Time::HiRes qw(sleep time);
-use apps::gitUI::repos;
-use apps::gitUI::repoGit;
-# use apps::gitUI::reposGithub;
+use apps::gitMUI::repos;
+use apps::gitMUI::repoGit;
+# use apps::gitMUI::reposGithub;
 use Pub::Utils;
 use Pub::Prefs;
 
@@ -437,7 +437,7 @@ sub doMonitorStartup
 		my $mon = Win32::ChangeNotify->new($path,1,$WIN32_FILTER);
 		if (!$mon)
 		{
-			error("apps::gitUI::monitor::createMonitor() - Could not create monitor($group:$num) $path");
+			error("apps::gitMUI::monitor::createMonitor() - Could not create monitor($group:$num) $path");
 			return 0;
 		}
 		push @$monitors,$mon;
@@ -522,7 +522,7 @@ sub doMonitorUpdate
 	&$the_callback({ status =>"doing Update" });
 
 	my $git_user = getPref('GIT_USER');
-	my $got_events = apps::gitUI::reposGithub::gitHubRequest(
+	my $got_events = apps::gitMUI::reposGithub::gitHubRequest(
 		'events',
 		"users/$git_user/events?per_page=30",
 		0,

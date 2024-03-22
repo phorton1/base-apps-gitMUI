@@ -14,15 +14,15 @@
 # any errors, yet this package remains usable without WX.
 
 
-package apps::gitUI::repos;
+package apps::gitMUI::repos;
 use strict;
 use warnings;
 use threads;
 use threads::shared;
 use Pub::Utils;
 use Pub::Prefs;
-use apps::gitUI::repo;
-use apps::gitUI::utils;
+use apps::gitMUI::repo;
+use apps::gitMUI::utils;
 
 
 
@@ -318,7 +318,7 @@ sub parseRepos
 				my $rel_path = $1;
 				my $path = makePath($repo->{path},$rel_path);
 				repoWarning(undef,$dbg_parse+1,1,"SUBMODULE($dbg_num, $repo->{path}) = $rel_path ");
-				my $sub_module = apps::gitUI::repo->new({
+				my $sub_module = apps::gitMUI::repo->new({
 					where => $REPO_LOCAL,
 					path  => $path,
 					section_path => $section_path,
@@ -351,7 +351,7 @@ sub parseRepos
 				my @parts = split(/\t/,$line);
 				my ($path,$opts) = ($parts[0],$parts[1] || '');
 				repoDisplay($dbg_parse+1,1,"repo($dbg_num,$path,$section_path,$section_id)");
-				$repo = apps::gitUI::repo->new({
+				$repo = apps::gitMUI::repo->new({
 					where => $REPO_LOCAL,
 					path => $path,
 					section_path => $section_path,
@@ -364,7 +364,7 @@ sub parseRepos
 				my @parts = split(/\t/,$line);
 				my ($id,$opts) = ($parts[0],$parts[1] || '');
 				repoDisplay($dbg_parse+1,1,"remote_only repo($dbg_num,$id,$section_path,$section_id)");
-				$repo = apps::gitUI::repo->new({
+				$repo = apps::gitMUI::repo->new({
 					where => $REPO_REMOTE,
 					id => $id,
 					section_path => $section_path,
@@ -463,7 +463,7 @@ sub parseRepos
 
 	for my $repo (@$repo_list)
 	{
-		apps::gitUI::repoGit::gitStart($repo);
+		apps::gitMUI::repoGit::gitStart($repo);
 
 		# parent submodules
 
@@ -523,7 +523,7 @@ sub parseRepos
 
 	if ($INIT_SYSTEM || getPref('GIT_ADD_UNTRACKED_REPOS'))
 	{
-		my $untracked = apps::gitUI::reposUntracked::findUntrackedRepos();
+		my $untracked = apps::gitMUI::reposUntracked::findUntrackedRepos();
 		my $num_untracked = scalar(keys %$untracked);
 		repoDisplay($dbg_parse,1,"ADDING $num_untracked untracked repos");
 		for my $path (sort {lc($a) cmp lc($b)} keys %$untracked)
@@ -540,7 +540,7 @@ sub parseRepos
 			}
 
 			repoDisplay($dbg_parse+1,2,"adding untracked_repo($path)");
-			my $repo = apps::gitUI::repo->new({
+			my $repo = apps::gitMUI::repo->new({
 				where => $REPO_LOCAL,
 				path  => $path,
 				section_id => $section_id,
@@ -552,7 +552,7 @@ sub parseRepos
 				if ($INIT_SYSTEM)
 				{
 					repoNote($repo,$dbg_parse,2,"INIT_SYSTEM repo($path)");
-					apps::gitUI::repoGit::gitStart($repo);
+					apps::gitMUI::repoGit::gitStart($repo);
 				}
 				else
 				{
@@ -1265,7 +1265,7 @@ sub writeNewReposFile()
 	$INIT_SYSTEM = 0;
 	warning($dbg_topo,0,"REPARSING ...");
 	parseRepos();
-	apps::gitUI::reposGithub::doGitHub(1);
+	apps::gitMUI::reposGithub::doGitHub(1);
 
 }
 

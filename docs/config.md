@@ -1,7 +1,7 @@
-# gitUI - Repository Configuration File
+# gitMUI - Repository Configuration File
 
 The **repository configuration file** contains a *list*
-of all the repos you want gitUI to work with, and
+of all the repos you want gitMUI to work with, and
 specifies individual *characteristics* of each repo.
 
 The default name is of the file is **git_repos.txt**
@@ -22,11 +22,11 @@ describe things about them, and their relationship.
 ## Automatic Generation of git_repos.txt
 
 The git_repos.txt file can be constructed for a new
-installation by running **gitUI** with a *command line
+installation by running **gitMUI** with a *command line
 parameters* of **init**:
 
-	C> gitUI init			- using installed EXE
-	C> perl gitUI.pm init	- using pure Perl
+	C> gitMUI init			- using installed EXE
+	C> perl gitMUI.pm init	- using pure Perl
 
 When building a new git_repos.txt file, the system will do its best to:
 
@@ -65,13 +65,13 @@ The REMOTE_ONLY clause is not required, but is *recommended*.
 
 The SECTION verb comes *before* any *Repo Path* or *Remote Only ID* lines,
 and allows you to group related repos together into sections in the
-various gitUI windows.
+various gitMUI windows.
 
 	SECTION path (optional_id_if_slash_dash_substitution_not_good_enough)
 
 The *path* will be removed from following paths, and the ID
 from following IDs, in the DISPLAY ONLY of the repos in certain
-gitUI windows. For example, given a SECTION with two
+gitMUI windows. For example, given a SECTION with two
 paths as follows:
 
 	SECTION	/src/Arduino/libraries
@@ -79,7 +79,7 @@ paths as follows:
 	/src/Arduino/libraries/FluidNC_Extensions
 
 A non-clickable header, and two links (which fit better in the
-various gitUI windows) will be created as follows
+various gitMUI windows) will be created as follows
 
 	/src/Arduino/libraries
 	FluidNC
@@ -95,7 +95,7 @@ to the given repo.
 ## SUBMODULE rel_path
 
 This verb defines a submodule within a repo, and
-tells gitUI where to find it.
+tells gitMUI where to find it.
 
 In our vision of subModules, although not absolutely
 necessary, there *may* be one or more repos someplace on
@@ -106,7 +106,7 @@ of some other repo.
 
 The ID of the submodule is gotten from GIT.
 The presence of the SUBMODULE verb defines several key facts
-for gitUI to use:
+for gitMUI to use:
 
 - it defines a **separate repo** that exists on the machine,
   which is independently monitored for changes, and which
@@ -139,7 +139,7 @@ following members:
 - id (overloaded) - the id of the submodule repo will be
   that of repo on gitHub.
 - parent_repo (added) - will be set as a pointer to
-  the actual parent repo object in the gitUI program
+  the actual parent repo object in the gitMUI program
 - rel_path (added) - will be stored on the object.
 
 By convention, the presence of {parent_repo} is
@@ -154,9 +154,9 @@ onto lists in the parent repo and the main module repo:
 ## Most Important VERBS within Repos
 
 These verbs are used for integrity checks agains gitHub,
-and to help gitUI get more information about the repo from gitHub.
+and to help gitMUI get more information about the repo from gitHub.
 These are set automatically to the gitHub values with the
-*gitUI init* command:
+*gitMUI init* command:
 
 - **PRIVATE** - is an integrity check against the visibility
   of the repo on gitHub, to make sure it is what I think
@@ -168,7 +168,7 @@ These are set automatically to the gitHub values with the
   repository, and a separate gitHub request will be
   made to get information about the fork.
   FORKED may be binary, or contain text that is shown
-  in the infoWindow. Set automatically with *gitUI init*.
+  in the infoWindow. Set automatically with *gitMUI init*.
 
 ## Fairly Important VERBS with REPOS
 
@@ -230,7 +230,7 @@ will be provided in the infoWindow.
 There is a function to do a scan of the entire machine
 for any untracked repos that might not be in the git_repos.txt
 file.   It is currently turned on, and uses a cache file
-in the base_data/temp/gitUI folder for re-use without
+in the base_data/temp/gitMUI folder for re-use without
 rescanning.
 
 

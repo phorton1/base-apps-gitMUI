@@ -1,9 +1,9 @@
 #---------------------------------------------
-# apps::gitUI::repoMenu;
+# apps::gitMUI::repoMenu;
 #---------------------------------------------
 # Add-in class for Context menu for repos
 
-package apps::gitUI::repoMenu;
+package apps::gitMUI::repoMenu;
 use strict;
 use warnings;
 use threads;
@@ -14,7 +14,7 @@ use Wx::Event qw(
 	EVT_MENU_RANGE );
 use Pub::Utils;
 use Pub::Prefs;
-use apps::gitUI::Resources;
+use apps::gitMUI::Resources;
 
 
 my $dbg_menu = 1;		# context menu and commands

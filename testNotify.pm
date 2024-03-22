@@ -9,11 +9,11 @@ use threads::shared;
 use Win32::ChangeNotify;
 use Pub::Utils;
 use Pub::Prefs;
-use apps::gitUI::utils;
-use apps::gitUI::repo;
-use apps::gitUI::repos;
-use apps::gitUI::repoGit;
-use apps::gitUI::reposGithub;
+use apps::gitMUI::utils;
+use apps::gitMUI::repo;
+use apps::gitMUI::repos;
+use apps::gitMUI::repoGit;
+use apps::gitMUI::reposGithub;
 
 
 my $WIN32_FILTER =

@@ -10,14 +10,14 @@
 # add members from local git/config files.
 
 
-package apps::gitUI::repoHistory;
+package apps::gitMUI::repoHistory;
 use strict;
 use warnings;
 use threads;
 use threads::shared;
 use Git::Raw;
 use Pub::Utils;
-use apps::gitUI::utils;
+use apps::gitMUI::utils;
 
 
 BEGIN

@@ -1,6 +1,6 @@
 #!/usr/bin/perl
 
-package apps::gitUI::dialogCredentials;
+package apps::gitMUI::dialogCredentials;
 use strict;
 use warnings;
 use threads;
@@ -53,7 +53,7 @@ sub new
 	my $this = $class->SUPER::new(
         $parent,
         -1,
-		"gitUI requires gitHub Credentials",
+		"gitMUI requires gitHub Credentials",
         $position,
         [$PS_WIDTH,$PS_HEIGHT],
         wxDEFAULT_DIALOG_STYLE); #  | wxRESIZE_BORDER);

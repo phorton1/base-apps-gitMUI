@@ -1,7 +1,7 @@
 #-------------------------------------------------------------------------
-# apps::gitUI::utils
+# apps::gitMUI::utils
 #-------------------------------------------------------------------------
-# Contains common defines, styles, and methods used by gitUI
+# Contains common defines, styles, and methods used by gitMUI
 #
 # Some commom git commands:
 #
@@ -34,7 +34,7 @@
 #    git pull -u origin master
 
 
-package apps::gitUI::utils;
+package apps::gitMUI::utils;
 use strict;
 use warnings;
 use Wx qw(:everything);
@@ -42,7 +42,7 @@ use Pub::Utils;
 use Pub::Prefs;
 use Pub::WX::AppConfig;
 use Pub::WX::Dialogs;
-use apps::gitUI::dialogCredentials;
+use apps::gitMUI::dialogCredentials;
 
 
 my $dbg_ids = 1;
@@ -121,14 +121,7 @@ BEGIN
 # directories
 #----------------------------------
 
-# $temp_dir = "/base_data/temp/gitUI";
-# $data_dir = "/base_data/data/gitUI";
-# 	# we set these here, even though they aren't used
-# 	# until gitUI::reposGithub.pm, cuz it's easy to find.
-# my_mkdir $temp_dir if !-d $temp_dir;
-# my_mkdir $data_dir if !-d $data_dir;
-
-my $program_name = 'gitUI';
+my $program_name = 'gitMUI';
 
 setStandardTempDir($program_name);
 setStandardDataDir($program_name);
@@ -198,7 +191,7 @@ sub checkInitSystem
 
 	if (!getPref('GIT_USER') || !getPref('GIT_API_TOKEN'))
 	{
-		return 0 if !apps::gitUI::dialogCredentials->getCredentials()
+		return 0 if !apps::gitMUI::dialogCredentials->getCredentials()
 	}
 
 	# and then if no repo filename, they get an option to
@@ -254,7 +247,7 @@ sub checkInitSystem
 
 
 our $THREAD_EVENT:shared = Wx::NewEventType;
-	# This is a weird place for this, but it is includable by both gitUI & command
+	# This is a weird place for this, but it is includable by both gitMUI.pm & command.pm
 
 # PUSH callback types
 # PACK is called first, stage is 0 on first, 1 thereafter
@@ -357,7 +350,7 @@ sub lctilde
 #   - folder_x										red deleted item
 #   - folder_lines			blue modified item
 #
-# The bit patterns in gitUI on screen are 12x15
+# The bit patterns in gitMUI on screen are 12x15
 
 sub myBitMapToWxBitmap
 	# Convert my format to XBM for Wx::Bitmap ctor and return a Wx::Bitmap.

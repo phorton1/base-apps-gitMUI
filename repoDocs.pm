@@ -1,5 +1,5 @@
 #----------------------------------------------------
-# apps::gitUI::repoDocs
+# apps::gitMUI::repoDocs
 #----------------------------------------------------
 # Currently unincluded - test program only
 # Any time I add a page of documentation I have to modify
@@ -7,15 +7,15 @@
 # another issue.
 
 
-package apps::gitUI::repoDocs;
+package apps::gitMUI::repoDocs;
 use strict;
 use warnings;
 use threads;
 use threads::shared;
 use Pub::Utils;
-use apps::gitUI::repos;
-use apps::gitUI::utils;
-use apps::gitUI::monitor;
+use apps::gitMUI::repos;
+use apps::gitMUI::utils;
+use apps::gitMUI::monitor;
 
 
 my $dbg_find = 0;

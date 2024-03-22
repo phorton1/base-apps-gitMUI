@@ -1,4 +1,4 @@
-# gitUI - BRANCH, LOCAL, and REMOTE repositories
+# gitMUI - BRANCH, LOCAL, and REMOTE repositories
 
 I have re-introduced the notion of LOCAL_ONLY,
 and REMOTE_ONLY repos, and removed the parsing

@@ -1,5 +1,5 @@
 #--------------------------------------------------
-# apps::gitUI::dialogDisplay
+# apps::gitMUI::dialogDisplay
 #--------------------------------------------------
 # A somewhat generic display dialog.
 # Candidate for Pub::WX
@@ -11,7 +11,7 @@
 # close itself.
 
 
-package apps::gitUI::genericTextCtrl;
+package apps::gitMUI::genericTextCtrl;
 	# the text control that is a child of the dialog
 	# does all the hard work.
 use strict;
@@ -28,7 +28,7 @@ use Wx::Event qw(
 	EVT_MOUSE_EVENTS
 	EVT_CHAR );
 use Pub::Utils;
-use apps::gitUI::utils;
+use apps::gitMUI::utils;
 use base qw(Wx::ScrolledWindow);
 
 my $dbg_ctrl = 1;
@@ -214,7 +214,7 @@ sub onPaint
 
 
 
-package apps::gitUI::dialogDisplay;
+package apps::gitMUI::dialogDisplay;
 use strict;
 use warnings;
 use threads;
@@ -224,8 +224,8 @@ use Wx::Event qw(
 	EVT_CLOSE
 	EVT_BUTTON);
 use Pub::Utils;
-use apps::gitUI::utils;
-use apps::gitUI::Resources;
+use apps::gitMUI::utils;
+use apps::gitMUI::Resources;
 use base qw(Wx::Dialog);
 
 
@@ -263,7 +263,7 @@ sub new
 
 	$this->{title} = $title;
 	$this->{any_errors} = 0;
-	$this->{win} = apps::gitUI::genericTextCtrl->new($this);
+	$this->{win} = apps::gitMUI::genericTextCtrl->new($this);
 
 	$this->{parent} = $parent;
     $this->Show();

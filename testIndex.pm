@@ -10,7 +10,7 @@ use Git::Raw;
 use Pub::Utils;
 
 
-my $repo_path = "/base/apps/gitUI";
+my $repo_path = "/base/apps/gitMUI";
 
 
 display(0,0,"repo($repo_path)");

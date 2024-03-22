@@ -1,12 +1,12 @@
 #-------------------------------------------------------------------------
-# Window to invoke gitUI from my /bat/git_repositories.txt
+# My generic hyperLink control
 #-------------------------------------------------------------------------
 
-package apps::gitUI::myHyperlink;
+package apps::gitMUI::myHyperlink;
 use strict;
 use warnings;
 use Wx qw(:everything);
-use apps::gitUI::utils;
+use apps::gitMUI::utils;
 use base qw(Wx::StaticText);
 
 

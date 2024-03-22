@@ -2,13 +2,13 @@
 # PRH TODO: NEED ARROW KEYS
 #
 #-------------------------------------------
-# apps::gitUI::commitListCtrl
+# apps::gitMUI::commitListCtrl
 #-------------------------------------------
 # custom listCtrl for use by commitList
 #
 # layout:
 #
-#  > [ ] /base/apps/gitUI
+#  > [ ] /base/apps/gitMUI
 #    [ ] some_change.txt
 #
 #  > = toggle button for repositories
@@ -27,7 +27,7 @@
 #          see comments on onLeftDown() for gruesome
 #          details of SHIFT and CTRL handling
 
-package apps::gitUI::commitListCtrl;
+package apps::gitMUI::commitListCtrl;
 use strict;
 use warnings;
 use threads;
@@ -43,13 +43,13 @@ use Wx::Event qw(
 use Pub::Utils;
 use Pub::Prefs;
 use Pub::WX::Dialogs;
-use apps::gitUI::utils;
-use apps::gitUI::repos;
-use apps::gitUI::repoGit;
-use apps::gitUI::repoMenu;
-use apps::gitUI::Resources;
-use apps::gitUI::monitor;	# for $MONITOR_NOTIFY_EVERY_CHANGE
-use base qw(Wx::ScrolledWindow apps::gitUI::repoMenu);
+use apps::gitMUI::utils;
+use apps::gitMUI::repos;
+use apps::gitMUI::repoGit;
+use apps::gitMUI::repoMenu;
+use apps::gitMUI::Resources;
+use apps::gitMUI::monitor;	# for $MONITOR_NOTIFY_EVERY_CHANGE
+use base qw(Wx::ScrolledWindow apps::gitMUI::repoMenu);
 
 
 my $dbg_ctrl = 1;		# life cycle

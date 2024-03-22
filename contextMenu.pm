@@ -1,11 +1,11 @@
 #---------------------------------------------
-# apps::gitUI::contextMenu;
+# apps::gitMUI::contextMenu;
 #---------------------------------------------
 # Add-in class for Context menu for myTextCtrl,
 # uses {repo_context} and {window_id} from the
 # text control
 
-package apps::gitUI::contextMenu;
+package apps::gitMUI::contextMenu;
 use strict;
 use warnings;
 use threads;
@@ -16,8 +16,8 @@ use Wx::Event qw(
 	EVT_MENU_RANGE );
 use Pub::Utils;
 use Pub::Prefs;
-use apps::gitUI::utils;
-use apps::gitUI::Resources;
+use apps::gitMUI::utils;
+use apps::gitMUI::Resources;
 
 
 my $dbg_menu = 0;		# context menu and commands

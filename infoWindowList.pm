@@ -1,5 +1,5 @@
 #-------------------------------------------
-# apps::gitUI::infoWindowList
+# apps::gitMUI::infoWindowList
 #-------------------------------------------
 # The left portion of the infoWindow sections
 # containing lists of repos. Based on {sub_mode}
@@ -21,7 +21,7 @@
 # PS, I think much of this ID_NUMBER complexity could go away
 # if I made the repo and/or path a member of the HyperLinks.
 
-package apps::gitUI::infoWindowList;
+package apps::gitMUI::infoWindowList;
 use strict;
 use warnings;
 use threads;
@@ -34,13 +34,13 @@ use Wx::Event qw(
 	EVT_ENTER_WINDOW
 	EVT_LEAVE_WINDOW);
 use Pub::Utils;
-use apps::gitUI::repos;
-use apps::gitUI::repoGroup;
-use apps::gitUI::utils;
-use apps::gitUI::myHyperlink;
-use apps::gitUI::repoMenu;
-use apps::gitUI::Resources;
-use base qw(Wx::ScrolledWindow apps::gitUI::repoMenu);
+use apps::gitMUI::repos;
+use apps::gitMUI::repoGroup;
+use apps::gitMUI::utils;
+use apps::gitMUI::myHyperlink;
+use apps::gitMUI::repoMenu;
+use apps::gitMUI::Resources;
+use base qw(Wx::ScrolledWindow apps::gitMUI::repoMenu);
 
 my $dbg_life = 0;
 my $dbg_pop = 1;
@@ -335,7 +335,7 @@ sub newCtrl
 	my ($this,$ypos,$obj,$display_name,$color) = @_;
 	my $uuid = $obj->uuid();
 	display($dbg_pop,1,"newCtrl($ypos,$display_name) uuid=$uuid");
-	my $ctrl = apps::gitUI::myHyperlink->new(
+	my $ctrl = apps::gitMUI::myHyperlink->new(
 		$this,
 		-1,
 		$display_name,

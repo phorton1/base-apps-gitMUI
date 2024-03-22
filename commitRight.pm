@@ -1,10 +1,10 @@
 #-------------------------------------------
-# apps::gitUI::commitRight
+# apps::gitMUI::commitRight
 #-------------------------------------------
 # The right side of the commitWindow contains
 # the diff_ctrl and command portions
 
-package apps::gitUI::commitRight;
+package apps::gitMUI::commitRight;
 use strict;
 use warnings;
 use threads;
@@ -17,14 +17,14 @@ use Wx::Event qw(
 	EVT_UPDATE_UI
 	EVT_SPLITTER_SASH_POS_CHANGED );
 use Pub::WX::Dialogs;
-use apps::gitUI::utils;
-use apps::gitUI::repos;
-use apps::gitUI::myTextCtrl;
-use apps::gitUI::myHyperlink;
-use apps::gitUI::repoGit;
-use apps::gitUI::monitor;
-use apps::gitUI::repoHistory;
-use apps::gitUI::Resources;
+use apps::gitMUI::utils;
+use apps::gitMUI::repos;
+use apps::gitMUI::myTextCtrl;
+use apps::gitMUI::myHyperlink;
+use apps::gitMUI::repoGit;
+use apps::gitMUI::monitor;
+use apps::gitMUI::repoHistory;
+use apps::gitMUI::Resources;
 use Pub::Utils;
 use base qw(Wx::Window);
 
@@ -85,8 +85,8 @@ sub new
 	$bottom_panel->SetBackgroundColour($color_light_grey);
 
 	$this->{what_ctrl} = Wx::StaticText->new($top_panel,-1,'',[5,5],[$FILENAME_LEFT-10,20]);
-	my $hyperlink = $this->{hyperlink} = apps::gitUI::myHyperlink->new($top_panel,-1,'',[$FILENAME_LEFT,5]);
-	my $diff_ctrl = $this->{diff_ctrl} = apps::gitUI::myTextCtrl->new($top_panel,$ID_COMMIT_WINDOW);
+	my $hyperlink = $this->{hyperlink} = apps::gitMUI::myHyperlink->new($top_panel,-1,'',[$FILENAME_LEFT,5]);
+	my $diff_ctrl = $this->{diff_ctrl} = apps::gitMUI::myTextCtrl->new($top_panel,$ID_COMMIT_WINDOW);
 
 	Wx::Button->new($bottom_panel,$ID_COMMAND_RESCAN,'Rescan',		[5,5],	[65,20]);
 	Wx::Button->new($bottom_panel,$ID_COMMAND_COMMIT,'Commit',			[5,30],	[65,20]);
