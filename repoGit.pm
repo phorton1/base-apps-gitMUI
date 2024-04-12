@@ -85,7 +85,7 @@ BEGIN
 	);
 }
 
-our $GIT_EXE_RE = '\.pm$|\.pl$|\.$cgi';
+our $GIT_EXE_RE = '\.pm$|\.pl$|\.$cgi|\.sh$';
 
 
 my $MAX_SHOW_CHANGES = 30;
