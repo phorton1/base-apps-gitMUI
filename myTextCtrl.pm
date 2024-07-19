@@ -175,8 +175,8 @@ sub onSingleButton
 	}
 	elsif ($id == $INFO_RIGHT_COMMAND_SINGLE_PULL)
 	{
-		clearSelectedPushRepos();
-		setSelectedPushRepo($repo);
+		clearSelectedPullRepos();
+		setSelectedPullRepo($repo);
 		$this->{frame}->doThreadedCommand($ID_COMMAND_PULL_SELECTED);
 	}
 	elsif ($id == $INFO_RIGHT_COMMAND_SINGLE_COMMIT_PARENT)
