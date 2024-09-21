@@ -128,6 +128,7 @@ setStandardDataDir($program_name);
 
 $ini_file = "$temp_dir/$program_name.ini";
 
+$logfile = "$temp_dir/$program_name.log";
 
 
 

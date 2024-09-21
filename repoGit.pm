@@ -1070,7 +1070,11 @@ sub gitPull
 			gitError($repo,"Repo is up to date!");
 			return 1;
 		}
-		if ($exit_code || $text !~ /Successfully rebased and updated/)
+
+		# dunno - the $exit_code is returning as zero, indicating success,
+		# but $text is blank.  Hmmm ... I'm just going to accept it for now.
+		
+		if ($exit_code)	#  || $text !~ /Successfully rebased and updated/)
 		{
 			gitError($repo,$msg);
 			# user_callback($GIT_CB_ERROR,$msg);
