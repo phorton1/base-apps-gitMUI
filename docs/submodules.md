@@ -58,14 +58,14 @@ myIOT/examples folder (after removing and commiting the removal of the
 old data folder, if one existed):
 
 	cd /src/Arduino/libraries/myIOT
-	git submodule add https://gitHub.com/phorton1/Arduino-libraries-myIOT-data_master examples/testDevice/data
+	git submodule add https://github.com/phorton1/Arduino-libraries-myIOT-data_master examples/testDevice/data
 
 Cloning a repository that contains submodules is done automatically
 if you pass --recursive on the command line.  Here's how you would
 clone the src-Arduino-theClock3 repo into your Arduino projects folder:
 
 	cd /src/Arduino
-	git clone --recursive https://gitHub.com/phorton1/src-Arduino-theClock3 theClock3
+	git clone --recursive https://github.com/phorton1/src-Arduino-theClock3 theClock3
 
 After cloning a new submodules you **MUST** checkout the 'master' branch
 before proceeding, via the normal gitGUI, or possibly from the command line
@@ -126,7 +126,7 @@ under the umbrella of this apps/gitMUI project.
 
 Because the master submodule and sumodules are just regular
 repositories, the [status monitor](status.md) will automatically
-notice if any are out of date with respect to gitHub, and they
+notice if any are out of date with respect to github, and they
 will show as 'Need Pull' or 'Pull+Stash' (in red).
 
 
@@ -148,7 +148,7 @@ following repos:
 In the cannonical example, we will would:
 
 - make a change to readme.md in /theClock3/data
-- commit and push that to gitHub
+- commit and push that to github
 
 At this point, all the other **data** submodules will turn red,
 indicating that they need to be pulled, and **theClock3** will
