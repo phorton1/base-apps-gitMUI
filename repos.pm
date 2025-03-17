@@ -422,7 +422,7 @@ sub parseRepos
 
 					my ($root) = split(/\s+/,$line);
 					my $path = $repo->{path}.$root;
-					$repo->repoError("$what $root does not exist")
+					$repo->repoWarning(0,0,"$what $root does not exist")
 						if !(-f $path);
 				}
 				elsif ($line =~ s/^(NEEDS)\s+//i)
