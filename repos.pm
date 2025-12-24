@@ -14,8 +14,8 @@
 # any errors, yet this package remains usable without WX.
 
 #-----------------------------------------------------------
-# 2025-12-23 Implment SUBSET repos, for boat laptop LENOVO4.
-#
+# 2025-12-23 Implement SUBSET repos, for boat laptop LENOVO4.
+#-----------------------------------------------------------
 # (1) Got rid of the notion of REMOTE_ONLY repos that start with a dash.
 # (2) Got rid of previous "options" following the path of a repo with LOCAL_ONLY/REMOTE_ONLY
 #
@@ -26,9 +26,7 @@
 #
 #   gitMUI.prefs:
 #		SUBSET = BOAT	# optional
-#
 #   git_repositories.txt
-#
 #		/some repo name \t BOAT,OTHER	# tab, then comma delimited list of SUBSETS
 #
 # In the case that a SUBSET is specified, gitMUI will not attempt to identify
@@ -39,6 +37,18 @@
 # This is a messy program at this point, PRIVATE, and not usefully built as a
 # windows installable.
 
+#-----------------------------------------------------------
+# 2025-12-24 PullAll and Pull SUBMODULES
+#-----------------------------------------------------------
+# It is fairly important now with the BOAT SUBSET to be able
+# to easily update the laptop with anything that needs a pull,
+# and it was already painful to do so manually with SUBMODULES.
+#
+# So I am revisiting the "pull all" logic with special attention
+# to SUBMODULES.  To begin with, I will make an arbitrary change
+# to a file on the boat laptop.
+#
+# GitHub events are too slow.
 
 
 package apps::gitMUI::repos;
