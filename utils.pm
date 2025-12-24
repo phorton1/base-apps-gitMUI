@@ -50,10 +50,19 @@ my $dbg_ids = 1;
 
 our $INIT_SYSTEM = 0;
 
-our $TEST_INIT_SYSTEM = 0;
+our $TEST_INIT_SYSTEM = 0;		# DANGEROUS: Deletes git_repositories.txt !!!
 	# if set, command line 'init' will force a rebuild of git_repos.txt,
 	# but will use the caches if present.  Otherwise, $INIT_SYSTEM will
 	# clear the temp direotory.
+
+# 2025-12-23
+# I had hopes of building and releasing this publicly as an
+# intallable windows application.  Now I am not so sure.
+# It IS generally usable, but the ins and outs of using it,
+# much less documenting it, are probably beyond the scope
+# of my lifetime.  I am leaving the ability to build an
+# installer, and to scan the hard disk, but generally speaking,
+# I will probably never do it.
 
 
 BEGIN

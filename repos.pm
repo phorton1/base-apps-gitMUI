@@ -13,6 +13,33 @@
 # that it should start a UI window if it encounters
 # any errors, yet this package remains usable without WX.
 
+#-----------------------------------------------------------
+# 2025-12-23 Implment SUBSET repos, for boat laptop LENOVO4.
+#
+# (1) Got rid of the notion of REMOTE_ONLY repos that start with a dash.
+# (2) Got rid of previous "options" following the path of a repo with LOCAL_ONLY/REMOTE_ONLY
+#
+# The notion remains that the "main" machine (LENOVO3 in this case) still attempts to
+# 	identify dangling github repos and/or missing local repos, but
+#   the prefs file may specify a SUBSET=blah (i.e. SUBSET=BOAT) preference
+#   and only those repos that match that subset will be parsed
+#
+#   gitMUI.prefs:
+#		SUBSET = BOAT	# optional
+#
+#   git_repositories.txt
+#
+#		/some repo name \t BOAT,OTHER	# tab, then comma delimited list of SUBSETS
+#
+# In the case that a SUBSET is specified, gitMUI will not attempt to identify
+#	dangling github repos.
+# It will still constitute an ERROR if a local repo *should* be found, and is not.
+#
+# I am leaving the REMOTE_ONLY code, but not the ability to create one, in place.
+# This is a messy program at this point, PRIVATE, and not usefully built as a
+# windows installable.
+
+
 
 package apps::gitMUI::repos;
 use strict;
@@ -27,7 +54,7 @@ use apps::gitMUI::utils;
 
 
 
-my $dbg_parse = -2;
+my $dbg_parse = 0;
 	# -1 for repos
 	# -2 for lines
 my $dbg_notify = 1;
@@ -38,6 +65,8 @@ BEGIN
  	use Exporter qw( import );
 	our @EXPORT = qw(
 		parseRepos
+
+		$SUBSET
 
 		getRepoList
 		getReposByUUID
@@ -75,6 +104,8 @@ BEGIN
 }
 
 
+our $SUBSET:shared;
+
 my $repo_list:shared;
 my $repos_by_uuid:shared;
 my $repos_by_path:shared;
@@ -88,6 +119,7 @@ my $repos_commit_parent:shared;
 
 sub initParse
 {
+	$SUBSET = '';
 	$repo_list = shared_clone([]);
 	$repos_by_uuid = shared_clone({});
 	$repos_by_path = shared_clone({});
@@ -289,12 +321,6 @@ sub setCanPushPull
 # parseRepos
 #------------------------------------------
 
-my $ALLOW_MISSING = 1;
-	# partial implementations allow for missing repos
-	# I *might* want to flag them differently, but for
-	# now, I just want the parser to work correctly validating
-	# syntax, but not barfing on missing repos.
-
 
 sub parseRepos
 {
@@ -303,12 +329,19 @@ sub parseRepos
 
 	initParse();
 
+	$SUBSET = getPref('SUBSET');
+	if ($SUBSET)
+	{
+		repoWarning(undef,$dbg_parse,0,"------------------------------------------------");
+		repoWarning(undef,$dbg_parse,0,"SUBSET=$SUBSET");
+		repoWarning(undef,$dbg_parse,0,"------------------------------------------------");
+	}
+	
 	my $USED_IN = {};
 
 	my $text = getTextFile($repo_filename);
     if ($text)
     {
-		my $missing = 0;
 		my $repo;
 		my $section_path = '';
 		my $section_id = '';
@@ -321,95 +354,102 @@ sub parseRepos
 
 			my $dbg_num = scalar(@$repo_list);
 
-			if ($line =~ /SUBMODULE\t(.*)$/)
-			{
-				my $rel_path = $1;
-				my $path = makePath($repo->{path},$rel_path);
-				repoWarning(undef,$dbg_parse+1,1,"SUBMODULE($dbg_num, $repo->{path}) = $rel_path ");
-				my $sub_module = apps::gitMUI::repo->new({
-					where => $REPO_LOCAL,
-					path  => $path,
-					section_path => $section_path,
-					section_id => $section_id,
-					parent_repo => $repo,
-					rel_path => $rel_path, });
-				addRepoToSystem($sub_module,'') if $sub_module;
-				my $main_id = $sub_module->{id};
-				$USED_IN->{$main_id} ||= [];
-				push @{$USED_IN->{$main_id}},$path;
-
-			}
-
 			# get section path RE and optional name if different
 			# SECTION and path-branch delimiter is TAB!!
 
-			elsif ($line =~ /^SECTION\t/i)
+			if ($line =~ /^SECTION\t/i)
 			{
+				$repo = undef;
 				my @parts = split(/\t/,$line);
 				$section_path = $parts[1];
 				$section_path =~ s/^\s+|\s+$//g;
 				$section_id = $parts[2] || '';
 			}
 
-			# Local Repos start with a forward slash
-			# Remote Only repos start with a dash
 
-
+			# REPO DEFINITIONS START WITH FORWARD SLASH
 
 			elsif ($line =~ /^\//)
 			{
+				$repo = undef;
 				my @parts = split(/\t/,$line);
-				my ($path,$opts) = ($parts[0],$parts[1] || '');
+				my ($path,$subsets) = ($parts[0],$parts[1] || '');
+
+				if ($SUBSET)
+				{
+					my $found = 0;
+					for my $ss (split(/,/,$subsets))
+					{
+						if ($ss eq $SUBSET)
+						{
+							$found = 1;
+							last;
+						}
+					}
+					if (!$found)
+					{
+						repoDisplay($dbg_parse,1,"skipping SUBSET($SUBSET) repo($path)");
+						next;
+					}
+				}
+
 				repoDisplay($dbg_parse+1,1,"repo($dbg_num,$path,$section_path,$section_id)");
 				$repo = apps::gitMUI::repo->new({
 					where => $REPO_LOCAL,
 					path => $path,
 					section_path => $section_path,
 					section_id => $section_id,
-					opts => $opts, });
+					# opts => $opts,
+				});
 				if ($repo)
 				{
 					addRepoToSystem($repo);
 				}
-
-				# experiment.  Treat missing repos as "remote" only.
-
-				elsif ($ALLOW_MISSING)
-				{
-					my $id = $path;
-					$id =~ s/\//-/g;
-
-					repoDisplay($dbg_parse+1,1,"MISSING=remote_only repo($dbg_num,$id,$section_path,$section_id)");
-					$repo = apps::gitMUI::repo->new({
-						where => $REPO_REMOTE,
-						id => $id,
-						section_path => $section_path,
-						section_id => $section_id,
-						opts => $opts, });
-					addRepoToSystem($repo) if $repo;
-
-				}
 			}
-			elsif ($line =~ s/^-//)
-			{
-				my @parts = split(/\t/,$line);
-				my ($id,$opts) = ($parts[0],$parts[1] || '');
-				repoDisplay($dbg_parse+1,1,"remote_only repo($dbg_num,$id,$section_path,$section_id)");
-				$repo = apps::gitMUI::repo->new({
-					where => $REPO_REMOTE,
-					id => $id,
-					section_path => $section_path,
-					section_id => $section_id,
-					opts => $opts, });
-				addRepoToSystem($repo) if $repo;
-			}
+
+			#	No more REMOTE_ONLY repo definitions
+			#
+			#	elsif ($line =~ s/^-//)
+			#	{
+			#		my @parts = split(/\t/,$line);
+			#		my ($id,$opts) = ($parts[0],$parts[1] || '');
+			#		repoDisplay($dbg_parse+1,1,"remote_only repo($dbg_num,$id,$section_path,$section_id)");
+			#		$repo = apps::gitMUI::repo->new({
+			#			where => $REPO_REMOTE,
+			#			id => $id,
+			#			section_path => $section_path,
+			#			section_id => $section_id,
+			#			opts => $opts, });
+			#		addRepoToSystem($repo) if $repo;
+			#	}
 
 
 			elsif ($repo)
 			{
+				# handle SUBMODULES
+
+				if ($line =~ /SUBMODULE\t(.*)$/)
+				{
+					my $rel_path = $1;
+					my $path = makePath($repo->{path},$rel_path);
+					repoWarning(undef,$dbg_parse+1,1,"SUBMODULE($dbg_num, $repo->{path}) = $rel_path ");
+					my $sub_module = apps::gitMUI::repo->new({
+						where => $REPO_LOCAL,
+						path  => $path,
+						section_path => $section_path,
+						section_id => $section_id,
+						parent_repo => $repo,
+						rel_path => $rel_path, });
+					addRepoToSystem($sub_module,'') if $sub_module;
+					my $main_id = $sub_module->{id};
+					$USED_IN->{$main_id} ||= [];
+					push @{$USED_IN->{$main_id}},$path;
+				}
+
+
 				# set PRIVATE bit
 
-				if ($line =~ /^PRIVATE$/i)
+				elsif ($line =~ /^PRIVATE$/i)
 				{
 					repoDisplay($dbg_parse+2,2,"PRIVATE");
 					$repo->{private} = 1;
@@ -552,46 +592,51 @@ sub parseRepos
         return;
     }
 
-	if ($INIT_SYSTEM || getPref('GIT_ADD_UNTRACKED_REPOS'))
+	# We don't list untracked repos if $SUBSET
+
+	if (!$SUBSET)
 	{
-		my $untracked = apps::gitMUI::reposUntracked::findUntrackedRepos();
-		my $num_untracked = scalar(keys %$untracked);
-		repoDisplay($dbg_parse,1,"ADDING $num_untracked untracked repos");
-		for my $path (sort {lc($a) cmp lc($b)} keys %$untracked)
+		if ($INIT_SYSTEM || getPref('GIT_ADD_UNTRACKED_REPOS'))
 		{
-			my $section_id = 'untrackedRepos';
-			my $section_path = 'untrackedRepos';
-			my $opts = $UNTRACKED_REPO;
-
-			if ($INIT_SYSTEM)
+			my $untracked = apps::gitMUI::reposUntracked::findUntrackedRepos();
+			my $num_untracked = scalar(keys %$untracked);
+			repoDisplay($dbg_parse,1,"ADDING $num_untracked untracked repos");
+			for my $path (sort {lc($a) cmp lc($b)} keys %$untracked)
 			{
-				$section_id = '';
-				$section_path = '';
-				$opts = '';
-			}
+				my $section_id = 'untrackedRepos';
+				my $section_path = 'untrackedRepos';
+				my $opts = $UNTRACKED_REPO;
 
-			repoDisplay($dbg_parse+1,2,"adding untracked_repo($path)");
-			my $repo = apps::gitMUI::repo->new({
-				where => $REPO_LOCAL,
-				path  => $path,
-				section_id => $section_id,
-				section_path => $section_id,
-				opts => $opts, });
-			if ($repo)
-			{
-				addRepoToSystem($repo);
 				if ($INIT_SYSTEM)
 				{
-					repoNote($repo,$dbg_parse,2,"INIT_SYSTEM repo($path)");
-					apps::gitMUI::repoGit::gitStart($repo);
+					$section_id = '';
+					$section_path = '';
+					$opts = '';
 				}
-				else
+
+				repoDisplay($dbg_parse+1,2,"adding untracked_repo($path)");
+				my $repo = apps::gitMUI::repo->new({
+					where => $REPO_LOCAL,
+					path  => $path,
+					section_id => $section_id,
+					section_path => $section_id,
+					opts => $opts, });
+				if ($repo)
 				{
-					repoWarning($repo,$dbg_parse,2,"untracked repo($path)");
+					addRepoToSystem($repo);
+					if ($INIT_SYSTEM)
+					{
+						repoNote($repo,$dbg_parse,2,"INIT_SYSTEM repo($path)");
+						apps::gitMUI::repoGit::gitStart($repo);
+					}
+					else
+					{
+						repoWarning($repo,$dbg_parse,2,"untracked repo($path)");
+					}
 				}
 			}
-		}
-	}
+		}	# $INIT_SYSTEM || GIT_ADD_UNTRACKED_REPOS
+	}	# !$SUBSET
 
 	return 1;
 }
@@ -632,7 +677,8 @@ sub setUsedBy
 			my $used_repo = $repos_by_path->{$use};
 			if (!$used_repo)
 			{
-				$repo->repoError("invalid USES: $use");
+				$repo->repoError("invalid USES: $use") if !$SUBSET;
+					# We cannot reverse validate all USES when doing $SUBSETS
 			}
 			else
 			{

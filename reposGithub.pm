@@ -341,23 +341,31 @@ sub doGitHub
 				$found_local = 1;
 			}
 
+			# 2025-12-23 Don't add remoteOnly repos from github if $SUBSET
+			
 			if (!$found_local)
 			{
-				my $dbg_num = scalar(@$repo_list);
-				repoDisplay($dbg_github,0,"creating remoteOnlyRepo($dbg_num,$entry->{name})");
+				if ($SUBSET)
+				{
+					repoDisplay($dbg_github,0,"skipping SUBSET($SUBSET) remoteOnlyRepo($entry->{name})");
+				}
+				else
+				{
+					my $dbg_num = scalar(@$repo_list);
+					repoDisplay($dbg_github,0,"creating remoteOnlyRepo($dbg_num,$entry->{name})");
 
-				my $repo = apps::gitMUI::repo->new({
-					where => $REPO_REMOTE,
-					id => $id,
-					section_id => 'remoteOnly',
-					section_path => 'remoteOnly', });
+					my $repo = apps::gitMUI::repo->new({
+						where => $REPO_REMOTE,
+						id => $id,
+						section_id => 'danglingRepos',
+						section_path => 'danglingRepos', });
 
-				next if !$repo;
+					next if !$repo;
 
-				repoWarning($repo,0,0,"gitHub repo does not exist locally!!");
-				oneRepoEntry($id,$entry,$repo,$parent);
-				addRepoToSystem($repo);
-
+					$repo->repoError("dangling gitHub repo does not exist locally!!");
+					oneRepoEntry($id,$entry,$repo,$parent);
+					addRepoToSystem($repo);
+				}
 			}	# !$found_local
         }   # foreach $entry
     }   # while $page
