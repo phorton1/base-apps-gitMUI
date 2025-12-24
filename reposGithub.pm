@@ -385,15 +385,6 @@ sub doGitHub
 
 	display(0,-1,"doGitHub() total used on gitHub=".prettyBytes($total_size*1024));
 
-	# one time code to write out new git_repos.txt
-
-	if ($INIT_SYSTEM)
-	{
-		$INIT_SYSTEM = 0;
-		apps::gitMUI::repos::writeNewReposFile();
-	}
-
-
 }   #   doGitHub()
 
 
@@ -420,7 +411,7 @@ sub oneRepoEntry
 
 	$repo->{parent} = $parent if $parent;
 
-	if ($INIT_SYSTEM || $repo->isRemoteOnly())
+	if ($repo->isRemoteOnly())
 	{
 		$repo->{private} = 1 if $is_private;
 		$repo->{forked} = 1 if $is_forked;

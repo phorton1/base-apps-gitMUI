@@ -41,37 +41,15 @@ use Wx qw(:everything);
 use Pub::Utils;
 use Pub::Prefs;
 use Pub::WX::AppConfig;
-use Pub::WX::Dialogs;
-use apps::gitMUI::dialogCredentials;
 
 
 my $dbg_ids = 1;
-
-
-our $INIT_SYSTEM = 0;
-
-our $TEST_INIT_SYSTEM = 0;		# DANGEROUS: Deletes git_repositories.txt !!!
-	# if set, command line 'init' will force a rebuild of git_repos.txt,
-	# but will use the caches if present.  Otherwise, $INIT_SYSTEM will
-	# clear the temp direotory.
-
-# 2025-12-23
-# I had hopes of building and releasing this publicly as an
-# intallable windows application.  Now I am not so sure.
-# It IS generally usable, but the ins and outs of using it,
-# much less documenting it, are probably beyond the scope
-# of my lifetime.  I am leaving the ability to build an
-# installer, and to scan the hard disk, but generally speaking,
-# I will probably never do it.
 
 
 BEGIN
 {
  	use Exporter qw( import );
 	our @EXPORT = qw(
-
-		$INIT_SYSTEM
-		$TEST_INIT_SYSTEM
 
 		$THREAD_EVENT
 
@@ -148,9 +126,6 @@ $logfile = "$temp_dir/$program_name.log";
 my $DEFAULT_UPDATE_INTERVAL = 90;
 	# seconds for default update interval
 	# getPref("GIT_UPDATE_INTERVAL") == 0 will turn off automatic updates
-my $DEFAULT_ADD_UNTRACKED_REPOS = 0;
-	# Set this to one to scan the entire machine for untracked repos.
-	# Nascent feature to bootstrap the system for other users.
 my $DEFAULT_EDITOR = "\"C:\\Windows\\notepad.exe\"";
 	# program gets passed multiple filenames
 
@@ -166,24 +141,11 @@ my $default_prefs = {
 	# main prefs
 	# GIT_USER
 	# GIT_API_TOKEN
-
 	GIT_REPO_FILENAME => "$data_dir/git_repos.txt",
 	GIT_UPDATE_INTERVAL => $DEFAULT_UPDATE_INTERVAL,
-
 	GIT_EDITOR => $DEFAULT_EDITOR,
 	GIT_SHELL_EXTS => $DEFAULT_SHELL_EXTS,
 	GIT_EDITOR_EXTS => $DEFAULT_EDITOR_EXTS,
-
-
-	# prefs related to adding untracked repos
-
-	GIT_ADD_UNTRACKED_REPOS => $DEFAULT_ADD_UNTRACKED_REPOS,
-	GIT_UNTRACKED_USE_CACHE => 0,
-	GIT_UNTRACKED_SHOW_TRACKED_REPOS => 0,
-	GIT_UNTRACKED_SHOW_DIR_WARNINGS => 1,
-	GIT_UNTRACKED_USE_SYSTEM_EXCLUDES => 1,
-	GIT_UNTRACKED_USE_OPT_SYSTEM_EXCLUDES => 1,
-	GIT_UNTRACKED_COLLAPSE_COPIES => 0,
 
 };
 
@@ -195,56 +157,24 @@ Pub::Prefs::initPrefs(
 	0 );	# 1 == show_init_prefs
 
 
+
 sub checkInitSystem
 {
-	# credentials must exist in preferences
-
-	if (!getPref('GIT_USER') || !getPref('GIT_API_TOKEN'))
-	{
-		return 0 if !apps::gitMUI::dialogCredentials->getCredentials()
-	}
-
-	# and then if no repo filename, they get an option to
-	# init the system
-
 	my $repo_filename = getPref('GIT_REPO_FILENAME');
-	unlink $repo_filename if $TEST_INIT_SYSTEM;
-	my $repo_file_exists = -f $repo_filename ? 1 : 0;
-
-	if (!$repo_file_exists)
+	if (!(-f $repo_filename))
 	{
-		my $msg = "Could not find $repo_filename.\n".
-			"Do you want to scan the entire hard-drive for\n".
-			"repos and create a new $repo_filename?";
-		my $title = 'INIT_SYSTEM';
-		my $dlg = Wx::MessageDialog->new(undef,$msg,$title,wxCANCEL|wxOK|wxICON_EXCLAMATION);
-		my $rslt = $dlg->ShowModal();
-		return 0 if $rslt != wxID_OK;
-		warning(0,0,"INITIALIZING SYSTEM to new ".getPref('GIT_REPO_FILENAME'));
-		$INIT_SYSTEM = 1;
+		error("repo file $repo_filename does not exist!");
+		return 0;
 	}
-
-	if ($INIT_SYSTEM && !$TEST_INIT_SYSTEM)
+	if (!getPref('GIT_USER'))
 	{
-		warning(0,0,"INIT SYSTEM CLEARING temp directory");
-		my $dirh;
-		my @unlinks;
-		if (opendir($dirh,$temp_dir))
-		{
-			while (my $entry=readdir($dirh))
-			{
-				next if $entry !~ /\.txt$/;
-				push @unlinks,$entry;
-			}
-			closedir($dirh);
-
-			for my $unlink (@unlinks)
-			{
-				my $path = "$temp_dir/$unlink";
-				display(0,1,"unlinking $unlink");
-				unlink $path;
-			}
-		}
+		error("GIT_USER preference not set!");
+		return 0;
+	}
+	if (!getPref('GIT_API_TOKEN'))
+	{
+		error("GIT_API_TOKEN preference not set!");
+		return 0;
 	}
 
 	return 1;

@@ -225,13 +225,6 @@ and like a FORKED repo, a Browser link to the GitHub repo
 will be provided in the winInfo.
 
 
-## Untracked Repos
-
-There is a function to do a scan of the entire machine
-for any untracked repos that might not be in the git_repos.txt
-file.   It is currently turned on, and uses a cache file
-in the base_data/temp/gitMUI folder for re-use without
-rescanning.
 
 
 -- end of readme ---

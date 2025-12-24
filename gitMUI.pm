@@ -26,7 +26,6 @@ use Pub::WX::AppConfig;
 use apps::gitMUI::repo;
 use apps::gitMUI::repos;
 use apps::gitMUI::reposGithub;
-use apps::gitMUI::reposUntracked;
 use apps::gitMUI::utils;
 use apps::gitMUI::Resources;
 use apps::gitMUI::command;
@@ -75,17 +74,12 @@ sub new
 	display($dbg_frame,0,"apps::gitMUI::Frame->new()");
 
 	setAppFrame(1);
-		# recent mod to wxFrame to allow errors to be reported
-		# during startup.  We'll see how it goes before turning
-		# it on in other apps.
-
+		# allow errors to be reported during startup
 	if (!apps::gitMUI::utils::checkInitSystem())
 	{
 		setAppFrame(undef);
 		return;
 	}
-	warning(0,0,"INITIALIZING SYSTEM") if $INIT_SYSTEM;
-	unlink $ini_file if $INIT_SYSTEM;
 
 	my $dlg = apps::gitMUI::dialogDisplay->new(undef,'gitMUI display');
 	setRepoUI($dlg);
@@ -94,13 +88,7 @@ sub new
 	setRepoUI(undef);
 	apps::gitMUI::dialogDisplay::closeSelfIfNoErrors();
 
-	# error('blah');
-	# Pub::WX::Frame::showError(undef,"blah");
-	# setAppFrame(undef);
-
-	Pub::WX::Frame::setHowRestore($INIT_SYSTEM ?
-		$RESTORE_MAIN_RECT :
-		$RESTORE_ALL);
+	Pub::WX::Frame::setHowRestore($RESTORE_ALL);
 
 	my $this = $class->SUPER::new($parent);
 

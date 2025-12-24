@@ -42,7 +42,6 @@ BEGIN
 
 		$LOCAL_ONLY
 		$REMOTE_ONLY
-		$UNTRACKED_REPO
 
 	);
 }
@@ -55,7 +54,6 @@ our $REPO_REMOTE = 2;
 
 our $LOCAL_ONLY = "LOCAL_ONLY";
 our $REMOTE_ONLY = "REMOTE_ONLY";
-our $UNTRACKED_REPO = 'UNTRACKED_REPO';
 
 
 my $MAX_DISPLAY_PATH = 30;
@@ -191,9 +189,7 @@ sub getId
 				}
 				else
 				{
-					$opts =~ /$UNTRACKED_REPO/ ?
-						repoWarning($this,0,0,"Unexpected remote url($url)") :
-						repoError($this,"Unexpected remote url($url)");
+					repoError($this,"Unexpected remote url($url)");
 				}
 			}
 			else
@@ -540,7 +536,7 @@ sub idWithinSection
 {
 	my ($this) = @_;
 	my $id = $this->{id};
-	if (!$id || $this->{opts} =~ /$UNTRACKED_REPO/)
+	if (!$id)
 	{
 		$id = $this->{path};
 	}

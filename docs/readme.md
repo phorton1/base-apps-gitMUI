@@ -240,23 +240,6 @@ all local repos *must/should* match the **default_branch**
 specified on gitHub.
 
 
-## System Initialization
-
-If there is no git_repos.txt, AND the program is run with
-a single 'init' command_line parameter, the entire hard disk,
-minus known unreadable system directories, will be scanned
-for 'untracked' .git repositories and a new git_repos.txt
-will be built.
-
-In doing so, a fairly complicated process will be performed
-to derive 'sections' for any repos that have $NUM_FOR_GROUP=5
-common ansestors, and for mapping gitHub id's to local paths
-in the process.
-
-This *should* work fairly well for any users who have some
-kind of a systematic mapping from local repository paths to
-gitHub remote ID's already in place.
-
 
 ## Also See (Dependencies)
 
