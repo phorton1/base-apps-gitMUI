@@ -8,10 +8,7 @@
 #
 # This file can parse them from the file and
 # add members from local git/config files.
-#
-# parseRepos(1) takes an optional parameter indicating
-# that it should start a UI window if it encounters
-# any errors, yet this package remains usable without WX.
+
 
 #-----------------------------------------------------------
 # 2025-12-23 Implement SUBSET repos, for boat laptop LENOVO4.
@@ -331,7 +328,6 @@ sub setCanPushPull
 # parseRepos
 #------------------------------------------
 
-
 sub parseRepos
 {
 	my $repo_filename = getPref('GIT_REPO_FILENAME');
@@ -355,12 +351,15 @@ sub parseRepos
 		my $repo;
 		my $section_path = '';
 		my $section_id = '';
+		my $line_num = 0;
 
         for my $line (split(/\n/,$text))
         {
+			$line_num++;		# 1 based
 			$line =~ s/#.*$//;
 			$line =~ s/^\s+//;
 			$line =~ s/\s+$//;
+			next if !$line;
 
 			my $dbg_num = scalar(@$repo_list);
 
@@ -398,7 +397,7 @@ sub parseRepos
 					}
 					if (!$found)
 					{
-						repoDisplay($dbg_parse,1,"skipping SUBSET($SUBSET) repo($path)");
+						repoDisplay($dbg_parse+1,1,"skipping SUBSET($SUBSET) repo($path)");
 						next;
 					}
 				}
@@ -418,100 +417,115 @@ sub parseRepos
 			}
 
 
-			elsif ($repo)
+			#------------------------------------------------
+			# from here down requires a $repo
+			#------------------------------------------------
+
+			# handle SUBMODULES
+
+			elsif ($line =~ /SUBMODULE\t(.*)$/)
 			{
-				# handle SUBMODULES
-
-				if ($line =~ /SUBMODULE\t(.*)$/)
-				{
-					my $rel_path = $1;
-					my $path = makePath($repo->{path},$rel_path);
-					repoWarning(undef,$dbg_parse+1,1,"SUBMODULE($dbg_num, $repo->{path}) = $rel_path ");
-					my $sub_module = apps::gitMUI::repo->new({
-						where => $REPO_LOCAL,
-						path  => $path,
-						section_path => $section_path,
-						section_id => $section_id,
-						parent_repo => $repo,
-						rel_path => $rel_path, });
-					addRepoToSystem($sub_module,'') if $sub_module;
-					my $main_id = $sub_module->{id};
-					$USED_IN->{$main_id} ||= [];
-					push @{$USED_IN->{$main_id}},$path;
-				}
-
-
-				# set PRIVATE bit
-
-				elsif ($line =~ /^PRIVATE$/i)
-				{
-					repoDisplay($dbg_parse+2,2,"PRIVATE");
-					$repo->{private} = 1;
-				}
-
-				# set FORKED = 1 or whatever follows
-
-				elsif ($line =~ s/^FORKED\s*//i)
-				{
-					$line ||= 1;
-					repoDisplay($dbg_parse+2,2,"FORKED $line");
-					$repo->{forked} = $line;
-					$repo->{mine} = '';
-				}
-				elsif ($line =~ /^MINE/i)
-				{
-					repoDisplay($dbg_parse+2,2,"MINE");
-					$repo->{mine} = 1;
-				}
-				elsif ($line =~ /^NOT_MINE/i)
-				{
-					repoDisplay($dbg_parse+2,2,"NOT_MINE");
-					$repo->{mine} = '';
-				}
-				elsif ($line =~ /^PAGE_HEADER/i)
-				{
-					repoDisplay($dbg_parse+2,2,"PAGE_HEADER");
-					$repo->{page_header} = 1;
-				}
-
-				# arrayed things with error checking
-				# DOCS and NEEDS cannot have any spaces in them
-				# but may have trailing data
-
-				elsif ($line =~ s/^(DOCS)\s+//i)
-				{
-					my $what = $1;
-					repoDisplay($dbg_parse+2,2,"$what $line");
-					$repo->{lc($what)} ||= shared_clone([]);
-					push @{$repo->{lc($what)}},$line;
-
-					my ($root) = split(/\s+/,$line);
-					my $path = $repo->{path}.$root;
-					$repo->repoWarning(0,0,"$what $root does not exist")
-						if !(-f $path);
-				}
-				elsif ($line =~ s/^(NEEDS)\s+//i)
-				{
-					my $what = $1;
-					repoDisplay($dbg_parse+2,2,"$what $line");
-					$repo->{lc($what)} ||= shared_clone([]);
-					push @{$repo->{lc($what)}},$line;
-					my ($path) = split(/\s+/,$line);
-					$repo->repoError("$what $path does not exist")
-						if !(-d $path);
-				}
-
-				# unchecked (here) arrayed things
-
-				elsif ($line =~ s/^(USES|GROUP|FRIEND|NOTES|WARNINGS|ERRORS)\s+//i)
-				{
-					my $what = $1;
-					repoDisplay($dbg_parse+2,2,"$what $line");
-					$repo->{lc($what)} ||= shared_clone([]);
-					push @{$repo->{lc($what)}},$line;
-				}
+				next if !$repo;
+				my $rel_path = $1;
+				my $path = makePath($repo->{path},$rel_path);
+				repoWarning(undef,$dbg_parse+1,1,"SUBMODULE($dbg_num, $repo->{path}) = $rel_path ");
+				my $sub_module = apps::gitMUI::repo->new({
+					where => $REPO_LOCAL,
+					path  => $path,
+					section_path => $section_path,
+					section_id => $section_id,
+					parent_repo => $repo,
+					rel_path => $rel_path, });
+				addRepoToSystem($sub_module,'') if $sub_module;
+				my $main_id = $sub_module->{id};
+				$USED_IN->{$main_id} ||= [];
+				push @{$USED_IN->{$main_id}},$path;
 			}
-		}
+
+
+			# set PRIVATE bit
+
+			elsif ($line =~ /^PRIVATE$/i)
+			{
+				next if !$repo;
+				repoDisplay($dbg_parse+2,2,"PRIVATE");
+				$repo->{private} = 1;
+			}
+
+			# set FORKED = 1 or whatever follows
+
+			elsif ($line =~ s/^FORKED\s*//i)
+			{
+				next if !$repo;
+				$line ||= 1;
+				repoDisplay($dbg_parse+2,2,"FORKED $line");
+				$repo->{forked} = $line;
+				$repo->{mine} = '';
+			}
+			elsif ($line =~ /^MINE/i)
+			{
+				next if !$repo;
+				repoDisplay($dbg_parse+2,2,"MINE");
+				$repo->{mine} = 1;
+			}
+			elsif ($line =~ /^NOT_MINE/i)
+			{
+				next if !$repo;
+				repoDisplay($dbg_parse+2,2,"NOT_MINE");
+				$repo->{mine} = '';
+			}
+			elsif ($line =~ /^PAGE_HEADER/i)
+			{
+				next if !$repo;
+				repoDisplay($dbg_parse+2,2,"PAGE_HEADER");
+				$repo->{page_header} = 1;
+			}
+
+			# arrayed things with error checking
+			# DOCS and NEEDS cannot have any spaces in them
+			# but may have trailing data
+
+			elsif ($line =~ s/^(DOCS)\s+//i)
+			{
+				next if !$repo;
+				my $what = $1;
+				repoDisplay($dbg_parse+2,2,"$what $line");
+				$repo->{lc($what)} ||= shared_clone([]);
+				push @{$repo->{lc($what)}},$line;
+
+				my ($root) = split(/\s+/,$line);
+				my $path = $repo->{path}.$root;
+				$repo->repoWarning(0,0,"$what $root does not exist")
+					if !(-f $path);
+			}
+			elsif ($line =~ s/^(NEEDS)\s+//i)
+			{
+				next if !$repo;
+				my $what = $1;
+				repoDisplay($dbg_parse+2,2,"$what $line");
+				$repo->{lc($what)} ||= shared_clone([]);
+				push @{$repo->{lc($what)}},$line;
+				my ($path) = split(/\s+/,$line);
+				$repo->repoError("$what $path does not exist")
+					if !(-d $path);
+			}
+
+			# unchecked (here) arrayed things
+
+			elsif ($line =~ s/^(USES|NOTES|WARNINGS|ERRORS)\s+//i)
+			{
+				my $what = $1;
+				next if !$repo;
+				repoDisplay($dbg_parse+2,2,"$what $line");
+				$repo->{lc($what)} ||= shared_clone([]);
+				push @{$repo->{lc($what)}},$line;
+			}
+			else
+			{
+				repoError(undef,"UKNOWN LINE($line_num): $line");
+			}
+
+		}	# for each $line
     }
     else
     {

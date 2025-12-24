@@ -263,7 +263,9 @@ sub gitHubRequest
 #-----------------------------------------------
 # doGitHub()
 #-----------------------------------------------
-
+# Always called immediately repos::parseRepos(),
+# $use_cache allows the UI to wipe out the cache
+# 	and start over.
 
 sub doGitHub
 {
@@ -347,12 +349,13 @@ sub doGitHub
 			{
 				if ($SUBSET)
 				{
-					repoDisplay($dbg_github,0,"skipping SUBSET($SUBSET) remoteOnlyRepo($entry->{name})");
+					repoDisplay($dbg_github+1,0,"skipping SUBSET($SUBSET) remoteOnlyRepo($entry->{name})");
 				}
 				else
 				{
 					my $dbg_num = scalar(@$repo_list);
-					repoDisplay($dbg_github,0,"creating remoteOnlyRepo($dbg_num,$entry->{name})");
+
+					repoDisplay($dbg_github+1,0,"creating dangling GitHub remoteOnlyRepo($dbg_num,$entry->{name})");
 
 					my $repo = apps::gitMUI::repo->new({
 						where => $REPO_REMOTE,
@@ -360,9 +363,9 @@ sub doGitHub
 						section_id => 'danglingRepos',
 						section_path => 'danglingRepos', });
 
-					next if !$repo;
+					# next if !$repo; # SHOULD NEVER HAPPEN
 
-					$repo->repoError("dangling gitHub repo does not exist locally!!");
+					repoError($repo,"dangling gitHub repo($entry->{name}) does not exist locally!!");
 					oneRepoEntry($id,$entry,$repo,$parent);
 					addRepoToSystem($repo);
 				}
@@ -370,15 +373,16 @@ sub doGitHub
         }   # foreach $entry
     }   # while $page
 
+
+
+
 	for my $repo (@$repo_list)
 	{
-		# explicit local_only repos and
 		# submodules (rel_path} are allowed to exist without
 		# an explicit repo on git hub.
 
-		$repo->repoWarning(0,0,"repo not found on github!")
-			if $repo->{opts} !~ /$LOCAL_ONLY/ &&
-			   !$repo->{rel_path} &&
+		$repo->repoError("repo not found on GitHub!")
+			if !$repo->{rel_path} &&
 			   ($repo->{exists} & $REPO_LOCAL) &&
 			   !($repo->{exists} & $REPO_REMOTE);
 	}
@@ -401,6 +405,7 @@ sub oneRepoEntry
 	$repo->{size} = $entry->{size} || 0;
 	$repo->{default_branch} = $default_branch;
 	$repo->{descrip} = $entry->{description} || '';
+	$repo->{pushed_at} = $entry->{pushed_at};
 
 	if ($repo->{descrip} =~ /Copied from (.*?)\s/i)
 	{

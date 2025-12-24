@@ -240,6 +240,7 @@ sub new
 
 		# Status fields always exist
 
+		pushed_at	=> '',
 		HEAD_ID 	=> '',
 		MASTER_ID 	=> '',
 		REMOTE_ID 	=> '',
@@ -261,13 +262,13 @@ sub new
 
 		# fields added in parseRepos()
 		#
-		# page_header => 0,					# PAGE_HEADER for ordered documents
-		# docs     => shared_clone([]),		# MD documents in particular order
-		# uses 	 => shared_clone([]),		# a list of the repositories this repository USES
-		# used_by  => shared_clone([]),		# list of repositorie sthat use this repository
-		# needs	 => shared_clone([]),       # a list of the abitrary dependencies this repository has
-		# friend   => shared_clone([]),       # a hash of repositories this repository relates to or can use
-		# group    => shared_clone([]),       # a list of arbitrary groups that this repository belongs to
+		# page_header	=> 0,					# PAGE_HEADER for ordered documents
+		# docs     		=> shared_clone([]),	# MD documents in particular order
+		# uses 	 		=> shared_clone([]),	# a list of the repositories this repository USES
+		# used_by  		=> shared_clone([]),	# list of repositorie sthat use this repository
+		# needs	 		=> shared_clone([]),	# a list of the abitrary dependencies this repository has
+		# friend   		=> shared_clone([]),	# a hash of repositories this repository relates to or can use
+		# group    		=> shared_clone([]),	# a list of arbitrary groups that this repository belongs to
 
 		# these arrays always exist
 
@@ -709,10 +710,6 @@ sub contentArray
 
 # Recursion
 #
-# GROUPS are recursive through USES and FRIEND.
-#     not implemented yet
-#     only the highest level repos need to be specified as groups.
-#     The recursion should be handled in parseRepos()
 # 'uses' are recursed inline in contentArray
 #
 # For 'needs' we have a separate method that shows the direct NEEDS
@@ -930,32 +927,6 @@ sub toTextCtrl
 		   $this->{branch} ne $this->{default_branch};
 
 	$this->contentLine($text_ctrl,1,'private');
-
-	# short status
-
-	my $short_status = '';
-	$short_status = $this->addTextForHashNum($short_status,'unstaged_changes',"UNSTAGED");
-	$short_status = $this->addTextForHashNum($short_status,'staged_changes',"STAGED");
-	$short_status = $this->addTextForNum($short_status,'AHEAD');
-	$short_status = $this->addTextForNum($short_status,'BEHIND');
-	$short_status = $this->addTextForNum($short_status,'REBASE');
-		# Above determine canCommit, canPush, canPull, and needsStash
-	$short_status = $this->addTextForFxn($short_status,'canAdd');
-	$short_status = $this->addTextForFxn($short_status,'canCommit');
-	$short_status = $this->addTextForFxn($short_status,'canPush');
-	$short_status = $this->addTextForFxn($short_status,'canPull');
-	$short_status = $this->addTextForFxn($short_status,'needsStash');
-	$short_status = $this->addTextForFxn($short_status,'canCommitParent');
-
-	if ($short_status)
-	{
-		# mimic the 'link' colors for 'canPush',
-
-		my $color = linkDisplayColor($this);
-		$short_status = pad('status',$LEFT_MARGIN)." = ".$short_status;
-		$text_ctrl->addSingleLine(1, $color, $short_status);
-	}
-
 	$this->contentLine($text_ctrl,0,'section_path');
 	$this->contentLine($text_ctrl,0,'section_id');
 	$this->contentLine($text_ctrl,1,'mine');
@@ -996,6 +967,35 @@ sub toTextCtrl
 		$this->contentEWN($text_ctrl,1,'errors',$color_red);
 		$this->contentEWN($text_ctrl,1,'warnings',$color_magenta);
 		$this->contentEWN($text_ctrl,0,'notes');
+	}
+
+
+	# pushed_at and short status
+
+	$text_ctrl->addLine();
+	$this->contentLine($text_ctrl,1,'pushed_at');
+
+	my $short_status = '';
+	$short_status = $this->addTextForHashNum($short_status,'unstaged_changes',"UNSTAGED");
+	$short_status = $this->addTextForHashNum($short_status,'staged_changes',"STAGED");
+	$short_status = $this->addTextForNum($short_status,'AHEAD');
+	$short_status = $this->addTextForNum($short_status,'BEHIND');
+	$short_status = $this->addTextForNum($short_status,'REBASE');
+		# Above determine canCommit, canPush, canPull, and needsStash
+	$short_status = $this->addTextForFxn($short_status,'canAdd');
+	$short_status = $this->addTextForFxn($short_status,'canCommit');
+	$short_status = $this->addTextForFxn($short_status,'canPush');
+	$short_status = $this->addTextForFxn($short_status,'canPull');
+	$short_status = $this->addTextForFxn($short_status,'needsStash');
+	$short_status = $this->addTextForFxn($short_status,'canCommitParent');
+
+	if ($short_status)
+	{
+		# mimic the 'link' colors for 'canPush',
+
+		my $color = linkDisplayColor($this);
+		$short_status = pad('status',$LEFT_MARGIN)." = ".$short_status;
+		$text_ctrl->addSingleLine(1, $color, $short_status);
 	}
 
 	# COMMIT INFORMATION for debugging visible without scrolling
