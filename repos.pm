@@ -677,8 +677,9 @@ sub setUsedBy
 			my $used_repo = $repos_by_path->{$use};
 			if (!$used_repo)
 			{
-				$repo->repoError("invalid USES: $use") if !$SUBSET;
-					# We cannot reverse validate all USES when doing $SUBSETS
+				$repo->repoError("invalid USES: $use");
+					# We must still validate USES because other parts
+					# of the system depend on USES and USED_BY being
 			}
 			else
 			{
