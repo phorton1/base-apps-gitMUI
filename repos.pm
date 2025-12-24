@@ -27,7 +27,7 @@ use apps::gitMUI::utils;
 
 
 
-my $dbg_parse = 0;
+my $dbg_parse = -2;
 	# -1 for repos
 	# -2 for lines
 my $dbg_notify = 1;
@@ -289,6 +289,13 @@ sub setCanPushPull
 # parseRepos
 #------------------------------------------
 
+my $ALLOW_MISSING = 1;
+	# partial implementations allow for missing repos
+	# I *might* want to flag them differently, but for
+	# now, I just want the parser to work correctly validating
+	# syntax, but not barfing on missing repos.
+
+
 sub parseRepos
 {
 	my $repo_filename = getPref('GIT_REPO_FILENAME');
@@ -301,6 +308,7 @@ sub parseRepos
 	my $text = getTextFile($repo_filename);
     if ($text)
     {
+		my $missing = 0;
 		my $repo;
 		my $section_path = '';
 		my $section_id = '';
@@ -346,6 +354,8 @@ sub parseRepos
 			# Local Repos start with a forward slash
 			# Remote Only repos start with a dash
 
+
+
 			elsif ($line =~ /^\//)
 			{
 				my @parts = split(/\t/,$line);
@@ -357,7 +367,28 @@ sub parseRepos
 					section_path => $section_path,
 					section_id => $section_id,
 					opts => $opts, });
-				addRepoToSystem($repo) if $repo;
+				if ($repo)
+				{
+					addRepoToSystem($repo);
+				}
+
+				# experiment.  Treat missing repos as "remote" only.
+
+				elsif ($ALLOW_MISSING)
+				{
+					my $id = $path;
+					$id =~ s/\//-/g;
+
+					repoDisplay($dbg_parse+1,1,"MISSING=remote_only repo($dbg_num,$id,$section_path,$section_id)");
+					$repo = apps::gitMUI::repo->new({
+						where => $REPO_REMOTE,
+						id => $id,
+						section_path => $section_path,
+						section_id => $section_id,
+						opts => $opts, });
+					addRepoToSystem($repo) if $repo;
+
+				}
 			}
 			elsif ($line =~ s/^-//)
 			{
