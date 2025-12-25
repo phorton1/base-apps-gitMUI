@@ -486,8 +486,9 @@ sub setCanCommitParent
 	}
 
 	my $can_commit = $repo_ok && $found ? 1 : 0;
-
-	warning($dbg_can_commit,0,"setCanCommitParent($this->{path}) repo_ok($repo_ok) found($found) = $can_commit");
+	my $old_can_commit = $this->{can_commit_parent} ? 1 : 0;
+	warning($dbg_can_commit,0,"setCanCommitParent($this->{path}) repo_ok($repo_ok) found($found) = $can_commit")
+		if $can_commit != $old_can_commit;
 	display($dbg_can_commit+1,1,"BEHIND($this->{BEHIND}) REBASE($this->{REBASE}) changes($num_changes) master_matches($master_matches)");
 	display($dbg_can_commit+1,1,"parent BEHIND($parent->{BEHIND}) REBASE($parent->{REBASE}) unstaged($num_parent_unstaged)");
 

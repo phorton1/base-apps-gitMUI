@@ -414,12 +414,30 @@ sub doGitHub
 				my $sha = $data->{commit}->{sha} || '';
 				repoDisplay($dbg_github,3,"GITHUB_ID=$sha");
 				$repo->{GITHUB_ID} = $sha;
+
+				if ($repo->{GITHUB_ID} eq $repo->{REMOTE_ID})
+				{
+					if ($repo->{BEHIND})
+					{
+						repoWarning($repo,$dbg_github,4,"clearing BEHIND($id)=0");
+						$repo->{BEHIND} = 0;
+					}
+				}
+				else
+				{
+					if (!$repo->{BEHIND})
+					{
+						repoWarning($repo,$dbg_github,4,"setting BEHIND($id)=1");
+						$repo->{BEHIND} = 1;
+					}
+				}
 			}
 			else
 			{
 				$repo->repoError("repo not found on GitHub!");
 			}
 		}
+		setRepoState($repo);
 	}
 
 	display(0,-1,"doGitHub() total used on gitHub=".prettyBytes($total_size*1024));

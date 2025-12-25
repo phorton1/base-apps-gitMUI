@@ -1,23 +1,69 @@
 # gitMUI - Status and Updating
 
-TODO: implement an actual *statusWindow*
-
 
 Maintaining the status of the local repositories versus gitHub
 is rather complicated, and a bit time consuming.
 
 This document describes how the general scheme by which
-monitorUpdate() sets the repo gitHub ID, remote_commits,
-and {BEHIND} members. {BEHIND} indicates that a repo is
-out of date with respect to gitHub and needs to be pulled.
+monitor::githubThread() and reposGithub::doGitHub()
+sets the repo GITHUB_ID, which in turn can set the
+BEHIND and REBASE member. BEHIND indicates that a local repo is
+out of date with respect to gitHub and needs to be pulled,
+and REBASE indicates that a local repo is BEHIND and yet
+has unstaged or staged changes, i.e. could be dangerously
+accidentally committed creating a merge situation.
 
-By the structure of the monitor, which calls gitChanges()
+Generally speaking the monitor, which calls gitChanges()
 on each repo at startup, which in turn calls gitStart()
-on each repo, the HEAD_ID, MASTER_ID, REMOTE_ID, local_commits,
-and {AHEAD} members have already been added to everr repo
-befor the monitor does an monitorUpdate(). which sets
-the , and maintained, for every repo in repoGit().
+on each repo, and then calls gitChanges() on every repo
+in which any files change, maintains the local truth:
+HEAD_ID, MASTER_ID, REMOTE_ID, local_commits, staged_changes
+and unstaged_changes arrays, and manages the AHEAD member
+independently of the githubThread().
 
+doGitHub() (at startup and from Rescan/Rebuild UI commands) and
+the monitor::gitHubThread() are responsible for using the {pushed_at}
+member to update the GITHUB_ID and to set the BEHIND and REBASE
+members appropriately.
+
+REBASE is tricky to the extent that it can be changed either
+by local monitor::run() methods or the githubThread/goGitHub()
+methods.  REBASE situations are generally handled by Stashing
+local changes and pulling, giving precedence to the changes
+already pushed to GitHub.
+
+Also note that explicit actions of Pushing, Pulling, Reverting,
+and external Stashing can affect REBASE.
+
+## BASICS
+
+Because Git::Raw can give us the entire local history, including
+the HEAD_ID, MASTER_ID, and REMOTE_ID, we can develop an integer
+number for {AHEAD} which is the number of commits between MASTER_ID
+and REMOTE_ID, i.e. a count of the number of commits that will be
+sent to GitHub if we push the repo.  So AHEAD>0 implies that a
+push is needed.
+
+When we get the GITHUB_ID it can be within the local commit history
+(i.e. the same as REMOTE_ID or some previous local commit) indicating
+that the local repo "knows" about the GITHUB_ID, and therefore BEHIND==0.
+Or, the GITHUB_ID might be unknown to the local repo, and therefore
+we set BEHIND=1 as we have no idea of the number of commits between
+our last REMOTE_ID and the GITHUB_ID.
+
+BEHIND=1 is sufficient to notice that the repo needs to be pulled,
+and/or to set REBASE based on other conditions.
+
+Even more specifically, and simpler, is the notion that REMOTE_ID
+is the last commit this machine has pushed to github, and if
+REMOTE_ID != GITHUB_ID, then we just set BEHIND=1.  We do not
+have to search through local commits earlier than REMOTE_ID
+to ascertain that BEHIND should be set to 1.
+
+
+
+
+## ----------------- OLD -----------------------
 
 ## Automatic Status Updating
 

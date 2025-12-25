@@ -350,8 +350,12 @@ sub monitor_callback
 	my ($data) = @_;
 	my $this = getAppFrame();
 
-	my $show = $data->{status} || $data->{repo}->{path};
+	my $repo = $data->{repo};
+	my $repo_path = $repo ? $repo->{path} : '';
+	my $show = $data->{status} || $repo_path;
 	display($dbg_mon,0,"monitor_callback($show");
+
+	setRepoState($data->{repo}) if $repo_path;
 
 	my $evt = new Wx::PlThreadEvent( -1, $MONITOR_EVENT, shared_clone($data) );
 	Wx::PostEvent( $this, $evt );

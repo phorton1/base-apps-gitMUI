@@ -150,7 +150,12 @@ sub getTree
 #--------------------------------------------
 # gitStart
 #--------------------------------------------
-# Sets the initial head_id, master_id, and remote_id members
+# Sets the "local truth" about the repo based on Git::Raw.
+# Sets the head_id, master_id, and remote_id members and
+# can set AHEAD, but does not know about GITHUB_ID, has
+# nothing to do with BEHIND, and can, therefore NOT set
+# REBASE.
+
 
 sub gitStart
 	# returns undef if any problems
@@ -176,7 +181,6 @@ sub gitStart
 
 		# re-init remote portion repo
 
-		$repo->{BEHIND} = 0;
 		delete $repo->{remote_commits};
 		$repo->{branch_changed} = 1;
 	}
@@ -231,7 +235,6 @@ sub gitStart
 	$log->sorting(["time"]);	# ,"reverse"]);
 
 	my $ahead = 0;
-	my $rebase = 0;
 	my $com = $log->next();
 	while ($com && (
 		!$head_id_found ||
@@ -248,34 +251,16 @@ sub gitStart
 		$remote_id_found = 1 if $sha eq $remote_id;
 
 		# These are from newest to oldest
-		# AHEAD is if there are local commits and MASTERS is AFTER the REMOTE.
-		# BEHIND is only set by gitStatus ..
-
-		# After the Fetch during a Pull, REMOTE will be BEFORE the MASTER, indicating
-		# that a Rebase is necessary. It is SIGNIFICANT, that the repo is now in a state
-		# where no commits should be allowed, lest we create a state where a Merge is
-		# required. Since a Fetch may be done from the command line, the system needs to
-		# know about this possibility, grr, so I am adding a member variable
-		#
-		# 		REBASE
-		#
-		# For lack of a better word, this indicates that the repo is now out of date
-		# with respect to itself locally, and needs to be REBASED.
+		# AHEAD is if there are local commits and MASTER is AFTER the REMOTE.
 
 		my $ahead_str = '';
-		my $rebase_str = '';
 		if ($master_id_found && !$remote_id_found)
 		{
 			$ahead++;
 			$ahead_str = "AHEAD($ahead) ";
 		}
-		if ($remote_id_found && !$master_id_found)
-		{
-			$rebase++;
-			$rebase_str = "REBASE($rebase) ";
-		}
 
-		display($dbg_start+1,1,pad($ahead_str.$rebase_str,10)."$time ".pad($extra,30)._lim($sha,8)." "._lim($msg,20));
+		display($dbg_start+1,1,pad($ahead_str,10)."$time ".pad($extra,30)._lim($sha,8)." "._lim($msg,20));
 
 		$repo->{local_commits} ||= shared_clone([]);
 		push @{$repo->{local_commits}},shared_clone({
@@ -289,10 +274,8 @@ sub gitStart
 
 	warning($dbg_start,1,"repo($repo->{path}) is AHEAD($ahead)")
 		if $ahead;
-	warning($dbg_start-1,1,"repo($repo->{path}) needs REBASE($rebase)")
-		if $rebase;
+
 	$repo->{AHEAD} = $ahead;
-	$repo->{REBASE} = $rebase;
 
 	display($dbg_start+1,0,"gitStart($repo->{path}) returning");
 
@@ -625,7 +608,7 @@ sub gitIndex
 
 	getAppFrame()->notifyRepoChanged($repo)
 		if getAppFrame();
-
+	setRepoState($repo);
 	display($dbg_index,0,"gitIndex() returning 1");
 	return 1;
 }
@@ -708,6 +691,7 @@ sub gitRevert
 	# a notifyCallback on gitChanges()
 
 	my $undef = $index->checkout( $opts );
+	setRepoState($repo);
 
 	display($dbg_revert,0,"gitRevert($num_paths) returning 1");
 	return 1;
@@ -767,6 +751,7 @@ sub gitCommit
 
 	$repo->{staged_changes} = shared_clone({});
 	gitStart($repo,$git_repo);
+	setRepoState($repo);
 	setCanPushPull($repo);
 	getAppFrame()->notifyRepoChanged($repo)
 		if getAppFrame();
@@ -780,6 +765,7 @@ sub gitCommit
 #--------------------------------------------
 # gitTag
 #--------------------------------------------
+# Not currently called
 
 sub gitTag
 	# Note that we manually generate a monitor_callback
@@ -812,6 +798,7 @@ sub gitTag
 	# monitor_callback() for good measure
 
 	gitStart($repo,$git_repo);
+	setRepoState($repo);
 	setCanPushPull($repo);
 	getAppFrame()->notifyRepoChanged($repo)
 		if getAppFrame();
@@ -954,8 +941,13 @@ sub gitPush
 	# soon as possible after a push or pull
 
 	gitStart($repo,$git_repo);
-	$repo->{BEHIND} = 0 if $rslt;
-	setCanPushPull($repo);
+	if ($rslt)
+	{
+		$repo->{BEHIND} = 0;
+		$repo->{GITHUB_ID} = $repo->{MASTER_ID};
+		setRepoState($repo);
+		setCanPushPull($repo);
+	}
 	getAppFrame()->notifyRepoChanged($repo)
 		if getAppFrame();
 	apps::gitMUI::monitor::doMonitorUpdate();
@@ -1087,8 +1079,13 @@ sub gitPull
 	# soon as possible after a push or pull
 
 	gitStart($repo,$git_repo);
-	$repo->{BEHIND} = 0 if $rslt;
-	setCanPushPull($repo);
+	if ($rslt)
+	{
+		$repo->{BEHIND} = 0;
+		$repo->{GITHUB_ID} = $repo->{MASTER_ID};
+		setRepoState($repo);
+		setCanPushPull($repo);
+	}
 	getAppFrame()->notifyRepoChanged($repo)
 		if getAppFrame();
 	apps::gitMUI::monitor::doMonitorUpdate();

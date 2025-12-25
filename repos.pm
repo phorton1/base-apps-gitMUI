@@ -64,7 +64,8 @@ use apps::gitMUI::utils;
 my $dbg_parse = 0;
 	# -1 for repos
 	# -2 for lines
-my $dbg_notify = 1;
+my $dbg_notify = 0;
+my $dbg_state = 0;
 
 
 BEGIN
@@ -105,6 +106,7 @@ BEGIN
 		clearSelectedCommitParentRepo
 
 		setCanPushPull
+		setRepoState
 
 		groupReposBySection
 	);
@@ -302,15 +304,34 @@ sub setCanPushPull
 {
 	my ($repo) = @_;
 	return if !$repo->isLocalAndRemote();
-		# TODO: I don't think this handles localOnly commitParent
-	display($dbg_notify,0,"setCanPushPull($repo->{path})");
-	$repo->canPush() ?
-		$repos_can_push->{$repo->{path}} = 1 :
-		delete $repos_can_push->{$repo->{path}};
-	$repo->canPull() ?
-		$repos_can_pull->{$repo->{path}} = 1 :
-		delete $repos_can_pull->{$repo->{path}};
+		# TODO: This definitely does not handle submodule repos with {relpath}
+		
+	display($dbg_notify+1,0,"setCanPushPull($repo->{path})");
+
+	my $can_push = $repo->canPush();
+	my $can_pull = $repo->canPull();
+	my $old_can_push = $repos_can_push->{$repo->{path}} ? 1 : 0;
+	my $old_can_pull = $repos_can_pull->{$repo->{path}} ? 1 : 0;
+
+	if ($can_push != $old_can_push)
+	{
+		warning($dbg_notify,1,"setting CAN_PUSH($repo->{path})=$can_push");
+		$can_push ?
+			$repos_can_push->{$repo->{path}} = 1 :
+			delete $repos_can_push->{$repo->{path}};
+	}
+	if ($can_pull != $old_can_pull)
+	{
+		warning($dbg_notify,1,"setting CAN_PULL($repo->{path})=$can_pull");
+		$can_pull ?
+			$repos_can_pull->{$repo->{path}} = 1 :
+			delete $repos_can_pull->{$repo->{path}};
+	}
+
 	$repo->setCanCommitParent() if $repo->{parent};
+
+	# but this apparently looks like when a submodule changes
+	# you are supposed to call setCanPushPull on the parent
 
 	my $submodules = $repo->{submodules};
 	if ($submodules)
@@ -319,6 +340,52 @@ sub setCanPushPull
 		{
 			my $sub = getRepoByPath($path);
 			$sub->setCanCommitParent();
+		}
+	}
+}
+
+
+
+sub setRepoState
+	# This is the ONLY method that sets REBASE which combines
+	# local and remote truths.
+{
+	my ($repo) = @_;
+	return if !$repo;
+
+	my $path = $repo->{path};
+
+	my $ahead  = $repo->{AHEAD}  || 0;
+	my $behind = $repo->{BEHIND} || 0;
+	my $has_staged   = scalar(keys %{$repo->{staged_changes}});
+	my $has_unstaged = scalar(keys %{$repo->{unstaged_changes}});
+	my $rebase = ($behind && ($has_staged || $has_unstaged)) ? 1 : 0;
+
+	warning($dbg_state,0,"setRepoState($path) ahead($ahead) behind($behind) staged($has_staged) unstaged($has_unstaged) REBASE=$rebase")
+		if $repo->{REBASE} != $rebase;
+
+	$repo->{REBASE} = $rebase;
+
+	if ($repo->isLocalAndRemote())
+	{
+		$repo->canPush() ?
+			$repos_can_push->{$path} = 1 :
+			delete $repos_can_push->{$path};
+
+		$repo->canPull() ?
+			$repos_can_pull->{$path} = 1 :
+			delete $repos_can_pull->{$path};
+	}
+
+	$repo->setCanCommitParent() if $repo->{parent_repo};
+
+	my $subs = $repo->{submodules};
+	if ($subs)
+	{
+		for my $sub_path (@$subs)
+		{
+			my $sub = getRepoByPath($sub_path);
+			$sub->setCanCommitParent() if $sub;
 		}
 	}
 }

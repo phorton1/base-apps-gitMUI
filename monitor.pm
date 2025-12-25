@@ -620,6 +620,24 @@ sub doUpdateStep
 				{
 					warning($dbg_thread2,2,"SHA($id) changed from($repo->{GITHUB_ID}) to $sha");
 					$repo->{GITHUB_ID} = $sha;
+					if ($repo->{GITHUB_ID} eq $repo->{REMOTE_ID})
+					{
+						if ($repo->{BEHIND})
+						{
+							warning($dbg_thread2,2,"clearing BEHIND($id)=0");
+							$repo->{BEHIND} = 0;
+						}
+					}
+					else
+					{
+						if (!$repo->{BEHIND})
+						{
+							warning($dbg_thread2,2,"setting BEHIND($id)=1");
+							$repo->{BEHIND} = 1;
+						}
+					}
+
+					&$the_callback({ repo=>$repo });
 				}
 			}
 			else
