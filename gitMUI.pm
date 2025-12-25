@@ -227,7 +227,7 @@ sub onCommandId
 	}
 	elsif ($id == $ID_COMMAND_REFRESH_STATUS)
 	{
-		monitorUpdate();
+		doMonitorUpdate();
 	}
 }
 

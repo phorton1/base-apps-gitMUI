@@ -955,11 +955,10 @@ sub gitPush
 
 	gitStart($repo,$git_repo);
 	$repo->{BEHIND} = 0 if $rslt;
-		# pre-empt the next monitorUpdate() call
 	setCanPushPull($repo);
 	getAppFrame()->notifyRepoChanged($repo)
 		if getAppFrame();
-	apps::gitMUI::monitor::monitorUpdate(1);
+	apps::gitMUI::monitor::doMonitorUpdate();
 
 	display($dbg_push,1,"gitPush() returning rslt="._def($rslt));
 	return $rslt;
@@ -1089,11 +1088,10 @@ sub gitPull
 
 	gitStart($repo,$git_repo);
 	$repo->{BEHIND} = 0 if $rslt;
-		# pre-empt the next repoStatus() call
 	setCanPushPull($repo);
 	getAppFrame()->notifyRepoChanged($repo)
 		if getAppFrame();
-	apps::gitMUI::monitor::monitorUpdate(1);
+	apps::gitMUI::monitor::doMonitorUpdate();
 
 	display($dbg_pull,1,"gitPull() returning rslt="._def($rslt));
 	return $rslt;

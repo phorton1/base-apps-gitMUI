@@ -40,9 +40,10 @@ use threads;
 use threads::shared;
 use Win32::ChangeNotify;
 use Time::HiRes qw(sleep time);
+use apps::gitMUI::repo;
 use apps::gitMUI::repos;
 use apps::gitMUI::repoGit;
-# use apps::gitMUI::reposGithub;
+use apps::gitMUI::reposGithub;
 use Pub::Utils;
 use Pub::Prefs;
 
@@ -62,7 +63,6 @@ my $STATE_CHANGE_TIMEOUT = 2;
 	# amount of time to wait for stopMonitor or pauseMonitor
 
 
-
 my $dbg_thread = 0;
 	# monitor thread lifecycle
 my $dbg_mon = 1;
@@ -75,7 +75,8 @@ my $dbg_events = 1;
 	# show event details
 my $dbg_chgs = 1;
 	# show notifies when gitChanges returns value
-
+my $dbg_thread2 = 0;
+	# monitor the 2nd thread
 
 
 BEGIN {
@@ -89,7 +90,8 @@ BEGIN {
 		monitorStart
 		monitorStop
 		monitorPause
-		monitorUpdate
+
+		doMonitorUpdate
 
 		$MON_CB_TYPE_STATUS
 		$MON_CB_TYPE_REPO
@@ -117,7 +119,6 @@ my $WIN32_FILTER =
 my ($MONITOR_STATE_NONE,
 	$MONITOR_STATE_STARTING,
 	$MONITOR_STATE_RUNNING,
-	$MONITOR_STATE_UPDATE,
 	$MONITOR_STATE_PAUSING,
 	$MONITOR_STATE_PAUSED,
 	$MONITOR_STATE_STOPPING,
@@ -127,14 +128,13 @@ my ($MONITOR_STATE_NONE,
 # vars
 
 my $thread;
+my $thread2;
 my $the_callback;
 
 my $monitors;
 my $monitor_groups;
 my $monitor_state:shared = $MONITOR_STATE_NONE;
-
-my $can_update:shared = 1;
-my $last_update:shared = 0;
+my $update_busy:shared = 1;
 
 
 #------------------------------------------------
@@ -148,15 +148,17 @@ sub monitorRunning
 	# or take place while the monitor is in an update.
 {
 	return
-		$monitor_state == $MONITOR_STATE_RUNNING ||
-		$monitor_state == $MONITOR_STATE_UPDATE ? 1 : 0;
+	$update_busy ||
+		$monitor_state == $MONITOR_STATE_RUNNING ? 1 : 0;
 }
+
 
 sub monitorBusy
 	# monitoryBusy() is specifically intended to allow
 	# commands that might stop and restart the monitor.
 {
 	return
+		!$update_busy &&
 		$monitor_state != $MONITOR_STATE_RUNNING &&
 		$monitor_state != $MONITOR_STATE_STOPPED ? 1 : 0;
 }
@@ -183,6 +185,14 @@ sub monitorStart
 	$thread = threads->create(\&run);
 	$thread->detach();
 	display($dbg_thread,-2,"thread detached");
+
+	my $update_interval = getPref("GIT_UPDATE_INTERVAL");
+	if ($update_interval)
+	{
+		$thread2 = threads->create(\&githubThread);
+		$thread2->detach();
+		display($dbg_thread2,-2,"githubThread detached");
+	}
 	return 1;
 }
 
@@ -218,32 +228,6 @@ sub monitorPause
 }
 
 
-sub monitorUpdate
-	# $reset_timer merely resets the update timer so
-	# that the update will occur 3 seconds after the monitor is
-	# re-started as soon as possible after a series of
-	# pushes.
-{
-	my ($reset_timer) = @_;
-	$reset_timer ||= 0;
-	display($dbg_mon,-1,"monitorUpdate($reset_timer)");
-	if ($reset_timer)
-	{
-		my $update_interval = getPref("GIT_UPDATE_INTERVAL");
-		$last_update = time() - $update_interval + 3 if $update_interval;
-		return;
-	}
-
-	return !error("attempt to monitorUpdate() in state ".monitorStateString($monitor_state)) if
-		$monitor_state == $MONITOR_STATE_NONE ||
-		$monitor_state == $MONITOR_STATE_STOPPED ||
-		$monitor_state == $MONITOR_STATE_ERROR;
-	$can_update = 1;
-	setMonitorState($MONITOR_STATE_UPDATE);
-}
-
-
-
 
 #------------------------------------------------
 # State Machine
@@ -264,7 +248,6 @@ sub monitorStateString
 		$state == $MONITOR_STATE_NONE     ? 'NONE' :
 		$state == $MONITOR_STATE_STARTING ? 'STARTING' :
 		$state == $MONITOR_STATE_RUNNING  ? 'RUNNING' :
-		$state == $MONITOR_STATE_UPDATE   ? 'UPDATE' :
 		$state == $MONITOR_STATE_PAUSING  ? 'PAUSING' :
 		$state == $MONITOR_STATE_PAUSED   ? 'PAUSED' :
 		$state == $MONITOR_STATE_STOPPING ? 'STOPPING' :
@@ -348,27 +331,11 @@ sub run
 			display($dbg_thread,-1,"thread {started}");
 			setMonitorState($MONITOR_STATE_RUNNING);
 		}
-		elsif ($monitor_state == $MONITOR_STATE_UPDATE)
-		{
-			display($dbg_thread,-1,"thread {update}");
-			$can_update = doMonitorUpdate();
-			$last_update = time();
-			setMonitorState($MONITOR_STATE_RUNNING);
-		}
 		elsif ($monitor_state == $MONITOR_STATE_RUNNING)
 		{
 			display($dbg_thread+1,-1,"thread {running}");
-			my $update_interval = getPref("GIT_UPDATE_INTERVAL");
-			if ($can_update && $update_interval &&
-				time() > $last_update + $update_interval)
-			{
-				setMonitorState($MONITOR_STATE_UPDATE);
-			}
-			else
-			{
-				$rslt = doMonitorRun();
-				last if !$rslt;
-			}
+			$rslt = doMonitorRun();
+			last if !$rslt;
 		}
 		else
 		{
@@ -458,15 +425,6 @@ sub doMonitorStartup
 		&$the_callback({ repo=>$repo, changed=>$rslt });
 	}
 
-	# do an update as part of the startup
-	# before any commands are allowed ..
-
-	if ($can_update)
-	{
-		$can_update = doMonitorUpdate() ;
-		$last_update = time();
-	}
-
 	&$the_callback({ status =>"started" });
 	return 1;
 }
@@ -517,450 +475,169 @@ sub doMonitorRun
 
 
 
-#-------------------------------------------------------
-# OLD UPDATE
-#-------------------------------------------------------
-#
-#	sub doMonitorUpdate
-#	{
-#		display($dbg_thread,-1,"doMonitorUpdate()");
-#		&$the_callback({ status =>"doing Update" });
-#
-#		my $git_user = getPref('GIT_USER');
-#		my $got_events = apps::gitMUI::reposGithub::gitHubRequest(
-#			'events',
-#			"users/$git_user/events?per_page=30",
-#			0,
-#			undef,
-#			\$etag);
-#
-#		if (!defined($got_events))
-#		{
-#			error("Could not get github events");
-#			return 0;
-#		}
-#
-#		if (!ref($got_events))
-#		{
-#			display($dbg_update,1,"got status($got_events) events (no changes)");
-#			&$the_callback({ status =>"Update: no changes" });
-#			return 1;
-#		}
-#
-#		my $rslt = updateStatusAll($got_events);
-#		&$the_callback({ status =>"Update finished" }) if $rslt;
-#		return $rslt;
-#	}
-#
-#
-#	sub updateStatusAll
-#		# the main method that updates the status for all repos
-#	{
-#		my ($events) = @_;
-#		my $num_events = @$events;
-#		display($dbg_update,-1,"updateStatusAll() for $num_events events");
-#
-#		my $repo_list = getRepoList();
-#		for my $repo (@$repo_list)
-#		{
-#			next if !$repo->isLocalAndRemote();
-#			return 0 if !initRepoStatus($repo);
-#		}
-#
-#		for my $event (reverse @$events)
-#		{
-#			return 0 if !oneEvent($event);
-#		}
-#
-#		for my $repo (@$repo_list)
-#		{
-#			next if !$repo->isLocalAndRemote();
-#			return 0 if !finishRepoStatus($repo);
-#		}
-#
-#		return 1;
-#	}
-#
-#
-#
-#	sub initRepoStatus
-#	{
-#		my ($repo) = @_;
-#
-#		$repo->{save_BEHIND} 	= $repo->{BEHIND};
-#		$repo->{save_GITHUB_ID} = $repo->{GITHUB_ID} || '';
-#
-#		$repo->{BEHIND} = 0;
-#		$repo->{found_REMOTE_ID_on_github} = 0;
-#
-#		delete $repo->{remote_commits};
-#		return gitStart($repo);
-#	}
-#
-#
-#	sub finishRepoStatus
-#	{
-#		my ($repo) = @_;
-#		my $changed = 0;
-#
-#		if ($repo->{BEHIND} != $repo->{save_BEHIND})
-#		{
-#			$changed = 1;
-#			display($dbg_update,-2,"BEHIND_CHANGED(from $repo->{save_BEHIND} to $repo->{BEHIND}) for $repo->{path}",0,$UTILS_COLOR_CYAN);
-#		}
-#		if ($repo->{GITHUB_ID} ne $repo->{save_GITHUB_ID})
-#		{
-#			$changed = 1;
-#			display($dbg_update,-2,"GITHUB_ID_CHANGED(from ".
-#				_lim($repo->{save_GITHUB_ID},8)." to ".
-#				_lim($repo->{GITHUB_ID},8).") for $repo->{path}",
-#				0,$UTILS_COLOR_CYAN) if $repo->{save_GITHUB_ID};
-#		}
-#
-#		delete $repo->{save_BEHIND};
-#		delete $repo->{save_GITHUB_ID};
-#		delete $repo->{found_REMOTE_ID_on_github};
-#
-#		if ($changed)
-#		{
-#			display($dbg_update+1,-2,"STATUS_REPO_CHANGED($repo->{path})",0,$UTILS_COLOR_CYAN);
-#			setCanPushPull($repo);
-#			&$the_callback({ repo=>$repo });
-#		}
-#
-#		return 1;
-#	}
-#
-#
-#	sub oneEvent
-#		# Todo: I believe that we now need to pay attention to BRANCHES in gitHub events
-#	{
-#		my ($event) = @_;
-#		my $event_id = $event->{id};
-#		my $type = $event->{type};
-#		return 1 if $type ne 'PushEvent';
-#			# We are only interested in PushEvents
-#			# see https://docs.github.com/en/rest/using-the-rest-api/github-event-types?apiVersion=2022-11-28
-#
-#		my $git_user = getPref('GIT_USER');
-#
-#		my $time_str = $event->{created_at} || '';
-#		my $time = gmtToInt($time_str);
-#		my $github_repo = $event->{repo} || '';
-#		my $repo_id = $github_repo->{name} || '';
-#		$repo_id =~ s/^$git_user\///;
-#
-#		my $payload = $event->{payload} || '';
-#		my $head = $payload ? $payload->{head} || '' : '';
-#		my $before = $payload ? $payload->{before} || '' : '';
-#		my $commits = $payload ? $payload->{commits} : '';
-#
-#		return !error("No 'before' in event($event_id) for id($repo_id)")
-#			if !$before;
-#		return !error("No 'head' in event($event_id) for id($repo_id))")
-#			if !$head;
-#		if (!$commits || !@$commits)
-#		{
-#			warning($dbg_events,-2,"No commits in event($event_id) for id($repo_id)");
-#			return 1;
-#		}
-#
-#		display($dbg_events,-2,"commits for repo($repo_id=$repo_id) at $time_str");
-#		display($dbg_events,-3,"before=$before") if $before;
-#
-#		# add the event to all repos with matching id ..
-#
-#		my $repo_list = getRepoList();
-#		for my $repo (@$repo_list)
-#		{
-#			next if $repo->{id} ne $repo_id;
-#			return 0 if !oneRepoEvent($repo,$event_id,$time,$head,$before,$commits);
-#		}
-#
-#		return 1;
-#	}
-#
-#
-#	sub oneRepoEvent
-#	{
-#		my ($repo,$event_id,$time,$head,$before,$commits) = @_;
-#		my $num_commits = @$commits;
-#		display($dbg_events,-2,"onRepoEvent($repo->{path}) for $num_commits commits");
-#
-#		# start counting remote commits after those
-#		# known by the local repo ..
-#
-#		$repo->{found_REMOTE_ID_on_github} = 1
-#			if $before eq $repo->{REMOTE_ID};
-#		$repo->{remote_commits} ||= shared_clone([]);
-#
-#		# the head will always be the last commit in the commit list
-#		# repoDisplay(0,1,"head=$head") if $head;
-#		# checkEventCommit($repo,$head,'payload_head');
-#
-#		my $sha = '';
-#		for my $commit (@$commits)
-#		{
-#			$sha = $commit->{sha} || '';
-#			my $msg = $commit->{message} || '';
-#			$msg =~ s/\n/ /g;
-#			$msg =~ s/\t/ /g;
-#
-#			my $behind_str = '';
-#			if ($sha eq $repo->{REMOTE_ID})
-#			{
-#				$repo->{found_REMOTE_ID_on_github} = 1;
-#			}
-#			elsif ($repo->{found_REMOTE_ID_on_github})
-#			{
-#				$repo->{BEHIND}++;
-#				$behind_str = "BEHIND($repo->{BEHIND})";
-#			}
-#
-#			# only push events starting with the found remote ID
-#			# we don't need to see, although we debug, the others.
-#
-#			push @{$repo->{remote_commits}},shared_clone({
-#				sha => $sha,
-#				msg => $msg,
-#				time => $time }) if $repo->{found_REMOTE_ID_on_github};
-#
-#			display($dbg_events,-3,pad($behind_str,10)._lim($sha,8)._lim($msg,40));
-#		}
-#
-#		return !error("head($head)<>last_commit($sha) in event($event_id) path($repo->{path})")
-#			if $sha ne $head;
-#
-#		$repo->{GITHUB_ID} = $sha;
-#		return 1;
-#	}
-
 
 
 #--------------------------------------------------------
-# UPDATE
+# GITHUB UPDATE
 #--------------------------------------------------------
-# To become a separate package and thread
+
+my $DELAY_GITHUB_THREAD = 4;
+
+my $last_update:shared = 0;
+my $update_step:shared = 0;
 
 sub doMonitorUpdate
 {
-	return 1;
-		# prh temporarily disabled
-
-	display($dbg_thread,-1,"doMonitorUpdate()");
-	&$the_callback({ status =>"doing Update" });
-
-	my $git_user = getPref('GIT_USER');
-	my $got_events = apps::gitMUI::reposGithub::gitHubRequest(
-		0,
-		'events',
-		"users/$git_user/events?per_page=30");
-
-	if (!defined($got_events))
-	{
-		error("Could not get github events");
-		return 0;
-	}
-
-	if (!ref($got_events))
-	{
-		display($dbg_update,1,"got status($got_events) events (no changes)");
-		&$the_callback({ status =>"Update: no changes" });
-		return 1;
-	}
-
-	my $rslt = updateStatusAll($got_events);
-	&$the_callback({ status =>"Update finished" }) if $rslt;
-	return $rslt;
+	display($dbg_thread2,-1,"doMonitorUpdate()");
+	$last_update = 0;
 }
 
 
-#------------------------------------------
-# update primitives
-#------------------------------------------
-
-sub updateStatusAll
-	# the main method that updates the status for all repos
+sub githubThread
 {
-	my ($events) = @_;
-	my $num_events = @$events;
-	display($dbg_update,-1,"updateStatusAll() for $num_events events");
-
-	my $repo_list = getRepoList();
-	for my $repo (@$repo_list)
+	if ($DELAY_GITHUB_THREAD)		# to see startup before any events occur
 	{
-		next if !$repo->isLocalAndRemote();
-		return 0 if !initRepoStatus($repo);
+		warning(0,0,"Delaying githubThread startup by $DELAY_GITHUB_THREAD seconds");
+		sleep($DELAY_GITHUB_THREAD);
 	}
-
-	for my $event (reverse @$events)
+ 
+	display($dbg_thread2,0,"monitor::githubThread() starting");
+	my $update_interval = getPref("GIT_UPDATE_INTERVAL");
+	while (1)
 	{
-		return 0 if !oneEvent($event);
-	}
-
-	for my $repo (@$repo_list)
-	{
-		next if !$repo->isLocalAndRemote();
-		return 0 if !finishRepoStatus($repo);
-	}
-
-	return 1;
-}
-
-
-
-sub initRepoStatus
-{
-	my ($repo) = @_;
-
-	$repo->{save_BEHIND} 	= $repo->{BEHIND};
-	$repo->{save_GITHUB_ID} = $repo->{GITHUB_ID} || '';
-
-	$repo->{BEHIND} = 0;
-	$repo->{found_REMOTE_ID_on_github} = 0;
-
-	delete $repo->{remote_commits};
-	return gitStart($repo);
-}
-
-
-sub finishRepoStatus
-{
-	my ($repo) = @_;
-	my $changed = 0;
-
-	if ($repo->{BEHIND} != $repo->{save_BEHIND})
-	{
-		$changed = 1;
-		display($dbg_update,-2,"BEHIND_CHANGED(from $repo->{save_BEHIND} to $repo->{BEHIND}) for $repo->{path}",0,$UTILS_COLOR_CYAN);
-	}
-	if ($repo->{GITHUB_ID} ne $repo->{save_GITHUB_ID})
-	{
-		$changed = 1;
-		display($dbg_update,-2,"GITHUB_ID_CHANGED(from ".
-			_lim($repo->{save_GITHUB_ID},8)." to ".
-			_lim($repo->{GITHUB_ID},8).") for $repo->{path}",
-			0,$UTILS_COLOR_CYAN) if $repo->{save_GITHUB_ID};
-	}
-
-	delete $repo->{save_BEHIND};
-	delete $repo->{save_GITHUB_ID};
-	delete $repo->{found_REMOTE_ID_on_github};
-
-	if ($changed)
-	{
-		display($dbg_update+1,-2,"STATUS_REPO_CHANGED($repo->{path})",0,$UTILS_COLOR_CYAN);
-		setCanPushPull($repo);
-		&$the_callback({ repo=>$repo });
-	}
-
-	return 1;
-}
-
-
-sub oneEvent
-	# Todo: I believe that we now need to pay attention to BRANCHES in gitHub events
-{
-	my ($event) = @_;
-	my $event_id = $event->{id};
-	my $type = $event->{type};
-	return 1 if $type ne 'PushEvent';
-		# We are only interested in PushEvents
-		# see https://docs.github.com/en/rest/using-the-rest-api/github-event-types?apiVersion=2022-11-28
-
-	my $git_user = getPref('GIT_USER');
-
-	my $time_str = $event->{created_at} || '';
-	my $time = gmtToInt($time_str);
-	my $github_repo = $event->{repo} || '';
-	my $repo_id = $github_repo->{name} || '';
-	$repo_id =~ s/^$git_user\///;
-
-	my $payload = $event->{payload} || '';
-	my $head = $payload ? $payload->{head} || '' : '';
-	my $before = $payload ? $payload->{before} || '' : '';
-	my $commits = $payload ? $payload->{commits} : '';
-
-	return !error("No 'before' in event($event_id) for id($repo_id)")
-		if !$before;
-	return !error("No 'head' in event($event_id) for id($repo_id))")
-		if !$head;
-	if (!$commits || !@$commits)
-	{
-		warning($dbg_events,-2,"No commits in event($event_id) for id($repo_id)");
-		return 1;
-	}
-
-	display($dbg_events,-2,"commits for repo($repo_id=$repo_id) at $time_str");
-	display($dbg_events,-3,"before=$before") if $before;
-
-	# add the event to all repos with matching id ..
-
-	my $repo_list = getRepoList();
-	for my $repo (@$repo_list)
-	{
-		next if $repo->{id} ne $repo_id;
-		return 0 if !oneRepoEvent($repo,$event_id,$time,$head,$before,$commits);
-	}
-
-	return 1;
-}
-
-
-sub oneRepoEvent
-{
-	my ($repo,$event_id,$time,$head,$before,$commits) = @_;
-	my $num_commits = @$commits;
-	display($dbg_events,-2,"onRepoEvent($repo->{path}) for $num_commits commits");
-
-	# start counting remote commits after those
-	# known by the local repo ..
-
-	$repo->{found_REMOTE_ID_on_github} = 1
-		if $before eq $repo->{REMOTE_ID};
-	$repo->{remote_commits} ||= shared_clone([]);
-
-	# the head will always be the last commit in the commit list
-	# repoDisplay(0,1,"head=$head") if $head;
-	# checkEventCommit($repo,$head,'payload_head');
-
-	my $sha = '';
-	for my $commit (@$commits)
-	{
-		$sha = $commit->{sha} || '';
-		my $msg = $commit->{message} || '';
-		$msg =~ s/\n/ /g;
-		$msg =~ s/\t/ /g;
-
-		my $behind_str = '';
-		if ($sha eq $repo->{REMOTE_ID})
+		if ($monitor_state == $MONITOR_STATE_STOPPING)
 		{
-			$repo->{found_REMOTE_ID_on_github} = 1;
+			display($dbg_thread2,0,"githubThread {stopping}");
+			last;
 		}
-		elsif ($repo->{found_REMOTE_ID_on_github})
+		elsif ($monitor_state != $MONITOR_STATE_RUNNING)
 		{
-			$repo->{BEHIND}++;
-			$behind_str = "BEHIND($repo->{BEHIND})";
+			$update_step = 0;
+			sleep(1);
 		}
-
-		# only push events starting with the found remote ID
-		# we don't need to see, although we debug, the others.
-
-		push @{$repo->{remote_commits}},shared_clone({
-			sha => $sha,
-			msg => $msg,
-			time => $time }) if $repo->{found_REMOTE_ID_on_github};
-
-		display($dbg_events,-3,pad($behind_str,10)._lim($sha,8)._lim($msg,40));
+		elsif ($update_step)
+		{
+			doUpdateStep();
+		}
+		elsif (time() > $last_update + $update_interval)
+		{
+			$last_update = time();
+			$update_busy = 1;
+			warning($dbg_thread2,0,"starting GitHub update");
+			&$the_callback({ status =>"starting GitHub update" });
+			$update_step = 1;
+		}
+		else
+		{
+			sleep(1);
+		}
 	}
 
-	return !error("head($head)<>last_commit($sha) in event($event_id) path($repo->{path})")
-		if $sha ne $head;
-
-	$repo->{GITHUB_ID} = $sha;
-	return 1;
+	display($dbg_thread2,0,"monitor::githubThread() exiting");
 }
 
+
+sub doUpdateStep
+	# the first N steps get bulk pages and note any new
+	# 	pushed_at times, marking those repos as needing new SHAs
+	# steps starting at 100 iterate through any repos that need
+	# 	sha's and get them.
+	# a single update cycle is then finished and we wait
+	#	$update_interval seconds to start another one.
+{
+	display($dbg_thread2,0,"doUpdateStep($update_step)");
+	my $repo_list = getRepoList();
+
+	if ($update_step < 100)		# synonymous with page number
+	{
+		my $same_page = $update_step;
+		display($dbg_thread2,1,"getting page($update_step)");
+		&$the_callback({ status =>"get GitHub repos page($update_step)" });
+		my $data = gitHubRequest(1,$HOW_GITHUB_NORMAL,"repos","user/repos?per_page=50",\$update_step);
+		if ($data)
+		{
+			my %pushed_ats;
+			for my $entry (@$data)
+			{
+				my $id = $entry->{name};
+				$pushed_ats{$id} = $entry->{pushed_at};
+			}
+			for my $repo (@$repo_list)
+			{
+				next if !($repo->{exists} & $REPO_LOCAL);
+					# don't touch REMOTE_ONLY repos
+					# also of interest is {rel_path} local submodules
+				my $id = $repo->{id};
+				my $pushed_at = $pushed_ats{$id};
+				my $repo_pushed_at = $repo->{pushed_at} || '';
+				if ($pushed_at && $repo_pushed_at ne $pushed_at)
+				{
+					warning($dbg_thread2,2,"repo($repo->{id}) pushed_at($repo_pushed_at) changed to $pushed_at");
+					$repo->{needs_update} = 1;
+					$repo->{pushed_at} = $pushed_at;
+				}
+			}
+			if ($update_step == $same_page)
+			{
+				warning($dbg_thread2,1,"finished getting pages");
+				$update_step = 100;
+			}
+		}
+		else
+		{
+			warning($dbg_thread2,1,"NO DATA getting page($same_page)");
+			$update_step = 0;
+			$update_busy = 0;
+		}
+	}
+	else
+	{
+		my $repo;
+		for my $try (sort {$a->{pushed_at} cmp $b->{pushed_at}} @$repo_list)
+		{
+			if ($try->{needs_update})
+			{
+				delete $try->{needs_update};
+				$repo = $try;
+				last;
+			}
+		}
+		if ($repo)
+		{
+			# GET https://api.github.com/repos/{owner}/{repo}/branches/master
+
+			my $id = $repo->{id};
+			my $what = "sha_$id";
+			my $git_user = getPref("GIT_USER");
+			display($dbg_thread2,2,"getting SHA($id)");
+			&$the_callback({ status =>"get GitHub SHA($id)" });
+			my $data = gitHubRequest(1,$HOW_GITHUB_NORMAL,$what,"repos/$git_user/$id/branches/master");
+			my $commit = $data ? $data->{commit} : '';
+			my $sha = $commit ? $commit->{sha} : '';
+			if ($sha)
+			{
+				if ($repo->{GITHUB_ID} ne $sha)
+				{
+					warning($dbg_thread2,2,"SHA($id) changed from($repo->{GITHUB_ID}) to $sha");
+					$repo->{GITHUB_ID} = $sha;
+				}
+			}
+			else
+			{
+				warning($dbg_thread2,1,"Could not get SHA($id)");
+			}
+		}
+		else
+		{
+			warning($dbg_thread2,1,"finished getting SHA's");
+			&$the_callback({ status =>"GitHub update finished" });
+			$update_step = 0;
+			$update_busy = 0;
+		}
+	}
+
+	$last_update = time();
+}
 
 
 1;
