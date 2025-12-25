@@ -84,8 +84,8 @@ sub new
 	my $dlg = apps::gitMUI::dialogDisplay->new(undef,'gitMUI display');
 	setRepoUI($dlg);
 
-	return if !parseRepos();		# only fails on hard errors
-	doGitHub(1);  					# use cache,
+	return if !parseRepos();
+	doGitHub($HOW_GITHUB_INIT);  	# use cachefiles with no network hit if possible
 
 	setRepoUI(undef);
 	apps::gitMUI::dialogDisplay::closeSelfIfNoErrors();
@@ -207,10 +207,14 @@ sub onCommandId
 		my $dlg = apps::gitMUI::dialogDisplay->new($this,'gitMUI display');
 		setRepoUI($dlg);
 
-		return if !parseRepos();		# only fails on hard errors
-		doGitHub(0)  					# no cache
-			if $id == $ID_COMMAND_REBUILD_CACHE;
-
+		# destroy the cache if $ID_COMMAND_REBUILD_CACHE,
+		# try Etag/304 hits if just $ID_COMMAND_RESCAN
+		
+		return if !parseRepos();
+		my $how = $id == $ID_COMMAND_REBUILD_CACHE ?
+			$HOW_GITHUB_REBUILD : $HOW_GITHUB_NORMAL;
+		doGitHub($how);
+	
 		setRepoUI(undef);
 		# could leave the dialog open and require manual close
 		apps::gitMUI::dialogDisplay::closeSelfIfNoErrors();
