@@ -607,11 +607,12 @@ sub doUpdateStep
 			# GET https://api.github.com/repos/{owner}/{repo}/branches/master
 
 			my $id = $repo->{id};
+			my $branch = $repo->{branch};
 			my $what = "sha_$id";
 			my $git_user = getPref("GIT_USER");
 			display($dbg_thread2,2,"getting SHA($id)");
 			&$the_callback({ status =>"get GitHub SHA($id)" });
-			my $data = gitHubRequest(1,$HOW_GITHUB_NORMAL,$what,"repos/$git_user/$id/branches/master");
+			my $data = gitHubRequest(1,$HOW_GITHUB_NORMAL,$what,"repos/$git_user/$id/branches/$branch");
 			my $commit = $data ? $data->{commit} : '';
 			my $sha = $commit ? $commit->{sha} : '';
 			if ($sha)

@@ -409,8 +409,9 @@ sub doGitHub
 				# GET https://api.github.com/repos/{owner}/{repo}/branches/master
 
 				my $id = $repo->{id};
+				my $branch = $repo->{branch};
 				my $what = "sha_$id";
-				my $data = gitHubRequest(1,$how,$what,"repos/$git_user/$id/branches/master");
+				my $data = gitHubRequest(1,$how,$what,"repos/$git_user/$id/branches/$branch");
 				my $sha = $data->{commit}->{sha} || '';
 				repoDisplay($dbg_github,3,"GITHUB_ID=$sha");
 				$repo->{GITHUB_ID} = $sha;
