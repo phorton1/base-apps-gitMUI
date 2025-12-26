@@ -39,8 +39,6 @@ BEGIN
 
 		$REPO_LOCAL
 		$REPO_REMOTE
-
-		$LOCAL_ONLY
 		$REMOTE_ONLY
 
 	);
@@ -48,12 +46,11 @@ BEGIN
 
 
 our $REPO_LOCAL = 1;
-	# LOCAL_ONLY repos have no ID
+	# exists locally
 our $REPO_REMOTE = 2;
-	# REMOTE_ONLY repos have no PATH
-
-our $LOCAL_ONLY = "LOCAL_ONLY";
+	# exlists on github
 our $REMOTE_ONLY = "REMOTE_ONLY";
+	# used for dangling GitHub repos; these have no PATH
 
 
 my $MAX_DISPLAY_PATH = 30;
@@ -174,29 +171,26 @@ sub getId
 
 		display($dbg_new,0,"branch($path) = $branch");
 
-		if ($opts  !~ /$LOCAL_ONLY/)
+		my $remote = Git::Raw::Remote->load($git_repo, 'origin');
+		if ($remote)
 		{
-			my $remote = Git::Raw::Remote->load($git_repo, 'origin');
-			if ($remote)
+			my $url = $remote->url();
+			my $user = getPref("GIT_USER");
+			if ($url =~ s/https:\/\/github.com\/$user\///)
 			{
-				my $url = $remote->url();
-				my $user = getPref("GIT_USER");
-				if ($url =~ s/https:\/\/github.com\/$user\///)
-				{
-					$id = $url;
-					$id =~ s/\.git$//;
-					display($dbg_new,0,"getId($path) = $id");
-				}
-				else
-				{
-					repoError($this,"Unexpected remote url($url)");
-				}
+				$id = $url;
+				$id =~ s/\.git$//;
+				display($dbg_new,0,"getId($path) = $id");
 			}
 			else
 			{
-				repoWarning($this,0,0,"Could not get remote($path)");
+				repoError($this,"Unexpected remote url($url)");
 			}
-		}	# !local_only
+		}
+		else
+		{
+			repoWarning($this,0,0,"Could not get remote($path)");
+		}
 	}
 	else
 	{

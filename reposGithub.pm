@@ -420,7 +420,10 @@ sub doGitHub
 				{
 					if ($repo->{BEHIND})
 					{
-						repoWarning($repo,$dbg_github,4,"clearing BEHIND($id)=0");
+						repoWarning(undef,$dbg_github,4,"clearing BEHIND($id)=0");
+							# note: undef prevents it from being added to the list of
+							# warnings on the repo which is REALLY not what we want
+							# for normal state changes
 						$repo->{BEHIND} = 0;
 					}
 				}
@@ -428,7 +431,8 @@ sub doGitHub
 				{
 					if (!$repo->{BEHIND})
 					{
-						repoWarning($repo,$dbg_github,4,"setting BEHIND($id)=1");
+						repoWarning(undef,$dbg_github,4,"setting BEHIND($id)=1");
+							# note: undef prevents adding to list of warnings on repo
 						$repo->{BEHIND} = 1;
 					}
 				}
@@ -467,7 +471,8 @@ sub oneRepoEntry
 	if ($repo->{descrip} =~ /Copied from (.*?)\s/i)
 	{
 		my $text = $1;
-		$repo->repoNote($dbg_github,3,"Copied from $text");
+		repoNote(undef,$dbg_github,3,"Copied from $text");
+			# note: undef prevents adding to list of notes on repo
 		$parent =~ s/https:\/\/github.com\///;
 		$parent = "($parent)";
 	}
