@@ -57,32 +57,43 @@ BEGIN
 
 
 sub groupReposAsSubmodules
-	# henceforth it is not required to have a master
-	# module to use submodules ... however, if a master
-	# module does exist, it takes precedence over blind
-	# submodule groups.
+	# It is not necessary to have an explicit separate repo,
+	# which is itself not a SUBMODULE, for the master of a group,
+	# but by convention I usually do have such a separate repo,
+	# but, obviously, at least one actual GitHub repo must be
+	# the master containing the normalized source code.
 {
 	my $repo_list = getRepoList();
-		# hash by id of array of repos with parent_repos
 	display($dbg_groups,0,"groupReposAsSubmodules()");
 
-	# pass 1 - initial temp_groups
+	# pass 1 - create initial temp_groups containing
+	# all submodules which share the same github id
 
 	display($dbg_groups,1,"initial temp_groups");
 
 	my $temp_groups = {};
+		# submodules within a group all share the
+		# same id of the actual "master" repo on github
 	for my $repo (@$repo_list)
 	{
 		next if !$repo->{path};
 		next if !$repo->{parent_repo};
-		my $id = $repo->{id};
-		display($dbg_groups,2,"temp_group($id) += $repo->{path}");
-		$temp_groups->{$id} ||= shared_clone({});
-		$temp_groups->{$id}->{$repo->{path}} = $repo;
+			# having a parent_repo member is synonymous
+			# with having a rel_path as an indicator of a
+			# submodule.
+		my $master_id = $repo->{id};
+		display($dbg_groups,2,"temp_group($master_id) += $repo->{path}");
+		$temp_groups->{$master_id} ||= shared_clone({});
+		$temp_groups->{$master_id}->{$repo->{path}} = $repo;
 		$repo->{found_master} = 0;
 	}
 
-	# pass 2 - add MASTER submodules
+	# pass 2 - add separate MASTER repos if they exist
+	#
+	# In parseRepos() submodules paths are set into the
+	# {used_in} array on the repo with the master_id, however
+	# there is no check there that the master_id actually
+	# exists on GitHub.
 
 	display($dbg_groups,1,"add master submodules");
 	for my $repo (@$repo_list)
@@ -120,8 +131,14 @@ sub groupReposAsSubmodules
 	}
 
 	# pass 3 - build_the_groups
-	# with warning for any submodule without found_master
-
+	# With warning for any submodule without found_master.
+	# This warning will help identify cases where I've forgotten
+	# to clone a needed repo onto the BOAT machine, though I still
+	# need to use "git clone --recurse-submodules" and/or
+	#	git submodule update --init --recursive
+	# "git submodule foreach --recursive git checkout master"
+	# to get it aligned.
+	
 	display($dbg_groups,1,"build_groups");
 	my $group_num = 0;
 	my $groups = shared_clone([]);

@@ -489,6 +489,11 @@ sub parseRepos
 			#------------------------------------------------
 
 			# handle SUBMODULES
+			# submodules set USED_IN (which is different than USES or USED_BY}
+			# to the id of the GitHub repo that contains their actual source.
+			#
+			# At this time parseRepos() does NOT check if a repo with the master_id
+			# for a submodule group actually exists on GitHub, alghough it *could*
 
 			elsif ($line =~ /SUBMODULE\t(.*)$/)
 			{
@@ -602,16 +607,16 @@ sub parseRepos
 
 	# Call gitStart() to set head, master, and remote id's
 	# Set used_by list from USES modules
-	# Validate that referred FRIEND repos exist
-	# For submodules, set
+	# For submodules, add the submodule to
 	#		{submodules} list of paths on parent
-	#		{used_in} list of paths on master module
+	# and for the actual gitHub repo with the master_id
+	#		set the {used_in} list of paths on the 'master' module
 
 	for my $repo (@$repo_list)
 	{
 		apps::gitMUI::repoGit::gitStart($repo);
 
-		# parent submodules
+		# add sumodules to the paren't repos {submodules} list
 
 		my $parent_repo = $repo->{parent_repo};
 		if ($parent_repo)
@@ -622,7 +627,8 @@ sub parseRepos
 			push @{$parent_repo->{submodules}},$repo->{path};
 		}
 
-		# master used_in's
+		# set the {used_in} member on the 'master' module repo
+		# that contains the actual source code on GitHub.
 
 		my $id = $repo->{id};
 		if (!$repo->{parent_repo} && $USED_IN->{$id})
@@ -635,19 +641,6 @@ sub parseRepos
 		# uses
 
 		setUsedBy($repo);
-
-		# friends
-
-		my $friends = $repo->{friend};
-		if ($friends)
-		{
-			for my $friend (@$friends)
-			{
-				my $friend_repo = $repos_by_path->{$friend};
-				$repo->repoError("invalid FRIEND: $friend")
-					if !$friend_repo;
-			}
-		}
 	}
 
 	# sort used_by repos by depth, name
