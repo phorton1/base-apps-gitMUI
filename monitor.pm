@@ -91,6 +91,7 @@ BEGIN {
 		monitorStop
 		monitorPause
 
+		canUpdate
 		doMonitorUpdate
 
 		$MON_CB_TYPE_STATUS
@@ -186,13 +187,9 @@ sub monitorStart
 	$thread->detach();
 	display($dbg_thread,-2,"thread detached");
 
-	my $update_interval = getPref("GIT_UPDATE_INTERVAL");
-	if ($update_interval)
-	{
-		$thread2 = threads->create(\&githubThread);
-		$thread2->detach();
-		display($dbg_thread2,-2,"githubThread detached");
-	}
+	$thread2 = threads->create(\&githubThread);
+	$thread2->detach();
+	display($dbg_thread2,-2,"githubThread detached");
 	return 1;
 }
 
@@ -483,13 +480,26 @@ sub doMonitorRun
 
 my $DELAY_GITHUB_THREAD = 4;
 
+my $update_now:shared = 1;
+	# always does the initial update
 my $last_update:shared = 0;
 my $update_step:shared = 0;
 
+
+sub canUpdate
+	# returns true if "refresh" button (used to intiate an update)
+	# should be enabled
+{
+	return $monitor_state == $MONITOR_STATE_RUNNING &&
+		   !$update_busy && !$update_step && !$update_now;
+}
+
+
 sub doMonitorUpdate
+	# called from "refresh" button
 {
 	display($dbg_thread2,-1,"doMonitorUpdate()");
-	$last_update = 0;
+	$update_now = 1;
 }
 
 
@@ -505,7 +515,8 @@ sub githubThread
 	my $update_interval = getPref("GIT_UPDATE_INTERVAL");
 	while (1)
 	{
-		if ($monitor_state == $MONITOR_STATE_STOPPING)
+		if ($monitor_state == $MONITOR_STATE_STOPPING ||
+			$monitor_state == $MONITOR_STATE_STOPPED)
 		{
 			display($dbg_thread2,0,"githubThread {stopping}");
 			last;
@@ -519,13 +530,15 @@ sub githubThread
 		{
 			doUpdateStep();
 		}
-		elsif (time() > $last_update + $update_interval)
+		elsif ($update_now || (
+			   $update_interval && (time() > $last_update + $update_interval)))
 		{
 			$last_update = time();
 			$update_busy = 1;
 			warning($dbg_thread2,0,"starting GitHub update");
 			&$the_callback({ status =>"starting GitHub update" });
 			$update_step = 1;
+			$update_now = 0;
 		}
 		else
 		{
@@ -593,6 +606,7 @@ sub doUpdateStep
 	else
 	{
 		my $repo;
+		# do oldest pushed repos first
 		for my $try (sort {$a->{pushed_at} cmp $b->{pushed_at}} @$repo_list)
 		{
 			if ($try->{needs_update})

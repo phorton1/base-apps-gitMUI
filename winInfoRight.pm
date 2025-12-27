@@ -126,7 +126,7 @@ sub onUpdateUI
 
 	my $enable = 0;
 	$enable = 1 if $id == $ID_COMMAND_REFRESH_STATUS &&
-		!monitorBusy();
+		canUpdate();
 	$enable = 1 if $id == $INFO_RIGHT_COMMAND_PUSH &&
 		$repo &&
 		$repo->canPush();

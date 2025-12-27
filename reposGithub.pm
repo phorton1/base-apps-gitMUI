@@ -391,17 +391,15 @@ sub doGitHub
     }   # while $page
 
 
-	# the following loop is both functional and experimental
-	# for any repos which exist locally, and which are not
-	# submodules (as identified by relpath)
-
+	# the following loop gets SHA's which exist both locally and remotely
+	# and identifies local repos that are missing on gitHub
+	
 	repoWarning(undef,$dbg_github,1,"doGitHub getting SHA's");
 	for my $repo (@$repo_list)
 	{
-		if (!$repo->{rel_path} &&
-			($repo->{exists} & $REPO_LOCAL))
+		if ($repo->{exists} & $REPO_LOCAL)
 		{
-			# if its on github do experiment to get the current SHA info
+			# if its on github get the current SHA info
 			# or give an error if it does not exist on github
 
 			if ($repo->{exists} & $REPO_REMOTE)
@@ -432,7 +430,6 @@ sub doGitHub
 					if (!$repo->{BEHIND})
 					{
 						repoWarning(undef,$dbg_github,4,"setting BEHIND($id)=1");
-							# note: undef prevents adding to list of warnings on repo
 						$repo->{BEHIND} = 1;
 					}
 				}
