@@ -168,10 +168,25 @@ sub gitHubRequest
 			agent => 'Mozilla/5.0',
 			cookie_jar =>{});
 		$my_ua->timeout(15);
-		$my_ua->ssl_opts( SSL_ca_file => Mozilla::CA::SSL_ca_file() );
-		$my_ua->ssl_opts( verify_hostname => 1 );
-		my $response = $my_ua->request($request);
 
+		# stop using Mozilla::CA and fallback to Windows system CA store
+		#
+		#	$my_ua->ssl_opts( SSL_ca_file => Mozilla::CA::SSL_ca_file() );
+		#	$my_ua->ssl_opts( verify_hostname => 1 );
+
+		#	$my_ua->ssl_opts(
+		#		SSL_ca_file        => '',
+		#		SSL_ca_path        => '',
+		#		SSL_verify_mode    => 1,   # VERIFY_PEER
+		#		verify_hostname    => 1,
+		#	);
+
+$my_ua->ssl_opts(
+    SSL_ca_file     => 'C:/Program Files/Git/mingw64/ssl/certs/ca-bundle.crt',
+    SSL_verify_mode => 1,
+    verify_hostname => 1,
+);
+		my $response = $my_ua->request($request);
 
 		#--------------------------------
 		# Process the response
